@@ -39,12 +39,16 @@ export interface TechnicalComponents {
   ma50Above200: boolean;
   priceAboveMa20: boolean;
   macdHistogramPositive: boolean;
+  macd?: number;
+  macdSignal?: number;
+  macdHistogram?: number;
 }
 
 export interface MomentumComponents {
   return1M: number;
   return3M: number;
   return6M: number;
+  return12M?: number;
   relativeStrengthVsSpy: number;
   momentumScore: number;
   trendPersistence: number;
@@ -124,6 +128,16 @@ export interface OpportunityEvaluation {
   valuation_details: ValuationComponents;
 }
 
+export interface DataQualityReport {
+  data_quality_score: number; // 0 ~ 100
+  data_freshness: 'FRESH' | 'RECENT' | 'STALE' | 'OUTDATED';
+  last_updated: string;
+  source: 'yahoo' | 'seed' | 'database';
+  data_warnings: string[];
+  bars_count: number;
+  has_fundamentals: boolean;
+}
+
 export interface FullTickerEvaluation {
   ticker: string;
   name: string;
@@ -135,8 +149,20 @@ export interface FullTickerEvaluation {
   risk: RiskEvaluation;
   decision: DecisionEvaluation;
   signal_generated: boolean;
+  data_quality?: DataQualityReport;
   raw_metadata?: Record<string, any>;
 }
+
+export type SignalStatus =
+  | 'NEW'
+  | 'ACTIVE'
+  | 'TRACKING'
+  | '5D_REACHED'
+  | '10D_REACHED'
+  | '20D_REACHED'
+  | 'CLOSED'
+  | 'EXPIRED'
+  | 'CANCELLED';
 
 export interface SignalSnapshot {
   id: string;
@@ -159,10 +185,14 @@ export interface SignalSnapshot {
   valuation_score: number | null;
   rsi: number;
   drawdown: number;
+  return_1d?: number | null;
   return_5d: number | null;
   return_10d: number | null;
   return_20d: number | null;
   current_return: number | null;
+  max_gain?: number;
+  max_loss?: number;
+  status?: SignalStatus;
   is_closed: boolean;
   components: {
     weights: { technical: number; momentum: number; fundamental: number; valuation: number };
@@ -179,6 +209,18 @@ export interface WatchlistItem {
   created_at: string;
 }
 
+export interface ScanRunItem {
+  scan_run_id: string;
+  ticker: string;
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED';
+  error_code?: string;
+  error_message?: string;
+  started_at: string;
+  finished_at: string;
+  opportunity_score?: number;
+  decision?: DecisionType;
+}
+
 export interface ScanRunLog {
   run_id: string;
   started_at: string;
@@ -188,9 +230,11 @@ export interface ScanRunLog {
   signal_count: number;
   failure_count: number;
   failed_tickers: { ticker: string; error: string }[];
+  items?: ScanRunItem[];
   status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED';
   version: string;
   error_summary?: string;
+  created_at?: string;
 }
 
 export interface BacktestSummary {
@@ -206,7 +250,36 @@ export interface BacktestSummary {
   median_return_20d: number;
   max_drawdown: number;
   profit_factor: number;
+  expectancy?: number;
   by_strategy: Record<string, { count: number; win_rate_20d: number; avg_return_20d: number }>;
   by_risk: Record<RiskLevel, { count: number; win_rate_20d: number; avg_return_20d: number }>;
   by_opportunity_bucket: Record<string, { count: number; win_rate_20d: number; avg_return_20d: number }>;
+}
+
+export interface SystemStatus {
+  dataProvider: 'yahoo' | 'seed' | 'fallback';
+  marketStatus: {
+    isOpen: boolean;
+    lastSyncedAt: string;
+    benchmarkPriceSPY: number;
+  };
+  dataCoverage: {
+    ohlcvPercent: number;
+    fundamentalsPercent: number;
+    watchlistActiveCount: number;
+  };
+  dbStatus: {
+    connected: boolean;
+    type: 'supabase' | 'local_persistent';
+    evaluationsCount: number;
+    signalsCount: number;
+    scanRunsCount: number;
+  };
+  lastScan?: {
+    run_id: string;
+    status: string;
+    evaluated_count: number;
+    signals_generated: number;
+    timestamp: string;
+  };
 }
