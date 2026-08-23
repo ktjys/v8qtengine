@@ -1,9 +1,9 @@
 import React from 'react';
 import {
   Activity,
+  Database,
   Layers,
   ListFilter,
-  Radio,
   RefreshCw,
   Sliders,
   TrendingUp,
@@ -13,6 +13,7 @@ interface NavbarProps {
   activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs';
   setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs') => void;
   onOpenScanModal: () => void;
+  onOpenDbModal: () => void;
   totalCount: number;
   signalsCount: number;
 }
@@ -21,6 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   onOpenScanModal,
+  onOpenDbModal,
   totalCount,
   signalsCount,
 }) => {
@@ -36,10 +38,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
-                  V8 QUANT ENGINE
+                  QUANT DECISION ENGINE
                 </span>
                 <span className="px-2 py-0.5 text-xs font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                  v1.0 Baseline
+                  LIVE
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-mono hidden sm:block">
@@ -86,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <TrendingUp className="w-4 h-4" />
-              <span>V8 vs V7 백테스트</span>
+              <span>백테스트 성과 분석</span>
             </button>
 
             <button
@@ -117,11 +119,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Action Trigger */}
-          <div className="flex items-center space-x-3">
-            <div className="hidden lg:flex items-center space-x-2 text-xs font-mono px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>LIVE PIPELINE ACTIVE</span>
-            </div>
+          <div className="flex items-center space-x-2.5">
+            <button
+              id="header-db-settings-btn"
+              onClick={onOpenDbModal}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition-all active:scale-95"
+              title="데이터베이스 설정 및 마이그레이션"
+            >
+              <Database className="w-4 h-4 text-cyan-400" />
+              <span className="hidden sm:inline">DB 설정</span>
+            </button>
 
             <button
               id="header-run-scan-btn"
@@ -158,7 +165,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               activeTab === 'backtest' ? 'bg-cyan-500 text-white font-semibold' : 'text-slate-400'
             }`}
           >
-            백테스트 검증
+            백테스트 분석
           </button>
           <button
             onClick={() => setActiveTab('classification')}
@@ -175,6 +182,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             실행 이력
+          </button>
+          <button
+            onClick={onOpenDbModal}
+            className="px-3 py-1 text-xs rounded-md whitespace-nowrap bg-slate-800 text-cyan-400 font-semibold border border-slate-700"
+          >
+            DB 설정
           </button>
         </div>
       </div>

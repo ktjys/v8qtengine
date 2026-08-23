@@ -1,7 +1,7 @@
 import { MarketDataProvider } from './providers/marketDataProvider';
 import { YahooFinanceProvider } from './providers/yahooFinanceProvider';
 import { SeedDataProvider } from './seed/seedProvider';
-import { NormalizedMarketData, OHLCVBar } from './providers/types';
+import { FundamentalData, NormalizedMarketData, OHLCVBar, QuoteData } from './providers/types';
 import { calculateTechnicalIndicators } from './indicators/technicalIndicators';
 import { calculateMomentumIndicators } from './indicators/momentumIndicators';
 import { extractFundamentalIndicators } from './indicators/fundamentalIndicators';
@@ -10,6 +10,11 @@ import { RawRiskInputs } from '../engine/riskEngine';
 import { RawYahooMetadata } from '../engine/classificationEngine';
 import { evaluateDataQuality } from './validation/freshnessValidator';
 import { DataQualityReport } from '../types/v8';
+import { marketDataRepository } from '../db/repositories/marketDataRepository';
+import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
+import { assetRepository } from '../db/repositories/assetRepository';
+import { indicatorRepository } from '../db/repositories/indicatorRepository';
+import { dbClient } from '../db/supabaseClient';
 
 export interface ProcessedAssetData {
   ticker: string;
@@ -46,7 +51,15 @@ export class MarketDataService {
   }
 
   getProviderName(): string {
+    if (dbClient.isSupabaseConnected) {
+      return `Supabase DB (${this.provider.name})`;
+    }
     return this.provider.name;
+  }
+
+  async getQuote(ticker: string): Promise<QuoteData> {
+    const cleanTicker = ticker.toUpperCase().trim();
+    return this.provider.getQuote(cleanTicker);
   }
 
   async getBenchmarkBars(): Promise<OHLCVBar[]> {
@@ -54,20 +67,110 @@ export class MarketDataService {
     if (this.benchmarkBarsCache && now - this.benchmarkLastFetched < 1000 * 60 * 10) {
       return this.benchmarkBarsCache;
     }
-    const bars = await this.provider.getBenchmark('1y');
-    this.benchmarkBarsCache = bars;
+
+    // 1. Check DB first for SPY
+    let dbBars = await marketDataRepository.getBars('SPY', 252);
+    const lastDate = dbBars.length > 0 ? new Date(dbBars[dbBars.length - 1].date).getTime() : 0;
+    const isStale = dbBars.length < 20 || isNaN(lastDate) || (now - lastDate > 4 * 24 * 60 * 60 * 1000);
+
+    if (isStale) {
+      const bars = await this.provider.getBenchmark('1y');
+      if (bars.length > 0) {
+        await marketDataRepository.saveBars('SPY', bars, this.provider.name);
+        dbBars = bars;
+      }
+    }
+
+    this.benchmarkBarsCache = dbBars;
     this.benchmarkLastFetched = now;
-    return bars;
+    return dbBars;
   }
 
   async processTicker(ticker: string, isEtfHint = false): Promise<ProcessedAssetData> {
     const cleanTicker = ticker.toUpperCase().trim();
     const benchmarkBars = await this.getBenchmarkBars();
-    const normalized = await this.provider.getNormalizedMarketData(cleanTicker, benchmarkBars);
+
+    // 1. Always fetch live real-time quote first
+    const liveQuote = await this.provider.getQuote(cleanTicker);
+
+    // 2. Fetch historical bars from DB or live provider, verifying freshness
+    let dbBars = await marketDataRepository.getBars(cleanTicker, 252);
+    const lastDate = dbBars.length > 0 ? new Date(dbBars[dbBars.length - 1].date).getTime() : 0;
+    const isStale = dbBars.length < 20 || isNaN(lastDate) || (Date.now() - lastDate > 4 * 24 * 60 * 60 * 1000);
+
+    if (isStale) {
+      const fetchedBars = await this.provider.getHistorical(cleanTicker, '1y');
+      if (fetchedBars && fetchedBars.length > 0) {
+        await marketDataRepository.saveBars(cleanTicker, fetchedBars, this.provider.name);
+        dbBars = fetchedBars;
+      }
+    }
+
+    // 3. Synchronize / enrich latest bar with current live price
+    if (liveQuote && liveQuote.price > 0) {
+      if (dbBars.length > 0) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const lastBar = dbBars[dbBars.length - 1];
+        if (lastBar.date === todayStr) {
+          lastBar.close = liveQuote.price;
+          lastBar.high = Math.max(lastBar.high, liveQuote.price);
+          lastBar.low = Math.min(lastBar.low, liveQuote.price);
+        } else {
+          dbBars.push({
+            date: todayStr,
+            open: Math.round((liveQuote.price - liveQuote.change) * 100) / 100,
+            high: Math.max(liveQuote.price, liveQuote.price - liveQuote.change),
+            low: Math.min(liveQuote.price, liveQuote.price - liveQuote.change),
+            close: liveQuote.price,
+            adjClose: liveQuote.price,
+            volume: 100000,
+          });
+        }
+      }
+    }
+
+    // 4. Fetch fundamentals from DB or provider
+    const dbFund = await fundamentalsRepository.getLatest(cleanTicker);
+    const dbAsset = await assetRepository.findByTicker(cleanTicker);
+
+    let fundData: FundamentalData;
+    if (dbFund) {
+      fundData = {
+        ticker: cleanTicker,
+        asOfDate: dbFund.as_of_date,
+        marketCap: dbFund.market_cap,
+        revenueGrowthYoy: dbFund.revenue_growth,
+        earningsGrowthYoy: dbFund.eps_growth,
+        operatingMargin: dbFund.operating_margin,
+        freeCashFlowMargin: dbFund.fcf_margin,
+        trailingPe: dbFund.trailing_pe,
+        forwardPe: dbFund.forward_pe,
+        psRatio: dbFund.ps_ratio,
+        pegRatio: dbFund.peg_ratio,
+        sector: dbAsset?.sector,
+        industry: dbAsset?.industry,
+        quoteType: dbAsset?.asset_type === 'etf' ? 'ETF' : 'EQUITY',
+      };
+    } else {
+      fundData = await this.provider.getFundamentals(cleanTicker);
+      if (fundData) {
+        await fundamentalsRepository.save(fundData, this.provider.name);
+      }
+    }
+
+    const normalized: NormalizedMarketData = {
+      ticker: cleanTicker,
+      quote: liveQuote,
+      bars: dbBars,
+      fundamentals: fundData,
+      benchmarkBars,
+      fetchedAt: new Date().toISOString(),
+      source: this.provider.name,
+    };
 
     const tech = calculateTechnicalIndicators(normalized.bars);
     const mom = calculateMomentumIndicators(normalized.bars, benchmarkBars);
-    const fund = extractFundamentalIndicators(normalized.fundamentals, isEtfHint);
+    const fundInd = extractFundamentalIndicators(normalized.fundamentals, isEtfHint);
 
     const rawMetadata: RawYahooMetadata = {
       quoteType: normalized.fundamentals.quoteType,
@@ -96,16 +199,19 @@ export class MarketDataService {
       return3M: mom.return3M,
       return6M: mom.return6M,
       relativeStrengthVsSpy: mom.relativeStrengthVsSpy,
-      revenueGrowthYoy: fund.revenueGrowthYoy,
-      earningsGrowthYoy: fund.earningsGrowthYoy,
-      operatingMargin: fund.operatingMargin,
-      freeCashFlowMargin: fund.freeCashFlowMargin,
-      marketCapBillions: fund.marketCapBillions,
-      trailingPe: fund.trailingPe,
-      forwardPe: fund.forwardPe,
-      psRatio: fund.psRatio,
-      pegRatio: fund.pegRatio,
+      revenueGrowthYoy: fundInd.revenueGrowthYoy,
+      earningsGrowthYoy: fundInd.earningsGrowthYoy,
+      operatingMargin: fundInd.operatingMargin,
+      freeCashFlowMargin: fundInd.freeCashFlowMargin,
+      marketCapBillions: fundInd.marketCapBillions,
+      trailingPe: fundInd.trailingPe,
+      forwardPe: fundInd.forwardPe,
+      psRatio: fundInd.psRatio,
+      pegRatio: fundInd.pegRatio,
     };
+
+    // Save indicator snapshot to DB
+    await indicatorRepository.save(cleanTicker, indicators, normalized.quote.timestamp || new Date().toISOString().split('T')[0]);
 
     const riskInputs: RawRiskInputs = {
       beta: mom.beta,

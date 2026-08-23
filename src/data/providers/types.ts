@@ -56,5 +56,5 @@ export interface NormalizedMarketData {
   fundamentals: FundamentalData;
   benchmarkBars?: OHLCVBar[]; // SPY benchmark for relative strength & beta
   fetchedAt: string;
-  source: 'yahoo' | 'seed';
+  source: 'yahoo' | 'seed' | 'database' | string;
 }

@@ -56,7 +56,7 @@ export class MarketDataRepository {
       count++;
     }
 
-    if (dbClient.supabase && records.length > 0) {
+    if (dbClient.isTableAvailable('market_data_daily') && dbClient.supabase && records.length > 0) {
       try {
         // Upsert in batches of 100 to Supabase
         const batchSize = 100;
@@ -79,11 +79,11 @@ export class MarketDataRepository {
             .upsert(chunk, { onConflict: 'ticker,trade_date' });
 
           if (error) {
-            console.warn(`[MarketDataRepository] Supabase upsert error for ${clean}:`, error.message);
+            dbClient.handleDbError('market_data_daily', 'upsert', error);
           }
         }
       } catch (err) {
-        console.warn(`[MarketDataRepository] Supabase batch upsert exception for ${clean}:`, err);
+        dbClient.handleDbError('market_data_daily', 'upsert', err);
       }
     }
 
@@ -93,7 +93,7 @@ export class MarketDataRepository {
   async getBars(ticker: string, limit = 252): Promise<OHLCVBar[]> {
     const clean = ticker.toUpperCase().trim();
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('market_data_daily') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
           .from('market_data_daily')
@@ -102,7 +102,9 @@ export class MarketDataRepository {
           .order('trade_date', { ascending: false })
           .limit(limit);
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          dbClient.handleDbError('market_data_daily', 'getBars', error);
+        } else if (data && data.length > 0) {
           const sorted = data.reverse();
           const bars: OHLCVBar[] = sorted.map((r: any) => ({
             date: r.trade_date,
@@ -133,7 +135,7 @@ export class MarketDataRepository {
           return bars;
         }
       } catch (err) {
-        console.warn(`[MarketDataRepository] Supabase getBars error for ${clean}, fallback to local cache:`, err);
+        dbClient.handleDbError('market_data_daily', 'getBars', err);
       }
     }
 

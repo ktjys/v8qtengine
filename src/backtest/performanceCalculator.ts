@@ -2,14 +2,12 @@ import { BacktestSummary, RiskLevel } from '../types/v8';
 import { SimulatedTradeSignal } from './backtestTypes';
 
 export function calculateReplayPerformance(
-  signals: SimulatedTradeSignal[],
-  version: 'V8.0' | 'V7.0'
+  signals: SimulatedTradeSignal[]
 ): BacktestSummary {
   const total = signals.length;
 
   if (total === 0) {
     return {
-      version,
       total_signals: 0,
       completed_signals: 0,
       win_rate_5d: 0,
@@ -138,7 +136,6 @@ export function calculateReplayPerformance(
   });
 
   return {
-    version,
     total_signals: total,
     completed_signals: completed.length,
     win_rate_5d: Math.round((win5d / (sig5d.length || 1)) * 1000) / 10,

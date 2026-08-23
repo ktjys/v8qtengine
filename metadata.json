@@ -1,7 +1,6 @@
 {
-  "name": "V8 Quant Decision & Signal System",
-  "description": "V8 퀀트 의사결정 및 시그널 시스템: 자산 분류, 기회 점수, 독립 리스크 평가, 디시전 매트릭스, 시그널 스냅샷 및 사후 성과 백테스트",
+  "name": "Quant Decision & Signal Engine",
+  "description": "다차원 자산 분류, 기회-리스크 독립 평가 매트릭스, 불변 시그널 원장, Look-ahead Bias 제거 백테스트를 제공하는 단독 퀀트 의사결정 플랫폼",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
-

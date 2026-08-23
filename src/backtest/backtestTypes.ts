@@ -1,11 +1,10 @@
 import { BacktestSummary, RiskLevel, StrategyType } from '../types/v8';
 
 export interface BacktestRequestConfig {
-  startDate: string; // e.g. '2024-01-01'
-  endDate: string; // e.g. '2026-08-19'
+  startDate?: string; // e.g. '2024-01-01'
+  endDate?: string; // e.g. '2026-08-19'
   tickers?: string[]; // specific universe or all watchlist
-  opportunityThresholdV8?: number; // e.g. 70
-  opportunityThresholdV7?: number; // e.g. 65
+  opportunityThreshold?: number; // e.g. 70
 }
 
 export interface SimulatedTradeSignal {
@@ -13,7 +12,6 @@ export interface SimulatedTradeSignal {
   ticker: string;
   entryDate: string;
   entryPrice: number;
-  strategyVersion: 'V8.0' | 'V7.0';
   strategyType: StrategyType;
   riskLevel: RiskLevel;
   opportunityScore: number;
@@ -27,17 +25,17 @@ export interface SimulatedTradeSignal {
   isWin20d?: boolean;
 }
 
-export interface ReplayComparisonResult {
-  v8: BacktestSummary;
-  v7: BacktestSummary;
-  signalsV8: SimulatedTradeSignal[];
-  signalsV7: SimulatedTradeSignal[];
-  improvement: {
-    winRateDiff20d: number;
-    avgReturnDiff20d: number;
-    maxDrawdownReduction: number;
-    profitFactorDiff: number;
-  };
+export interface EquityCurvePoint {
+  date: string;
+  cumulativeReturn: number;
+  benchmarkReturn: number;
+  drawdown: number;
+}
+
+export interface StandaloneBacktestResult {
+  summary: BacktestSummary;
+  signals: SimulatedTradeSignal[];
+  equityCurve: EquityCurvePoint[];
   startDate: string;
   endDate: string;
   testedUniverseCount: number;

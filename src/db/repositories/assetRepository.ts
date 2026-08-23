@@ -19,7 +19,7 @@ export class AssetRepository {
   async findByTicker(ticker: string): Promise<AssetRecord | null> {
     const clean = ticker.toUpperCase().trim();
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('assets') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
           .from('assets')
@@ -27,7 +27,9 @@ export class AssetRepository {
           .eq('ticker', clean)
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          dbClient.handleDbError('assets', 'findByTicker', error);
+        } else if (data) {
           const record: AssetRecord = {
             ticker: data.ticker,
             name: data.name,
@@ -45,7 +47,7 @@ export class AssetRepository {
           return record;
         }
       } catch (err) {
-        console.warn(`[AssetRepository] Supabase findByTicker error for ${clean}, fallback to local cache:`, err);
+        dbClient.handleDbError('assets', 'findByTicker', err);
       }
     }
 
@@ -53,14 +55,16 @@ export class AssetRepository {
   }
 
   async getAll(): Promise<AssetRecord[]> {
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('assets') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
           .from('assets')
           .select('*')
           .order('ticker', { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          dbClient.handleDbError('assets', 'getAll', error);
+        } else if (data && data.length > 0) {
           const records: AssetRecord[] = data.map((item) => ({
             ticker: item.ticker,
             name: item.name,
@@ -80,7 +84,7 @@ export class AssetRepository {
           return records;
         }
       } catch (err) {
-        console.warn('[AssetRepository] Supabase getAll error, fallback to local cache:', err);
+        dbClient.handleDbError('assets', 'getAll', err);
       }
     }
 
@@ -100,7 +104,7 @@ export class AssetRepository {
       created_at: existing?.created_at || now,
     };
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('assets') && dbClient.supabase) {
       try {
         const payload = {
           ticker: record.ticker,
@@ -120,10 +124,10 @@ export class AssetRepository {
           .upsert(payload, { onConflict: 'ticker' });
 
         if (error) {
-          console.warn(`[AssetRepository] Supabase upsert failed for ${clean}:`, error.message);
+          dbClient.handleDbError('assets', 'upsert', error);
         }
       } catch (err) {
-        console.warn(`[AssetRepository] Supabase upsert exception for ${clean}:`, err);
+        dbClient.handleDbError('assets', 'upsert', err);
       }
     }
 

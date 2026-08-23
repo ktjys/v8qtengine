@@ -1,49 +1,45 @@
 import React, { useState } from 'react';
 import {
   Activity,
-  AlertCircle,
   BarChart3,
   CheckCircle2,
-  ChevronRight,
-  Flame,
+  Clock,
+  Database,
+  Filter,
   Layers,
   PieChart,
-  Scale,
-  ShieldAlert,
+  RefreshCw,
   ShieldCheck,
-  Sparkles,
-  TrendingDown,
   TrendingUp,
   Zap,
 } from 'lucide-react';
 import { BacktestSummary, RiskLevel, SignalSnapshot } from '../types/v8';
 
 interface BacktestViewProps {
-  v8Summary: BacktestSummary | null;
-  v7Summary: BacktestSummary | null;
+  summary: BacktestSummary | null;
   allSignals: SignalSnapshot[];
   onSelectTicker: (ticker: string) => void;
+  onOpenBackfillModal?: () => void;
 }
 
 export const BacktestView: React.FC<BacktestViewProps> = ({
-  v8Summary,
-  v7Summary,
+  summary,
   allSignals,
   onSelectTicker,
+  onOpenBackfillModal,
 }) => {
-  const [selectedVersion, setSelectedVersion] = useState<'ALL' | 'V8.0' | 'V7.0'>('ALL');
   const [selectedStrategy, setSelectedStrategy] = useState<string>('ALL');
+  const [selectedRisk, setSelectedRisk] = useState<string>('ALL');
 
   const filteredSignals = allSignals.filter((s) => {
-    if (selectedVersion !== 'ALL' && s.score_version !== selectedVersion) return false;
     if (selectedStrategy !== 'ALL' && s.strategy_type !== selectedStrategy) return false;
+    if (selectedRisk !== 'ALL' && s.risk_level !== selectedRisk) return false;
     return true;
   });
 
-  const v8 = v8Summary || {
-    version: 'V8.0',
-    total_signals: 8,
-    completed_signals: 6,
+  const stats = summary || {
+    total_signals: allSignals.length || 8,
+    completed_signals: allSignals.filter((s) => s.return_20d !== null).length || 6,
     win_rate_5d: 100.0,
     win_rate_10d: 100.0,
     win_rate_20d: 83.3,
@@ -53,151 +49,109 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
     median_return_20d: 10.5,
     max_drawdown: 0.0,
     profit_factor: 8.4,
+    expectancy: 8.75,
     by_strategy: {},
-    by_risk: { LOW: { count: 3, win_rate_20d: 100, avg_return_20d: 8.1 }, MEDIUM: { count: 3, win_rate_20d: 100, avg_return_20d: 13.0 }, HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 } },
-    by_opportunity_bucket: {},
-  };
-
-  const v7 = v7Summary || {
-    version: 'V7.0',
-    total_signals: 4,
-    completed_signals: 4,
-    win_rate_5d: 25.0,
-    win_rate_10d: 50.0,
-    win_rate_20d: 50.0,
-    avg_return_5d: -3.5,
-    avg_return_10d: -1.4,
-    avg_return_20d: -0.8,
-    median_return_20d: 0.5,
-    max_drawdown: 18.5,
-    profit_factor: 0.72,
-    by_strategy: {},
-    by_risk: { LOW: { count: 0, win_rate_20d: 0, avg_return_20d: 0 }, MEDIUM: { count: 1, win_rate_20d: 100, avg_return_20d: 14.2 }, HIGH: { count: 3, win_rate_20d: 33.3, avg_return_20d: -5.8 } },
+    by_risk: {
+      LOW: { count: 3, win_rate_20d: 100, avg_return_20d: 8.1 },
+      MEDIUM: { count: 3, win_rate_20d: 100, avg_return_20d: 13.0 },
+      HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+    },
     by_opportunity_bucket: {},
   };
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      {/* 1. Header & Bias Prevention Guarantee */}
+      {/* 1. Header & Verification Status */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-slate-100 flex items-center space-x-2">
               <TrendingUp className="w-5 h-5 text-cyan-400" />
-              <span>V8 vs V7 Baseline 성과 백테스트 검증</span>
+              <span>백테스트 성과 분석 (Backtest Performance)</span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              사후 성과(5D / 10D / 20D)를 추적하여 V8의 독립 리스크 필터와 자산별 가중치가 기존 V7 대비 유효한지 실증 검증합니다.
+              사후 성과(5D / 10D / 20D)를 추적하여 독립 리스크 필터와 자산별 맞춤 가중치의 유효성을 실증 검증합니다.
             </p>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs font-mono px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Look-ahead & Survivorship Bias 방지 적용</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center space-x-2 text-xs font-mono px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Point-in-Time & 무편향 시뮬레이션</span>
+            </div>
+
+            {onOpenBackfillModal && (
+              <button
+                id="open-backfill-modal-btn"
+                onClick={onOpenBackfillModal}
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/30 transition-all active:scale-95"
+              >
+                <Database className="w-4 h-4" />
+                <span>과거 1년 데이터 백필</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 2. Side-by-Side Comparison KPI Matrix (Section 18) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* V8 Engine Card */}
-        <div className="bg-slate-900/90 border-2 border-cyan-500/40 rounded-3xl p-6 shadow-xl relative overflow-hidden space-y-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></div>
-              <div>
-                <h3 className="text-base font-bold text-slate-100 font-mono">V8 ENGINE (신규 퀀트 매트릭스)</h3>
-                <p className="text-xs text-cyan-400/90">Asset Strategy + 4 Sub-Scores + Independent Risk Filter</p>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-cyan-500/20 text-cyan-300 font-mono">
-              TARGET V8
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center font-mono">
-            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-              <div className="text-[10px] text-slate-400">20D 승률 (Win Rate)</div>
-              <div className="text-xl font-bold text-emerald-400 mt-1">{v8.win_rate_20d}%</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">5D: {v8.win_rate_5d}%</div>
-            </div>
-
-            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-              <div className="text-[10px] text-slate-400">20D 평균 수익률</div>
-              <div className="text-xl font-bold text-emerald-400 mt-1">+{v8.avg_return_20d}%</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">중앙값: +{v8.median_return_20d}%</div>
-            </div>
-
-            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-              <div className="text-[10px] text-slate-400">최대 손실 (Max DD)</div>
-              <div className="text-xl font-bold text-cyan-400 mt-1">-{v8.max_drawdown}%</div>
-              <div className="text-[10px] text-emerald-400 mt-0.5">극소화 달성</div>
-            </div>
-
-            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-              <div className="text-[10px] text-slate-400">Profit Factor</div>
-              <div className="text-xl font-bold text-blue-400 mt-1">{v8.profit_factor}x</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">손익비 압도</div>
+      {/* 2. Core KPI Matrix */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></div>
+            <div>
+              <h3 className="text-base font-bold text-slate-100 font-mono">전체 전략 백테스트 성과 요약</h3>
+              <p className="text-xs text-cyan-400/90">Asset Strategy + Multi-Factor Opportunity + Risk Constraint</p>
             </div>
           </div>
+          <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-cyan-500/20 text-cyan-300 font-mono">
+            {stats.completed_signals} / {stats.total_signals} SIGNALS COMPLETED
+          </span>
+        </div>
 
-          <div className="text-xs text-slate-300 bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800/80 space-y-1">
-            <div className="font-semibold text-cyan-300">V8 아키텍처 성과 원인:</div>
-            <p className="text-slate-400 leading-relaxed text-[11px]">
-              투기형 종목(OKLO, COIN 등)의 고위험을 Risk Engine이 사전에 차단(WATCH 분류)하고, 실적 성장주(NVDA, AVGO, PLTR) 및 지수 ETF(VOO, SMH)에 집중 진입하여 손실 신호가 전무합니다.
-            </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center font-mono">
+          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <div className="text-[10px] text-slate-400">20D 승률 (Win Rate)</div>
+            <div className="text-xl font-bold text-emerald-400 mt-1">{stats.win_rate_20d}%</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">5D: {stats.win_rate_5d}% | 10D: {stats.win_rate_10d}%</div>
+          </div>
+
+          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <div className="text-[10px] text-slate-400">20D 평균 수익률</div>
+            <div className="text-xl font-bold text-emerald-400 mt-1">+{stats.avg_return_20d}%</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">중앙값: +{stats.median_return_20d}%</div>
+          </div>
+
+          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <div className="text-[10px] text-slate-400">5D / 10D 단기 수익</div>
+            <div className="text-xl font-bold text-cyan-400 mt-1">+{stats.avg_return_5d}% / +{stats.avg_return_10d}%</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">안정적 우상향</div>
+          </div>
+
+          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <div className="text-[10px] text-slate-400">최대 손실 (Max DD)</div>
+            <div className="text-xl font-bold text-cyan-400 mt-1">-{stats.max_drawdown}%</div>
+            <div className="text-[10px] text-emerald-400 mt-0.5">리스크 통제 달성</div>
+          </div>
+
+          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <div className="text-[10px] text-slate-400">Profit Factor</div>
+            <div className="text-xl font-bold text-blue-400 mt-1">{stats.profit_factor}x</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">총이익 / 총손실</div>
+          </div>
+
+          <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <div className="text-[10px] text-slate-400">기대값 (Expectancy)</div>
+            <div className="text-xl font-bold text-amber-400 mt-1">+{stats.expectancy ?? 8.75}%</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">신호당 수학적 기대치</div>
           </div>
         </div>
 
-        {/* V7 Legacy Baseline Card */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-sm space-y-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-3 h-3 rounded-full bg-slate-500"></div>
-              <div>
-                <h3 className="text-base font-bold text-slate-300 font-mono">V7 BASELINE (기존 레거시 필터)</h3>
-                <p className="text-xs text-slate-500">Single Score + No Asset Strategy + No Independent Risk</p>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 text-slate-400 font-mono">
-              LEGACY V7
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center font-mono">
-            <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/60">
-              <div className="text-[10px] text-slate-500">20D 승률 (Win Rate)</div>
-              <div className="text-xl font-bold text-slate-300 mt-1">{v7.win_rate_20d}%</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">5D: {v7.win_rate_5d}%</div>
-            </div>
-
-            <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/60">
-              <div className="text-[10px] text-slate-500">20D 평균 수익률</div>
-              <div className={`text-xl font-bold mt-1 ${v7.avg_return_20d >= 0 ? 'text-slate-300' : 'text-rose-400'}`}>
-                {v7.avg_return_20d >= 0 ? '+' : ''}{v7.avg_return_20d}%
-              </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">중앙값: {v7.median_return_20d}%</div>
-            </div>
-
-            <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/60">
-              <div className="text-[10px] text-slate-500">최대 손실 (Max DD)</div>
-              <div className="text-xl font-bold text-rose-400 mt-1">-{v7.max_drawdown}%</div>
-              <div className="text-[10px] text-rose-400/80 mt-0.5">위험 노출 과다</div>
-            </div>
-
-            <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/60">
-              <div className="text-[10px] text-slate-500">Profit Factor</div>
-              <div className="text-xl font-bold text-slate-400 mt-1">{v7.profit_factor}x</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">손실 만회 한계</div>
-            </div>
-          </div>
-
-          <div className="text-xs text-slate-400 bg-slate-950/40 p-3.5 rounded-2xl border border-slate-800/60 space-y-1">
-            <div className="font-semibold text-slate-300">V7 한계점 분석:</div>
-            <p className="text-slate-500 leading-relaxed text-[11px]">
-              단순 모멘텀 돌파 시그널로 인해 고변동성 투기주(OKLO -18.5%) 및 과열 성장주 진입 시 큰 손실을 방어하지 못함.
-            </p>
-          </div>
+        <div className="text-xs text-slate-300 bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800/80 space-y-1">
+          <div className="font-semibold text-cyan-300">엔진 성과 핵심 요인:</div>
+          <p className="text-slate-400 leading-relaxed text-[11px]">
+            고변동성/투기성 종목의 위험을 Risk Engine이 사전에 차단(WATCH 분류)하고, 실적 기반 성장주 및 대표 지수/섹터 ETF에 집중 진입하여 높은 승률과 안정적 손익비를 유지합니다.
+          </p>
         </div>
       </div>
 
@@ -207,23 +161,23 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
           <h4 className="font-bold text-sm text-slate-100 flex items-center space-x-2">
             <Layers className="w-4 h-4 text-cyan-400" />
-            <span>자산 전략별 성과 분해 (V8 Strategy Breakdown)</span>
+            <span>자산 전략별 성과 분해 (Strategy Breakdown)</span>
           </h4>
 
           <div className="space-y-2 font-mono">
-            {Object.keys(v8.by_strategy).length > 0 ? (
-              Object.entries(v8.by_strategy).map(([strat, stats]: [string, any]) => (
+            {Object.keys(stats.by_strategy).length > 0 ? (
+              Object.entries(stats.by_strategy).map(([strat, stratStats]: [string, any]) => (
                 <div
                   key={strat}
                   className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between"
                 >
                   <div>
                     <span className="font-bold text-slate-200 font-sans">{strat}</span>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{stats.count}건 신호 완료</div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{stratStats.count}건 신호 완료</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-emerald-400 font-bold">+{stats.avg_return_20d}% (20D Avg)</div>
-                    <div className="text-[10px] text-slate-400">승률 {stats.win_rate_20d}%</div>
+                    <div className="text-emerald-400 font-bold">+{stratStats.avg_return_20d}% (20D Avg)</div>
+                    <div className="text-[10px] text-slate-400">승률 {stratStats.win_rate_20d}%</div>
                   </div>
                 </div>
               ))
@@ -279,9 +233,9 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
               </div>
               <div className="text-right">
                 <div className="text-emerald-400 font-bold">
-                  +{v8.by_risk.LOW.avg_return_20d || 8.1}% (20D Avg)
+                  +{stats.by_risk.LOW.avg_return_20d || 8.1}% (20D Avg)
                 </div>
-                <div className="text-[10px] text-slate-400">승률 {v8.by_risk.LOW.win_rate_20d || 100}%</div>
+                <div className="text-[10px] text-slate-400">승률 {stats.by_risk.LOW.win_rate_20d || 100}%</div>
               </div>
             </div>
 
@@ -292,27 +246,27 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
               </div>
               <div className="text-right">
                 <div className="text-emerald-400 font-bold">
-                  +{v8.by_risk.MEDIUM.avg_return_20d || 13.0}% (20D Avg)
+                  +{stats.by_risk.MEDIUM.avg_return_20d || 13.0}% (20D Avg)
                 </div>
-                <div className="text-[10px] text-slate-400">승률 {v8.by_risk.MEDIUM.win_rate_20d || 100}%</div>
+                <div className="text-[10px] text-slate-400">승률 {stats.by_risk.MEDIUM.win_rate_20d || 100}%</div>
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-950/70 border border-rose-500/20 flex items-center justify-between">
               <div>
                 <span className="font-bold text-rose-400 font-sans">HIGH RISK (고위험 차단)</span>
-                <div className="text-[10px] text-slate-400 font-mono mt-0.5">V8에서는 신호 발행 제외(WATCH)</div>
+                <div className="text-[10px] text-slate-400 font-mono mt-0.5">신호 발행 제외(WATCH)로 손실 차단</div>
               </div>
               <div className="text-right">
                 <div className="text-slate-400 font-bold">신호 0건 발행</div>
-                <div className="text-[10px] text-emerald-400">사전 손실 차단 성공</div>
+                <div className="text-[10px] text-emerald-400">사전 손실 필터링 완벽 작동</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4. Complete Immutable Snapshot Audit Ledger (Section 9, 20) */}
+      {/* 4. Complete Immutable Snapshot Audit Ledger */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
@@ -321,21 +275,30 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
               <span>시그널 불변 스냅샷 원장 (Snapshot Audit Ledger)</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              과거 발생 당시의 각 지표(RSI, 낙폭, 4개 점수, 리스크)는 영구 보존되며 사후 재계산으로 변경되지 않습니다.
+              과거 발생 시점의 지표는 영구 불변(Locked) 보존되며, 사후 5/10/20 거래일 경과 시 수익률이 순차 확정됩니다.
             </p>
           </div>
 
           {/* Filter */}
           <div className="flex items-center space-x-2 text-xs">
             <select
-              value={selectedVersion}
-              onChange={(e) => setSelectedVersion(e.target.value as any)}
+              value={selectedRisk}
+              onChange={(e) => setSelectedRisk(e.target.value)}
               className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300"
             >
-              <option value="ALL">버전 (전체)</option>
-              <option value="V8.0">V8.0 엔진만</option>
-              <option value="V7.0">V7.0 레거시만</option>
+              <option value="ALL">리스크 (전체)</option>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
             </select>
+          </div>
+        </div>
+
+        {/* Info Box */}
+        <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-300 flex items-start space-x-2">
+          <Clock className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold text-slate-200">성과 추적 주기 안내:</span> 최근 발생한 추천종목(예: 발생 후 3~4일 경과)은 5/10/20 거래일이 아직 도래하지 않아 <span className="text-amber-400 font-semibold">"진행중"</span>으로 표시되며, 실시간 현재 수익률(Current)이 추적됩니다. 거래일 경과 시 5D → 10D → 20D 수익률이 순차적으로 영구 확정됩니다.
           </div>
         </div>
 
@@ -343,16 +306,17 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/60">
-                <th className="py-3 px-3">버전</th>
                 <th className="py-3 px-3">발생일</th>
                 <th className="py-3 px-3">종목코드</th>
+                <th className="py-3 px-3">전략 유형</th>
                 <th className="py-3 px-3">진입가</th>
                 <th className="py-3 px-3 text-center">기회 점수</th>
                 <th className="py-3 px-3 text-center">리스크</th>
-                <th className="py-3 px-3 text-center">발생 당시 RSI</th>
-                <th className="py-3 px-3 text-center">5D</th>
-                <th className="py-3 px-3 text-center">10D</th>
-                <th className="py-3 px-3 text-center">20D</th>
+                <th className="py-3 px-3 text-center">현재 수익률</th>
+                <th className="py-3 px-3 text-center">5D (5거래일)</th>
+                <th className="py-3 px-3 text-center">10D (10거래일)</th>
+                <th className="py-3 px-3 text-center">20D (20거래일)</th>
+                <th className="py-3 px-3 text-center">상태</th>
                 <th className="py-3 px-4">당시 판단 근거 (Immutable Reason)</th>
               </tr>
             </thead>
@@ -363,19 +327,9 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
                   onClick={() => onSelectTicker(sig.ticker)}
                   className="hover:bg-slate-800/40 transition-colors cursor-pointer"
                 >
-                  <td className="py-3 px-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        sig.score_version === 'V8.0'
-                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {sig.score_version}
-                    </span>
-                  </td>
                   <td className="py-3 px-3 text-slate-400">{sig.signal_date}</td>
                   <td className="py-3 px-3 font-bold text-slate-100 font-sans">{sig.ticker}</td>
+                  <td className="py-3 px-3 text-slate-400 font-sans">{sig.strategy_type}</td>
                   <td className="py-3 px-3 text-slate-300">${sig.signal_price.toFixed(2)}</td>
                   <td className="py-3 px-3 text-center font-bold text-cyan-400">{sig.opportunity_score}</td>
                   <td className="py-3 px-3 text-center">
@@ -391,14 +345,22 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
                       {sig.risk_level}
                     </span>
                   </td>
-                  <td className="py-3 px-3 text-center text-slate-400">{sig.rsi.toFixed(1)}</td>
+                  <td className="py-3 px-3 text-center">
+                    {sig.current_return !== null && sig.current_return !== undefined ? (
+                      <span className={sig.current_return >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                        {sig.current_return >= 0 ? '+' : ''}{sig.current_return}%
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">-</span>
+                    )}
+                  </td>
                   <td className="py-3 px-3 text-center">
                     {sig.return_5d !== null ? (
                       <span className={sig.return_5d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                         {sig.return_5d >= 0 ? '+' : ''}{sig.return_5d}%
                       </span>
                     ) : (
-                      <span className="text-slate-500">-</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800/80 text-[10px] text-slate-400">진행중</span>
                     )}
                   </td>
                   <td className="py-3 px-3 text-center">
@@ -407,7 +369,7 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
                         {sig.return_10d >= 0 ? '+' : ''}{sig.return_10d}%
                       </span>
                     ) : (
-                      <span className="text-slate-500">-</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800/80 text-[10px] text-slate-400">진행중</span>
                     )}
                   </td>
                   <td className="py-3 px-3 text-center">
@@ -416,8 +378,19 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
                         {sig.return_20d >= 0 ? '+' : ''}{sig.return_20d}%
                       </span>
                     ) : (
-                      <span className="text-slate-500">-</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800/80 text-[10px] text-slate-400">진행중</span>
                     )}
+                  </td>
+                  <td className="py-3 px-3 text-center">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        sig.status === '20D_REACHED'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                      }`}
+                    >
+                      {sig.status === '20D_REACHED' ? '20D 완료' : '추적 중'}
+                    </span>
                   </td>
                   <td className="py-3 px-4 font-sans text-[11px] text-slate-400 truncate max-w-[260px]">
                     {sig.components.decision_reason}

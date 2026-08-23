@@ -12,10 +12,7 @@ import { systemRouter } from './src/api/systemRoutes';
 import { telegramRouter } from './src/api/telegramRoutes';
 import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
-import { signalRepository } from './src/db/repositories/signalRepository';
-import { calculateBacktestMetrics } from './src/engine/backtestEngine';
 import { createSignalSnapshot, formatTelegramNotification } from './src/engine/signalEngine';
-import { runHistoricalReplay } from './src/backtest/strategyReplay';
 
 async function startServer() {
   const app = express();
@@ -23,14 +20,10 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Bootstrap initial evaluation state
-  await getInitialOrLatestEvaluations();
-
   // 1. Health check
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'ok',
-      version: 'V8.0-PROD',
       timestamp: new Date().toISOString(),
     });
   });
@@ -46,38 +39,28 @@ async function startServer() {
   app.use('/api/v8/system', systemRouter);
   app.use('/api/v8/telegram', telegramRouter);
 
-  // Backward compatibility alias endpoints
-  app.get('/api/v8/backtest', async (req, res) => {
-    const signals = await signalRepository.getAll();
-    const v8Summary = calculateBacktestMetrics(signals, 'V8.0');
-    const v7Summary = calculateBacktestMetrics(signals, 'V7.0');
-
-    res.json({
-      success: true,
-      v8: v8Summary,
-      v7: v7Summary,
-      all_signals: signals,
-    });
-  });
-
   app.post('/api/v8/telegram/preview', async (req, res) => {
-    const { ticker } = req.body;
-    if (!ticker) {
-      return res.status(400).json({ error: 'Ticker is required' });
-    }
-    const evalItem = await evaluationRepository.findByTicker(ticker);
-    if (!evalItem) {
-      return res.status(404).json({ error: 'Ticker evaluation not found' });
-    }
-    const snapshot = createSignalSnapshot(evalItem);
-    const message = formatTelegramNotification(snapshot);
+    try {
+      const { ticker } = req.body;
+      if (!ticker) {
+        return res.status(400).json({ error: 'Ticker is required' });
+      }
+      const evalItem = await evaluationRepository.findByTicker(ticker);
+      if (!evalItem) {
+        return res.status(404).json({ error: 'Ticker evaluation not found' });
+      }
+      const snapshot = createSignalSnapshot(evalItem);
+      const message = formatTelegramNotification(snapshot);
 
-    res.json({
-      success: true,
-      ticker: evalItem.ticker,
-      message,
-      snapshot,
-    });
+      res.json({
+        success: true,
+        ticker: evalItem.ticker,
+        message,
+        snapshot,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Vite middleware for development vs static in production
@@ -96,7 +79,11 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`V8 Quant System Server running on http://localhost:${PORT}`);
+    console.log(`Quant Decision Engine Server running on http://localhost:${PORT}`);
+    // Bootstrap initial evaluation state asynchronously after server is up
+    getInitialOrLatestEvaluations().catch((err) => {
+      console.error('[Bootstrap Error] Failed to initialize evaluations:', err);
+    });
   });
 }
 

@@ -1,36 +1,54 @@
 import { dbClient } from '../supabaseClient';
 import { SignalSnapshot, SignalStatus } from '../../types/v8';
+import { assetRepository } from './assetRepository';
 
 export class SignalRepository {
-  async getAll(version?: 'V8.0' | 'V7.0'): Promise<SignalSnapshot[]> {
-    if (dbClient.supabase) {
+  async getAll(): Promise<SignalSnapshot[]> {
+    if (dbClient.isTableAvailable('signals') && dbClient.supabase) {
       try {
-        let query = dbClient.supabase.from('signals').select('*, signal_outcomes(*)');
-        if (version) {
-          query = query.eq('score_version', version);
-        }
-        const { data, error } = await query.order('signal_date', { ascending: false });
+        const { data, error } = await dbClient.supabase
+          .from('signals')
+          .select('*')
+          .order('signal_date', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          dbClient.handleDbError('signals', 'getAll', error);
+        } else if (data && data.length > 0) {
+          // Attempt to fetch outcomes in a non-blocking separate query
+          let outcomesMap = new Map<string, any>();
+          if (dbClient.isTableAvailable('signal_outcomes')) {
+            try {
+              const { data: outData } = await dbClient.supabase
+                .from('signal_outcomes')
+                .select('*');
+              if (outData) {
+                for (const o of outData) {
+                  outcomesMap.set(o.signal_id, o);
+                }
+              }
+            } catch (outErr) {
+              // Ignore outcome join failures gracefully
+            }
+          }
+
           const mapped: SignalSnapshot[] = data.map((row: any) => {
-            const outcome = row.signal_outcomes?.[0] || {};
+            const outcome = outcomesMap.get(row.id) || {};
             return {
               id: row.id,
               ticker: row.ticker,
               name: row.reason_json?.name || row.ticker,
               asset_type: row.reason_json?.asset_type || 'equity',
               signal_date: row.signal_date,
-              signal_price: Number(row.entry_price),
-              score_version: row.score_version as 'V8.0' | 'V7.0',
-              strategy_type: row.strategy_type,
-              opportunity_score: row.opportunity_score,
-              risk_score: row.risk_score,
-              risk_level: row.risk_level,
-              decision: row.decision,
-              signal_confidence: Number(row.confidence ?? 0.8),
+              signal_price: Number(row.entry_price || 0),
+              strategy_type: row.strategy_type || 'CORE_MOMENTUM',
+              opportunity_score: row.opportunity_score ?? 70,
+              risk_score: row.risk_score ?? 50,
+              risk_level: row.risk_level || 'MEDIUM',
+              decision: row.decision || 'HOLD',
+              signal_confidence: Number(row.confidence ?? row.reason_json?.confidence ?? 0.8),
               classification_confidence: Number(row.reason_json?.classification_confidence ?? 1.0),
-              technical_score: row.technical_score,
-              momentum_score: row.momentum_score,
+              technical_score: row.technical_score ?? 70,
+              momentum_score: row.momentum_score ?? 70,
               fundamental_score: row.fundamental_score ?? null,
               valuation_score: row.valuation_score ?? null,
               rsi: Number(row.reason_json?.rsi ?? 50),
@@ -41,13 +59,13 @@ export class SignalRepository {
                 decision_reason: row.reason_json?.decision_reason || '',
               },
               status: (row.status as SignalStatus) || 'ACTIVE',
-              return_1d: outcome.return_1d ? Number(outcome.return_1d) : undefined,
-              return_5d: outcome.return_5d ? Number(outcome.return_5d) : null,
-              return_10d: outcome.return_10d ? Number(outcome.return_10d) : null,
-              return_20d: outcome.return_20d ? Number(outcome.return_20d) : null,
-              current_return: outcome.return_20d ? Number(outcome.return_20d) : null,
-              max_gain: outcome.max_gain ? Number(outcome.max_gain) : undefined,
-              max_loss: outcome.max_loss ? Number(outcome.max_loss) : undefined,
+              return_1d: outcome.return_1d !== undefined && outcome.return_1d !== null ? Number(outcome.return_1d) : undefined,
+              return_5d: outcome.return_5d !== undefined && outcome.return_5d !== null ? Number(outcome.return_5d) : null,
+              return_10d: outcome.return_10d !== undefined && outcome.return_10d !== null ? Number(outcome.return_10d) : null,
+              return_20d: outcome.return_20d !== undefined && outcome.return_20d !== null ? Number(outcome.return_20d) : null,
+              current_return: outcome.return_20d !== undefined && outcome.return_20d !== null ? Number(outcome.return_20d) : (outcome.return_10d !== undefined && outcome.return_10d !== null ? Number(outcome.return_10d) : (outcome.return_5d !== undefined && outcome.return_5d !== null ? Number(outcome.return_5d) : null)),
+              max_gain: outcome.max_gain !== undefined && outcome.max_gain !== null ? Number(outcome.max_gain) : undefined,
+              max_loss: outcome.max_loss !== undefined && outcome.max_loss !== null ? Number(outcome.max_loss) : undefined,
               is_closed: Boolean(outcome.closed_at),
             };
           });
@@ -57,25 +75,33 @@ export class SignalRepository {
           return mapped;
         }
       } catch (err) {
-        console.warn('[SignalRepository] Supabase getAll error, fallback to local cache:', err);
+        dbClient.handleDbError('signals', 'getAll', err);
       }
     }
 
     const list = Array.from(dbClient.signals.values());
-    if (version) {
-      return list.filter((s) => s.score_version === version);
-    }
     return list.sort((a, b) => b.signal_date.localeCompare(a.signal_date));
   }
 
   async save(signal: SignalSnapshot): Promise<SignalSnapshot> {
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('signals') && dbClient.supabase) {
       try {
-        const payload = {
+        // Ensure parent asset exists in assets table
+        await assetRepository.upsert({
+          ticker: signal.ticker.toUpperCase().trim(),
+          name: signal.name || signal.ticker,
+          asset_type: signal.asset_type || 'equity',
+          exchange: 'US',
+          currency: 'USD',
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+        const payload: Record<string, any> = {
           id: signal.id.startsWith('sig-') ? undefined : signal.id,
           ticker: signal.ticker,
           signal_date: signal.signal_date,
-          score_version: signal.score_version,
           strategy_type: signal.strategy_type,
           opportunity_score: signal.opportunity_score,
           risk_score: signal.risk_score,
@@ -106,16 +132,66 @@ export class SignalRepository {
           .select('id')
           .maybeSingle();
 
-        if (!error && data?.id) {
+        if (error) {
+          // If error is caused by missing optional columns (e.g. confidence or status), try minimal insert
+          const msg = error.message || '';
+          if (msg.includes('confidence') || msg.includes('status')) {
+            const minPayload = {
+              ticker: signal.ticker,
+              signal_date: signal.signal_date,
+              strategy_type: signal.strategy_type,
+              opportunity_score: signal.opportunity_score,
+              risk_score: signal.risk_score,
+              risk_level: signal.risk_level,
+              decision: signal.decision,
+              entry_price: signal.signal_price,
+              technical_score: signal.technical_score,
+              momentum_score: signal.momentum_score,
+              reason_json: payload.reason_json,
+            };
+            const { data: minData } = await dbClient.supabase
+              .from('signals')
+              .insert(minPayload)
+              .select('id')
+              .maybeSingle();
+            if (minData?.id) {
+              signal.id = minData.id;
+            }
+          } else {
+            dbClient.handleDbError('signals', 'save', error);
+          }
+        } else if (data?.id) {
           signal.id = data.id;
         }
       } catch (err) {
-        console.warn('[SignalRepository] Supabase save error:', err);
+        dbClient.handleDbError('signals', 'save', err);
       }
     }
 
     dbClient.signals.set(signal.id, signal);
+    dbClient.saveLocalSnapshot();
     return signal;
+  }
+
+  async upsert(signal: SignalSnapshot): Promise<SignalSnapshot> {
+    return this.save(signal);
+  }
+
+  async saveSignals(signals: SignalSnapshot[]): Promise<number> {
+    for (const sig of signals) {
+      await this.save(sig);
+      if (sig.return_20d !== null || sig.return_10d !== null || sig.return_5d !== null) {
+        await this.updateOutcome(sig.id, {
+          return_5d: sig.return_5d ?? undefined,
+          return_10d: sig.return_10d ?? undefined,
+          return_20d: sig.return_20d ?? undefined,
+          current_return: sig.current_return ?? undefined,
+          status: sig.status,
+          is_closed: sig.is_closed,
+        });
+      }
+    }
+    return signals.length;
   }
 
   async updateOutcome(
@@ -146,32 +222,42 @@ export class SignalRepository {
 
     if (dbClient.supabase) {
       try {
-        if (updates.status) {
-          await dbClient.supabase
+        if (updates.status && dbClient.isTableAvailable('signals')) {
+          const { error: sigErr } = await dbClient.supabase
             .from('signals')
             .update({ status: updates.status, updated_at: new Date().toISOString() })
             .eq('id', id);
+
+          if (sigErr) {
+            dbClient.handleDbError('signals', 'update status', sigErr);
+          }
         }
 
-        const outcomePayload = {
-          signal_id: id,
-          evaluation_date: new Date().toISOString().split('T')[0],
-          price: sig.signal_price,
-          return_1d: updates.return_1d,
-          return_5d: updates.return_5d,
-          return_10d: updates.return_10d,
-          return_20d: updates.return_20d,
-          max_gain: updates.max_gain,
-          max_loss: updates.max_loss,
-          is_win_20d: updates.return_20d !== undefined ? updates.return_20d > 0 : undefined,
-          closed_at: updates.is_closed ? new Date().toISOString() : null,
-        };
+        if (dbClient.isTableAvailable('signal_outcomes')) {
+          const outcomePayload = {
+            signal_id: id,
+            evaluation_date: new Date().toISOString().split('T')[0],
+            price: sig.signal_price,
+            return_1d: updates.return_1d,
+            return_5d: updates.return_5d,
+            return_10d: updates.return_10d,
+            return_20d: updates.return_20d,
+            max_gain: updates.max_gain,
+            max_loss: updates.max_loss,
+            is_win_20d: updates.return_20d !== undefined ? updates.return_20d > 0 : undefined,
+            closed_at: updates.is_closed ? new Date().toISOString() : null,
+          };
 
-        await dbClient.supabase
-          .from('signal_outcomes')
-          .upsert(outcomePayload, { onConflict: 'signal_id' });
+          const { error: outErr } = await dbClient.supabase
+            .from('signal_outcomes')
+            .upsert(outcomePayload, { onConflict: 'signal_id' });
+
+          if (outErr) {
+            dbClient.handleDbError('signal_outcomes', 'upsert outcome', outErr);
+          }
+        }
       } catch (err) {
-        console.warn(`[SignalRepository] Supabase updateOutcome error for ${id}:`, err);
+        dbClient.handleDbError('signal_outcomes', 'updateOutcome', err);
       }
     }
 

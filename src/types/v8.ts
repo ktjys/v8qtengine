@@ -132,7 +132,7 @@ export interface DataQualityReport {
   data_quality_score: number; // 0 ~ 100
   data_freshness: 'FRESH' | 'RECENT' | 'STALE' | 'OUTDATED';
   last_updated: string;
-  source: 'yahoo' | 'seed' | 'database';
+  source: 'yahoo' | 'seed' | 'database' | string;
   data_warnings: string[];
   bars_count: number;
   has_fundamentals: boolean;
@@ -170,7 +170,6 @@ export interface SignalSnapshot {
   ticker: string;
   name: string;
   signal_price: number;
-  score_version: 'V8.0' | 'V7.0';
   strategy_type: StrategyType;
   asset_type: AssetType;
   opportunity_score: number;
@@ -232,13 +231,11 @@ export interface ScanRunLog {
   failed_tickers: { ticker: string; error: string }[];
   items?: ScanRunItem[];
   status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED';
-  version: string;
   error_summary?: string;
   created_at?: string;
 }
 
 export interface BacktestSummary {
-  version: 'V8.0' | 'V7.0';
   total_signals: number;
   completed_signals: number;
   win_rate_5d: number;
@@ -283,3 +280,57 @@ export interface SystemStatus {
     timestamp: string;
   };
 }
+
+export interface DailyScorePoint {
+  date: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  changePercent: number;
+  ma20: number;
+  ma50: number;
+  ma200: number;
+  rsi14: number;
+  macd: number;
+  macdSignal: number;
+  macdHist: number;
+  drawdownFromHigh: number;
+  opportunityScore: number;
+  technicalScore: number;
+  momentumScore: number;
+  fundamentalScore: number | null;
+  valuationScore: number | null;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  strategyType: StrategyType;
+  decision: DecisionType;
+  isSignal: boolean;
+  decisionReason: string;
+}
+
+export interface SymbolScoreHistorySummary {
+  ticker: string;
+  currentPrice: number;
+  currentScore: number;
+  score30dAgo: number;
+  scoreChange30d: number;
+  highestScoreDate: string;
+  highestScore: number;
+  lowestScoreDate: string;
+  lowestScore: number;
+  totalSignalsInPeriod: number;
+  currentRsi: number;
+  rsiState: 'OVERSOLD' | 'HEALTHY_BUY' | 'NEUTRAL' | 'OVERBOUGHT';
+  trendState: 'STRONG_BULL' | 'BULL' | 'CORRECTION' | 'BEAR';
+}
+
+export interface SymbolScoreHistoryResult {
+  ticker: string;
+  range: string;
+  summary: SymbolScoreHistorySummary;
+  history: DailyScorePoint[];
+}
+

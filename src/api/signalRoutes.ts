@@ -4,11 +4,10 @@ import { updateSignalOutcomes } from '../jobs/signalOutcomeUpdater';
 
 export const signalRouter = Router();
 
-// GET /api/v8/signals
+// GET /api/v8/signals (and /api/quant/signals)
 signalRouter.get('/', async (req, res) => {
   try {
-    const version = req.query.version as 'V8.0' | 'V7.0' | undefined;
-    const signals = await signalRepository.getAll(version);
+    const signals = await signalRepository.getAll();
     res.json({
       success: true,
       count: signals.length,

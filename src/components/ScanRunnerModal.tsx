@@ -4,14 +4,10 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  Flame,
   Loader2,
   RefreshCw,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  X,
   Zap,
+  X,
 } from 'lucide-react';
 import { ScanRunLog, SignalSnapshot } from '../types/v8';
 
@@ -31,9 +27,9 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   const [newSignals, setNewSignals] = useState<SignalSnapshot[]>([]);
 
   const steps = [
-    { title: '1. Watchlist 동기화', desc: '21개 전종목 시세 및 메타데이터 로드' },
-    { title: '2. Asset Classification', desc: 'ETF/개별주 자산 정체성 및 전략 분류 (Manual 보존)' },
-    { title: '3. Opportunity Engine', desc: '전체 종목 4대 서브 스코어(Tech, Mom, Fund, Val) 산출' },
+    { title: '1. Watchlist 동기화', desc: '워치리스트 종목 시세 및 지표 로드' },
+    { title: '2. Asset Classification', desc: 'ETF/개별주 자산 정체성 및 전략 분류' },
+    { title: '3. Opportunity Engine', desc: '전체 종목 4대 팩터(Tech, Mom, Fund, Val) 산출' },
     { title: '4. Independent Risk Filter', desc: '베타, 변동성, 낙폭 기반 독립 리스크 제약 판정' },
     { title: '5. Decision & Signal Snapshot', desc: '의사결정 매트릭스 도출 및 불변 시그널 원장 저장' },
   ];
@@ -79,8 +75,8 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               <RefreshCw className={`w-4 h-4 ${isRunning ? 'animate-spin' : ''}`} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-100">V8 전체 퀀트 스캐너 실행</h3>
-              <p className="text-xs text-slate-400 font-mono">Watchlist 전체 21종목 일괄 평가 파이프라인</p>
+              <h3 className="text-base font-bold text-slate-100">퀀트 스캐너 실행</h3>
+              <p className="text-xs text-slate-400 font-mono">워치리스트 전종목 일괄 평가 파이프라인</p>
             </div>
           </div>
 
@@ -148,10 +144,10 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                 />
                 <span>부분 실패 허용 복원력 테스트 (Simulate Partial Failure)</span>
               </label>
-              <span className="text-[10px] text-slate-500 font-mono">Section 14 검증</span>
+              <span className="text-[10px] text-slate-500 font-mono">장애 격리</span>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              체크 시 1개 종목의 가상 네트워크 타임아웃을 유발하며, 시스템이 중단되지 않고 나머지 20개 종목을 정상 완료하는지 검증합니다.
+              체크 시 1개 종목의 가상 네트워크 타임아웃을 유발하며, 시스템이 중단되지 않고 나머지 종목을 정상 완료하는지 검증합니다.
             </p>
           </div>
         )}
@@ -213,12 +209,12 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               {isRunning ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>21개 종목 V8 엔진 평가 진행 중...</span>
+                  <span>엔진 평가 진행 중...</span>
                 </>
               ) : (
                 <>
                   <Zap className="w-4 h-4" />
-                  <span>V8 전체 파이프라인 스캔 시작</span>
+                  <span>전체 파이프라인 스캔 시작</span>
                 </>
               )}
             </button>

@@ -11,6 +11,7 @@ import {
   Edit3,
   ExternalLink,
   Layers,
+  LineChart,
   Percent,
   RotateCcw,
   Save,
@@ -33,10 +34,13 @@ import {
   StrategyType,
 } from '../types/v8';
 import { formatTelegramNotification } from '../engine/signalEngine';
+import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { SymbolDailyScoreChart } from './SymbolDailyScoreChart';
 
 interface SymbolDetailModalProps {
   evaluation: FullTickerEvaluation | null;
   historicalSignals: SignalSnapshot[];
+  initialTab?: 'overview' | 'chart' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals';
   onClose: () => void;
   onSaveOverride: (
     ticker: string,
@@ -51,13 +55,14 @@ interface SymbolDetailModalProps {
 export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   evaluation,
   historicalSignals,
+  initialTab = 'overview',
   onClose,
   onSaveOverride,
   onResetOverride,
 }) => {
   if (!evaluation) return null;
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals'>(initialTab);
   const [copiedTelegram, setCopiedTelegram] = useState(false);
 
   // Manual Override Form State
@@ -73,7 +78,6 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
     ticker: evaluation.ticker,
     name: evaluation.name,
     signal_price: evaluation.price,
-    score_version: 'V8.0',
     strategy_type: evaluation.classification.strategy_type,
     asset_type: evaluation.classification.asset_type,
     opportunity_score: evaluation.opportunity.opportunity_score,
@@ -129,15 +133,15 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="text-xl font-bold text-slate-100">{evaluation.name}</h3>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
-                  ${evaluation.price.toFixed(2)}
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold">
+                  {formatStockPrice(evaluation.price, evaluation.ticker)}
                 </span>
                 <span
                   className={`text-xs font-semibold ${
                     evaluation.change1d >= 0 ? 'text-emerald-400' : 'text-rose-400'
                   }`}
                 >
-                  {evaluation.change1d >= 0 ? '+' : ''}{evaluation.change1d}%
+                  {formatChangePercent(evaluation.change1d)}
                 </span>
               </div>
               <div className="flex items-center space-x-2 text-xs text-slate-400 mt-1">
@@ -173,6 +177,17 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             }`}
           >
             종합 진단 (Overview)
+          </button>
+          <button
+            onClick={() => setActiveTab('chart')}
+            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+              activeTab === 'chart'
+                ? 'border-cyan-400 text-cyan-400 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <LineChart className="w-3.5 h-3.5 text-cyan-400" />
+            <span>일별 점수 & 지표 차트</span>
           </button>
           <button
             onClick={() => setActiveTab('opportunity')}
@@ -228,6 +243,13 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+          {/* TAB: DAILY SCORE & INDICATORS CHART */}
+          {activeTab === 'chart' && (
+            <div className="space-y-6 animate-fadeIn">
+              <SymbolDailyScoreChart ticker={evaluation.ticker} />
+            </div>
+          )}
+
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-6 animate-fadeIn">
@@ -283,6 +305,33 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
 
                 <div className="mt-3 text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80 leading-relaxed">
                   💡 <strong>판단 근거:</strong> "{decision.reason}"
+                </div>
+              </div>
+
+              {/* Quick Chart Jump Banner */}
+              <div
+                onClick={() => setActiveTab('chart')}
+                className="cursor-pointer group p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950/40 border border-slate-800 hover:border-cyan-500/50 transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <LineChart className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-100 group-hover:text-cyan-300 transition-colors flex items-center space-x-2">
+                      <span>{evaluation.ticker} 일별 점수 변동 & 가격·RSI 지표 차트</span>
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono">
+                        NEW
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      과거 1년/6개월간 기회 점수 추이, 이동평균선 배열(MA20/50/200), RSI 오실레이터를 한눈에 확인하세요
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1 text-xs font-semibold text-cyan-400 group-hover:translate-x-1 transition-transform">
+                  <span>차트 열기</span>
+                  <ArrowRight className="w-4 h-4" />
                 </div>
               </div>
 
@@ -651,7 +700,7 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                         <div className="flex items-center space-x-2">
                           <span className="font-bold text-slate-100">{sig.signal_date}</span>
                           <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px]">
-                            {sig.score_version}
+                            {sig.strategy_type}
                           </span>
                           <span className="text-slate-400">${sig.signal_price.toFixed(2)}</span>
                         </div>

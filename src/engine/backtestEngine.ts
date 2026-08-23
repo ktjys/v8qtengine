@@ -1,15 +1,12 @@
 import { BacktestSummary, RiskLevel, SignalSnapshot } from '../types/v8';
 
 export function calculateBacktestMetrics(
-  signals: SignalSnapshot[],
-  version: 'V8.0' | 'V7.0'
+  signals: SignalSnapshot[]
 ): BacktestSummary {
-  const versionSignals = signals.filter((s) => s.score_version === version);
-  const total = versionSignals.length;
+  const total = signals.length;
 
   if (total === 0) {
     return {
-      version,
       total_signals: 0,
       completed_signals: 0,
       win_rate_5d: 0,
@@ -22,20 +19,24 @@ export function calculateBacktestMetrics(
       max_drawdown: 0,
       profit_factor: 0,
       by_strategy: {},
-      by_risk: { LOW: { count: 0, win_rate_20d: 0, avg_return_20d: 0 }, MEDIUM: { count: 0, win_rate_20d: 0, avg_return_20d: 0 }, HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 } },
+      by_risk: {
+        LOW: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+        MEDIUM: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+        HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+      },
       by_opportunity_bucket: {},
     };
   }
 
-  const completed = versionSignals.filter((s) => s.return_20d !== null);
+  const completed = signals.filter((s) => s.return_20d !== null);
   const nCompleted = completed.length || 1;
 
   // 5D, 10D, 20D stats
-  const sig5d = versionSignals.filter((s) => s.return_5d !== null);
+  const sig5d = signals.filter((s) => s.return_5d !== null);
   const win5d = sig5d.filter((s) => (s.return_5d ?? 0) > 0).length;
   const avg5d = sig5d.reduce((sum, s) => sum + (s.return_5d ?? 0), 0) / (sig5d.length || 1);
 
-  const sig10d = versionSignals.filter((s) => s.return_10d !== null);
+  const sig10d = signals.filter((s) => s.return_10d !== null);
   const win10d = sig10d.filter((s) => (s.return_10d ?? 0) > 0).length;
   const avg10d = sig10d.reduce((sum, s) => sum + (s.return_10d ?? 0), 0) / (sig10d.length || 1);
 
@@ -125,7 +126,6 @@ export function calculateBacktestMetrics(
   });
 
   return {
-    version,
     total_signals: total,
     completed_signals: completed.length,
     win_rate_5d: Math.round((win5d / (sig5d.length || 1)) * 1000) / 10,

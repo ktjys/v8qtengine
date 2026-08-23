@@ -1,12 +1,12 @@
-# 🚀 V8 Quant Decision & Signal System (V8 퀀트 의사결정 및 시그널 시스템)
+# 🚀 Quant Decision & Signal System (퀀트 의사결정 및 시그널 시스템)
 
-> **실시간 시장 데이터, 다차원 자산 분류, 기회-리스크 독립 평가 매트릭스, 불변 시그널 원장, Look-ahead Bias 제거 백테스트를 제공하는 차세대 퀀트 투자 의사결정 플랫폼**
+> **실시간 시장 데이터, 다차원 자산 분류, 기회-리스크 독립 평가 매트릭스, 불변 시그널 원장, Look-ahead Bias 제거 백테스트를 제공하는 퀀트 투자 의사결정 플랫폼**
 
 ---
 
 ## 📌 목차 (Table of Contents)
 1. [프로젝트 개요 (Overview)](#1-프로젝트-개요-overview)
-2. [시스템 핵심 철학 및 V7 대비 차별점](#2-시스템-핵심-철학-및-v7-대비-차별점)
+2. [시스템 핵심 철학 및 아키텍처 원칙](#2-시스템-핵심-철학-및-아키텍처-원칙)
 3. [아키텍처 및 디렉토리 구조](#3-아키텍처-및-디렉토리-구조)
 4. [주요 구현 기능 (Feature Breakdown)](#4-주요-구현-기능-feature-breakdown)
 5. [설치 및 실행 방법 (Installation & Usage)](#5-설치-및-실행-방법-installation--usage)
@@ -19,7 +19,7 @@
 
 ## 1. 프로젝트 개요 (Overview)
 
-**V8 Quant System**은 단일 지표나 고정 임계값에 의존하던 전통적인 기술적 분석(V7 방식)의 한계를 극복하고, 종목의 자산 특성(성장주, 가치주, 배당주, 지수 ETF, 레버리지 ETF 등)에 따라 가중치를 동적으로 적용하는 퀀트 의사결정 엔진입니다.
+**Quant Decision & Signal Engine**은 종목의 자산 특성(성장주, 가치주, 배당주, 지수 ETF, 섹터 ETF 등)에 따라 가중치를 동적으로 적용하고, 기회 점수와 리스크 제약을 독립적으로 분리 평가하여 명확한 행동 결정을 도출하는 전문 퀀트 의사결정 플랫폼입니다.
 
 - **실시간 데이터 수집**: Yahoo Finance API 및 폴백 시드 데이터를 활용한 일봉(OHLCV) 및 재무 데이터 정규화 수집
 - **영속적 데이터 관리**: Supabase(PostgreSQL) 기반 9개 테이블 스키마 및 Repository 패턴 적용
@@ -29,23 +29,22 @@
 
 ---
 
-## 2. 시스템 핵심 철학 및 V7 대비 차별점
+## 2. 시스템 핵심 철학 및 아키텍처 원칙
 
-| 비교 항목 | 기존 V7 전략 | 차세대 V8 전략 |
-| :--- | :--- | :--- |
-| **자산 분류 (Classification)** | 모든 종목을 동일한 기준으로 평가 | **7개 세부 전략 유형**으로 자동 분류 및 가중치 차등화 |
-| **평가 로직 구조** | 단순 RSI / 이평선 결합 단일 점수 | **기회 점수(4개 팩터) vs 독립 리스크 평가 매트릭스** |
-| **리스크 관리** | 점수 차감 방식으로 위험 희석 | **독립 게이트웨이**(고위험 시 기회점수가 높아도 매수 차단) |
-| **데이터 영속성** | 메모리 배열(서버 재부팅 시 초기화) | **Supabase DB 영속화 (Repository 패턴)** |
-| **백테스트 정밀도** | 단순 정적 산출식 | **Point-in-Time 과거 시점 재실행 (편향 제로)** |
-| **시그널 라이프사이클** | 단발성 알림 | **불변 시그널 스냅샷 원장 + 5D/10D/20D 사후 성과 추적** |
+| 핵심 요소 | 상세 원칙 |
+| :--- | :--- |
+| **자산 정체성 분류 (Classification)** | 종목의 특성에 맞추어 **7개 세부 전략 유형**으로 자동 분류 및 가중치 프로파일 차등 적용 |
+| **기회 점수 다차원 평가** | 기술적 지표, 모멘텀, 펀더멘털, 밸류에이션의 **4대 팩터** 가중 결합 |
+| **독립 리스크 게이트웨이** | 기회 점수와 별개로 변동성, 낙폭, 200일선 이탈 여부를 분석하여 고위험 종목의 진입을 원천 차단 |
+| **데이터 영속화 (Persistence)** | Supabase PostgreSQL 스키마 및 **Repository 패턴**을 통한 데이터 영구 관리 |
+| **무결성 백테스트** | **Point-in-Time 과거 시점 재실행**으로 생존 편향 및 미래 참조 편향 제로 보장 |
+| **시그널 라이프사이클** | 발생 당시 지표를 영구 보존하는 **불변 스냅샷 원장 + 5D/10D/20D 사후 성과 추적** |
 
 ---
 
 ## 3. 아키텍처 및 디렉토리 구조
 
 ```text
-v8qtengine/
 ├── server.ts                       # 모듈화된 Express API 컨트롤러 및 엔트리포인트
 ├── package.json                    # 프로젝트 의존성 및 빌드 스크립트
 ├── .env.example                    # 환경변수 템플릿
@@ -61,22 +60,22 @@ v8qtengine/
 │       ├── 008_create_signal_outcomes.sql
 │       └── 009_create_scan_runs.sql
 └── src/
-    ├── types/                      # V8 통합 TypeScript 타입 정의 (v8.ts)
+    ├── types/                      # 통합 TypeScript 타입 정의 (v8.ts)
     ├── api/                        # 도메인별 REST API 라우터
     │   ├── evaluationRoutes.ts     # 종목 평가 조회 API
     │   ├── watchlistRoutes.ts      # 관심종목 CRUD API
     │   ├── classificationRoutes.ts # 자산분류 수동 오버라이드 API
     │   ├── scanRoutes.ts           # 유니버스 스캔 실행 API
     │   ├── signalRoutes.ts         # 시그널 원장 및 사후 수익률 API
-    │   ├── backtestRoutes.ts       # V7 vs V8 백테스트 리플레이 API
+    │   ├── backtestRoutes.ts       # 백테스트 리플레이 API
     │   ├── runRoutes.ts            # 스캔 히스토리 API
     │   ├── systemRoutes.ts         # 시스템/프로바이더 상태 API
     │   └── telegramRoutes.ts       # 텔레그램 연동 및 테스트 발송 API
-    ├── pipeline/                   # V8 비즈니스 실행 파이프라인
+    ├── pipeline/                   # 비즈니스 실행 파이프라인
     │   ├── evaluationService.ts    # 단일 종목 평가 서비스
     │   ├── scanService.ts          # 유니버스 배치 스캔 및 장애 허용 처리
     │   └── v8Pipeline.ts           # 전체 파이프라인 인터페이스
-    ├── engine/                     # V8 코어 계산 엔진
+    ├── engine/                     # 코어 계산 엔진
     │   ├── classificationEngine.ts # 자산 분류기
     │   ├── opportunityEngine.ts    # 기회 점수 계산기 (가중치 적용)
     │   ├── riskEngine.ts           # 독립 리스크 산출기
@@ -94,17 +93,15 @@ v8qtengine/
     │   └── repositories/           # 8개 도메인별 Repository
     ├── backtest/                   # 과거 시점 리플레이 백테스트 엔진
     │   ├── historicalDataProvider.ts # Point-in-Time 슬라이싱
-    │   ├── v7Strategy.ts           # 레거시 V7 전략 실행기
-    │   ├── v8Strategy.ts           # V8 전략 실행기
-    │   ├── performanceCalculator.ts# 승률, 기대값, Profit Factor 산출
-    │   └── strategyReplay.ts       # 히스토리컬 일자별 리플레이 루프
+    │   ├── strategyReplay.ts       # 히스토리컬 일자별 리플레이 루프
+    │   └── performanceCalculator.ts# 승률, 기대값, Profit Factor 산출
     ├── notification/               # 텔레그램 브로드캐스트
     │   ├── templates.ts            # 실시간 시그널 알림 템플릿
     │   ├── telegramNotifier.ts     # 텔레그램 봇 전송 클라이언트
     │   └── notificationService.ts  # 알림 서비스
     ├── jobs/                       # 자동화 배치 작업
     │   ├── dailyMarketSync.ts      # 일일 시장 데이터 동기화
-    │   ├── dailyScan.ts            # 일일 V8 스캔 & 시그널 생성
+    │   ├── dailyScan.ts            # 일일 스캔 & 시그널 생성
     │   ├── signalOutcomeUpdater.ts # 사후 5D/10D/20D 수익률 갱신
     │   └── jobRunner.ts            # 전체 자동화 사이클 실행기
     └── components/                 # React UI 대시보드 컴포넌트
@@ -122,7 +119,7 @@ v8qtengine/
 - `high_beta_growth`: 고베타 성장주 (TSLA, AMD 등 - 변동성 관리)
 - `dividend_defensive`: 배당/방어주 (KO, SCHD 등 - 안정적 배당 & 밸류)
 - `crypto_proxy`: 가상자산 프록시/레버리지 (COIN, MSTR 등 - 초단기 모멘텀)
-- `general_equity`: 일반 주식
+- `general_equity`: 일반 보통주
 
 > 🛡️ **수동 지정 보호**: 관리자가 특정 종목의 전략 유형을 수동 오버라이드하면, 자동 분류 로직이 덮어쓰지 않고 영구 보존됩니다.
 
@@ -172,7 +169,7 @@ cp .env.example .env
 ```bash
 npm run dev
 ```
-브라우저에서 `http://localhost:3000`으로 접속하여 V8 Quant Dashboard를 확인할 수 있습니다.
+브라우저에서 `http://localhost:3000`으로 접속하여 Quant Dashboard를 확인할 수 있습니다.
 
 ### 5) 프로덕션 빌드 및 실행
 ```bash
@@ -227,19 +224,19 @@ Supabase 대시보드의 **SQL Editor**에 접속하여 `supabase/migrations/` �
 
 | Method | Endpoint | 설명 |
 | :--- | :--- | :--- |
-| **GET** | `/api/health` | 시스템 상태 및 엔진 버전 확인 |
-| **GET** | `/api/v8/evaluations` | 전체 감시종목의 최신 V8 평가 결과 리스트 조회 |
-| **GET** | `/api/v8/evaluations/:ticker` | 특정 종목의 V8 상세 평가 결과 조회 |
+| **GET** | `/api/health` | 시스템 상태 및 엔진 동작 확인 |
+| **GET** | `/api/v8/evaluations` | 전체 감시종목의 최신 평가 결과 리스트 조회 |
+| **GET** | `/api/v8/evaluations/:ticker` | 특정 종목의 상세 평가 결과 조회 |
 | **GET** | `/api/v8/watchlist` | 등록된 관심종목 전체 목록 조회 |
 | **POST** | `/api/v8/watchlist` | 관심종목 신규 등록 및 즉시 평가 |
 | **PATCH** | `/api/v8/watchlist/:ticker` | 관심종목 활성화/비활성화 및 메모 수정 |
 | **DELETE**| `/api/v8/watchlist/:ticker` | 관심종목 삭제 |
 | **POST** | `/api/v8/classification/override` | 자산 분류 및 전략 유형 수동 지정 (Manual Override) |
 | **DELETE**| `/api/v8/classification/override/:ticker` | 자산 분류 수동 지정을 해제하고 자동 분류로 복귀 |
-| **POST** | `/api/v8/scan/run` | 전체 유니버스 V8 평가 스캔 실행 (장애 허용 지원) |
+| **POST** | `/api/v8/scan/run` | 전체 유니버스 평가 스캔 실행 (장애 허용 지원) |
 | **GET** | `/api/v8/signals` | 불변 시그널 원장 및 사후 수익률 목록 조회 |
 | **POST** | `/api/v8/signals/update-outcomes` | 시그널들의 사후 5D/10D/20D 수익률 최신화 |
-| **GET** | `/api/v8/backtest/compare` | V7 vs V8 전략의 과거 시점 백테스트 비교 결과 조회 |
+| **GET** | `/api/v8/backtest` | 과거 시점 백테스트 성과 요약 및 상세 조회 |
 | **POST** | `/api/v8/backtest/replay` | 사용자 지정 기간/임계값 기반 과거 시점 리플레이 실행 |
 | **GET** | `/api/v8/runs` | 과거 스캔 실행 이력 및 에러 로그 조회 |
 | **GET** | `/api/v8/system/status` | DB 연결 상태, 프로바이더, 메모리/업타임 상태 조회 |

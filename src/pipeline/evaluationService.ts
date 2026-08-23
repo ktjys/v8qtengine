@@ -20,6 +20,10 @@ export class EvaluationService {
     return this.marketDataService.getProviderName();
   }
 
+  async getLiveQuote(ticker: string) {
+    return this.marketDataService.getQuote(ticker);
+  }
+
   async evaluateTicker(
     ticker: string,
     existingClassification?: AssetClassification

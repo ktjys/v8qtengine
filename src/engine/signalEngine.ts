@@ -46,7 +46,6 @@ export function createSignalSnapshot(
     ticker: evaluation.ticker,
     name: evaluation.name,
     signal_price: evaluation.price,
-    score_version: 'V8.0',
     strategy_type: classification.strategy_type,
     asset_type: classification.asset_type,
     opportunity_score: opp.opportunity_score,

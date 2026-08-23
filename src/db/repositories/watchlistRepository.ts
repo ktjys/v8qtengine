@@ -4,28 +4,33 @@ import { assetRepository } from './assetRepository';
 
 export class WatchlistRepository {
   async getAll(): Promise<WatchlistItem[]> {
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
           .from('watchlist')
-          .select('*, assets(name)')
-          .order('created_at', { ascending: true });
+          .select('*')
+          .order('ticker', { ascending: true });
 
-        if (!error && data && data.length > 0) {
-          const list: WatchlistItem[] = data.map((row: any) => ({
-            ticker: row.ticker,
-            name: row.assets?.name || row.ticker,
-            is_active: row.is_active ?? true,
-            memo: row.memo || '감시 종목',
-            created_at: row.created_at,
-          }));
+        if (error) {
+          dbClient.handleDbError('watchlist', 'getAll', error);
+        } else if (data && data.length > 0) {
+          const list: WatchlistItem[] = data.map((row: any) => {
+            const assetName = dbClient.assets.get(row.ticker)?.name;
+            return {
+              ticker: row.ticker,
+              name: assetName || row.name || row.ticker,
+              is_active: row.is_active ?? true,
+              memo: row.memo || '감시 종목',
+              created_at: row.created_at || new Date().toISOString(),
+            };
+          });
 
           // Sync with in-memory map
           list.forEach((item) => dbClient.watchlist.set(item.ticker, item));
           return list;
         }
       } catch (err) {
-        console.warn('[WatchlistRepository] Supabase getAll error, fallback to local cache:', err);
+        dbClient.handleDbError('watchlist', 'getAll', err);
       }
     }
 
@@ -40,27 +45,30 @@ export class WatchlistRepository {
   async findByTicker(ticker: string): Promise<WatchlistItem | null> {
     const clean = ticker.toUpperCase().trim();
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
           .from('watchlist')
-          .select('*, assets(name)')
+          .select('*')
           .eq('ticker', clean)
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          dbClient.handleDbError('watchlist', 'findByTicker', error);
+        } else if (data) {
+          const assetName = dbClient.assets.get(data.ticker)?.name;
           const item: WatchlistItem = {
             ticker: data.ticker,
-            name: data.assets?.name || data.ticker,
+            name: assetName || data.name || data.ticker,
             is_active: data.is_active ?? true,
             memo: data.memo || '감시 종목',
-            created_at: data.created_at,
+            created_at: data.created_at || new Date().toISOString(),
           };
           dbClient.watchlist.set(clean, item);
           return item;
         }
       } catch (err) {
-        console.warn(`[WatchlistRepository] Supabase findByTicker error for ${clean}:`, err);
+        dbClient.handleDbError('watchlist', 'findByTicker', err);
       }
     }
 
@@ -89,22 +97,26 @@ export class WatchlistRepository {
       if (item.memo) existing.memo = item.memo;
       if (item.name) existing.name = item.name;
 
-      if (dbClient.supabase) {
+      if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
         try {
-          await dbClient.supabase
+          const { error } = await dbClient.supabase
             .from('watchlist')
             .update({
               is_active: true,
               memo: existing.memo || null,
-              updated_at: now,
             })
             .eq('ticker', clean);
+
+          if (error) {
+            dbClient.handleDbError('watchlist', 'update in add', error);
+          }
         } catch (err) {
-          console.warn(`[WatchlistRepository] Supabase update in add() failed for ${clean}:`, err);
+          dbClient.handleDbError('watchlist', 'update in add', err);
         }
       }
 
       dbClient.watchlist.set(clean, existing);
+      dbClient.saveLocalSnapshot();
       return existing;
     }
 
@@ -116,23 +128,26 @@ export class WatchlistRepository {
       created_at: now,
     };
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
       try {
-        await dbClient.supabase
+        const { error } = await dbClient.supabase
           .from('watchlist')
-          .insert({
+          .upsert({
             ticker: clean,
             is_active: true,
             memo: newItem.memo,
-            created_at: now,
-            updated_at: now,
-          });
+          }, { onConflict: 'ticker' });
+
+        if (error) {
+          dbClient.handleDbError('watchlist', 'insert', error);
+        }
       } catch (err) {
-        console.warn(`[WatchlistRepository] Supabase insert failed for ${clean}:`, err);
+        dbClient.handleDbError('watchlist', 'insert', err);
       }
     }
 
     dbClient.watchlist.set(clean, newItem);
+    dbClient.saveLocalSnapshot();
     return newItem;
   }
 
@@ -147,40 +162,59 @@ export class WatchlistRepository {
       ticker: clean,
     };
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
       try {
-        await dbClient.supabase
+        const { error } = await dbClient.supabase
           .from('watchlist')
           .update({
             is_active: updated.is_active,
             memo: updated.memo || null,
-            updated_at: new Date().toISOString(),
           })
           .eq('ticker', clean);
+
+        if (error) {
+          dbClient.handleDbError('watchlist', 'update', error);
+        }
       } catch (err) {
-        console.warn(`[WatchlistRepository] Supabase update failed for ${clean}:`, err);
+        dbClient.handleDbError('watchlist', 'update', err);
       }
     }
 
     dbClient.watchlist.set(clean, updated);
+    dbClient.saveLocalSnapshot();
     return updated;
   }
 
   async remove(ticker: string): Promise<boolean> {
     const clean = ticker.toUpperCase().trim();
 
-    if (dbClient.supabase) {
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
       try {
-        await dbClient.supabase
+        const { error } = await dbClient.supabase
           .from('watchlist')
           .delete()
           .eq('ticker', clean);
+
+        if (error) {
+          dbClient.handleDbError('watchlist', 'delete', error);
+        }
       } catch (err) {
-        console.warn(`[WatchlistRepository] Supabase delete failed for ${clean}:`, err);
+        dbClient.handleDbError('watchlist', 'delete', err);
       }
     }
 
-    return dbClient.watchlist.delete(clean);
+    if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
+      try {
+        await dbClient.supabase.from('evaluations').delete().eq('ticker', clean);
+      } catch (err) {
+        // Silently ignore evaluation deletion error
+      }
+    }
+
+    dbClient.evaluations.delete(clean);
+    const res = dbClient.watchlist.delete(clean);
+    dbClient.saveLocalSnapshot();
+    return res;
   }
 }
 

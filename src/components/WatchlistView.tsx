@@ -6,8 +6,10 @@ import {
   ChevronDown,
   Filter,
   Info,
+  LineChart,
   Plus,
   Radio,
+  RefreshCw,
   Search,
   Send,
   Shield,
@@ -24,14 +26,17 @@ import {
   RiskLevel,
   StrategyType,
 } from '../types/v8';
+import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 
 interface WatchlistViewProps {
   evaluations: FullTickerEvaluation[];
-  onSelectTicker: (ticker: string) => void;
+  onSelectTicker: (ticker: string, initialTab?: 'overview' | 'chart') => void;
   onPreviewTelegram: (ticker: string) => void;
   onAddTicker: (ticker: string, name: string, memo: string) => void;
   onDeleteTicker: (ticker: string) => void;
   onToggleActive: (ticker: string, active: boolean) => void;
+  onRecalculate?: () => void;
+  isRecalculating?: boolean;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
@@ -41,6 +46,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   onAddTicker,
   onDeleteTicker,
   onToggleActive,
+  onRecalculate,
+  isRecalculating = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAssetType, setFilterAssetType] = useState<string>('ALL');
@@ -185,6 +192,18 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950/70 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
             </div>
+
+            {onRecalculate && (
+              <button
+                onClick={onRecalculate}
+                disabled={isRecalculating}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap disabled:opacity-50"
+                title="Yahoo Finance 실시간 시세 및 4대 팩터 점수를 다시 계산합니다."
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRecalculating ? 'animate-spin' : ''}`} />
+                <span>{isRecalculating ? '시세 갱신 중...' : '시세/평가 새로고침'}</span>
+              </button>
+            )}
 
             <button
               onClick={() => setShowAddModal(true)}
@@ -395,14 +414,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     </td>
 
                     {/* Price */}
-                    <td className="py-3 px-3 text-slate-200">
-                      <div>${item.price.toFixed(2)}</div>
+                    <td className="py-3 px-3 text-slate-200 font-mono">
+                      <div className="font-semibold text-slate-100">{formatStockPrice(item.price, item.ticker)}</div>
                       <div
                         className={`text-[10px] font-semibold ${
                           item.change1d >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {item.change1d >= 0 ? '+' : ''}{item.change1d}%
+                        {formatChangePercent(item.change1d)}
                       </div>
                     </td>
 
@@ -508,6 +527,13 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                         className="flex items-center justify-end space-x-1"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <button
+                          onClick={() => onSelectTicker(item.ticker, 'chart')}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600/30 text-cyan-400 hover:text-cyan-200 transition-colors"
+                          title="일별 점수 및 기술 지표 차트 열기"
+                        >
+                          <LineChart className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => onPreviewTelegram(item.ticker)}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white transition-colors"

@@ -104,7 +104,6 @@ export class ScanService {
       failed_tickers: failedList,
       items,
       status: failedList.length > 0 ? 'PARTIAL_SUCCESS' : 'SUCCESS',
-      version: 'V8.0',
       error_summary:
         failedList.length > 0
           ? `${failedList.length}건 API 실패 발생했으나 전체 스캔 지속 완료`

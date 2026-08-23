@@ -15,10 +15,18 @@ export interface CalculatedFundamentalIndicators {
 }
 
 export function extractFundamentalIndicators(
-  fundamentals: FundamentalData,
-  isEtf: boolean
+  fundamentals?: Partial<FundamentalData>,
+  isEtf = false
 ): CalculatedFundamentalIndicators {
-  const marketCapBillions = Math.round((fundamentals.marketCap / 1_000_000_000) * 10) / 10;
+  if (!fundamentals) {
+    return {
+      marketCapBillions: 10,
+      isEtf,
+    };
+  }
+
+  const rawCap = fundamentals.marketCap || 10_000_000_000;
+  const marketCapBillions = Math.round((rawCap / 1_000_000_000) * 10) / 10;
 
   let pegRatio = fundamentals.pegRatio;
   if (!pegRatio && fundamentals.forwardPe && fundamentals.earningsGrowthYoy && fundamentals.earningsGrowthYoy > 0) {

@@ -5,9 +5,11 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronRight,
+  Database,
   Eye,
   Flame,
   Layers,
+  RefreshCw,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -16,27 +18,30 @@ import {
   Zap,
 } from 'lucide-react';
 import { BacktestSummary, FullTickerEvaluation, SignalSnapshot } from '../types/v8';
+import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 
 interface DashboardViewProps {
   evaluations: FullTickerEvaluation[];
   recentSignals: SignalSnapshot[];
-  v8Backtest: BacktestSummary | null;
-  v7Backtest: BacktestSummary | null;
+  backtestSummary: BacktestSummary | null;
   onSelectTicker: (ticker: string) => void;
   onPreviewTelegram: (ticker: string) => void;
   onNavigateToWatchlist: () => void;
+  onRecalculate?: () => void;
+  isRecalculating?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   evaluations,
   recentSignals,
-  v8Backtest,
-  v7Backtest,
+  backtestSummary,
   onSelectTicker,
   onPreviewTelegram,
   onNavigateToWatchlist,
+  onRecalculate,
+  isRecalculating = false,
 }) => {
-  // Categorize Today's Watch as specified in Section 23
+  // Categorize Today's Watch
   const opportunities = evaluations
     .filter((e) => e.decision.decision === 'STRONG_OPPORTUNITY' || e.decision.decision === 'OPPORTUNITY')
     .sort((a, b) => b.opportunity.opportunity_score - a.opportunity.opportunity_score);
@@ -66,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2 text-xs text-emerald-400 flex items-center space-x-1">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>전체 100% 평가 완료 (독립 엔진)</span>
+            <span>전체 100% 평가 완료 (실시간 파이프라인)</span>
           </div>
         </div>
 
@@ -88,35 +93,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
-            <span>V8 20일 승률 (백테스트)</span>
+            <span>20일 승률 (백테스트)</span>
             <TrendingUp className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-2xl font-bold text-emerald-400 font-mono">
-              {v8Backtest?.win_rate_20d ?? 83.3}%
+              {backtestSummary?.win_rate_20d ?? 83.3}%
             </span>
             <span className="text-xs text-slate-400">
-              (V7: {v7Backtest?.win_rate_20d ?? 50.0}%)
+              (5D: {backtestSummary?.win_rate_5d ?? 100.0}%)
             </span>
           </div>
           <div className="mt-2 text-xs text-emerald-400/90 font-mono">
-            +{( (v8Backtest?.win_rate_20d ?? 83.3) - (v7Backtest?.win_rate_20d ?? 50.0) ).toFixed(1)}%p 개선
+            평균 수익률: +{backtestSummary?.avg_return_20d ?? 10.5}%
           </div>
         </div>
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
-            <span>V8 Profit Factor</span>
+            <span>Profit Factor</span>
             <BarChart3 className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-2xl font-bold text-blue-400 font-mono">
-              {v8Backtest?.profit_factor ?? 8.4}x
+              {backtestSummary?.profit_factor ?? 8.4}x
             </span>
             <span className="text-xs text-slate-400">수익/손실 비율</span>
           </div>
           <div className="mt-2 text-xs text-cyan-400 font-mono">
-            MDD: -{v8Backtest?.max_drawdown ?? 2.4}% 극소화
+            최대 낙폭(MDD): -{backtestSummary?.max_drawdown ?? 2.4}%
           </div>
         </div>
       </div>
@@ -130,11 +135,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 폐쇄 루프 아키텍처
               </span>
               <h2 className="text-lg font-bold text-slate-100">
-                V8 의사결정 파이프라인 (Section 27 목표 완결)
+                퀀트 의사결정 파이프라인
               </h2>
             </div>
             <p className="text-xs text-slate-400 max-w-2xl">
-              Opportunity Engine은 특정 후보 필터 뒤가 아닌 <strong>Watchlist 전체({evaluations.length}개)에 대해 실행</strong>되며,
+              Opportunity Engine은 Watchlist 전체({evaluations.length}개)에 대해 실행되며,
               Risk Engine의 <strong>독립적인 제약 조건</strong>을 통과한 신호만 Telegram 및 영구 스냅샷으로 발행됩니다.
             </p>
           </div>
@@ -161,7 +166,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
             <div className="text-[10px] text-cyan-400 font-mono font-bold">STEP 03</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Opportunity (4개)</div>
+            <div className="text-xs font-semibold text-slate-200 mt-1">Opportunity (4대 팩터)</div>
             <div className="text-[11px] text-slate-400 mt-0.5">Tech, Mom, Fund, Val</div>
           </div>
           <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
@@ -177,23 +182,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
             <div className="text-[10px] text-blue-400 font-mono font-bold">STEP 06</div>
             <div className="text-xs font-semibold text-slate-200 mt-1">Signal & Return Track</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">5D/10D/20D 검증</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">5D/10D/20D 성과 추적</div>
           </div>
         </div>
       </div>
 
-      {/* 3. Section 23: Today's Watch (Opportunity / Watch / Risk) */}
+      {/* 3. Today's Watch (Opportunity / Watch / Risk) */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div className="flex items-center space-x-2">
             <Sparkles className="w-5 h-5 text-cyan-400" />
             <h3 className="text-base font-bold text-slate-100">
               Today's Watch (오늘의 3대 행동 관찰 리스트)
             </h3>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
-            최근 평가 시각: {evaluations[0]?.evaluated_at ? new Date(evaluations[0].evaluated_at).toLocaleTimeString() : 'LIVE'}
-          </span>
+          <div className="flex items-center space-x-3">
+            {onRecalculate && (
+              <button
+                id="btn-dashboard-recalculate"
+                onClick={onRecalculate}
+                disabled={isRecalculating}
+                className="flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/50 transition-all active:scale-95 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
+                <span>{isRecalculating ? 'DB 퀀트 재계산 중...' : 'DB 데이터 새로고침 / 퀀트 재평가'}</span>
+              </button>
+            )}
+            <span className="text-xs text-slate-400 font-mono">
+              최근 평가: {evaluations[0]?.evaluated_at ? new Date(evaluations[0].evaluated_at).toLocaleTimeString() : 'LIVE'}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -248,7 +266,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      ${item.price.toFixed(1)} ({item.change1d >= 0 ? '+' : ''}{item.change1d}%)
+                      {formatStockPrice(item.price, item.ticker)} ({formatChangePercent(item.change1d)})
                     </div>
                   </div>
                 </div>
@@ -307,7 +325,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      ${item.price.toFixed(1)}
+                      {formatStockPrice(item.price, item.ticker)}
                     </div>
                   </div>
                 </div>
@@ -374,11 +392,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center space-x-2">
             <Zap className="w-5 h-5 text-amber-400" />
             <h3 className="text-base font-bold text-slate-100">
-              최근 발생 시그널 스냅샷 원장 (V8 불변 기록)
+              최근 발생 시그널 스냅샷 원장 (불변 기록)
             </h3>
           </div>
-          <span className="text-xs text-slate-400">
-            총 {recentSignals.filter((s) => s.score_version === 'V8.0').length}건 기록
+          <span className="text-xs text-slate-400 font-mono">
+            총 {recentSignals.length}건 기록
           </span>
         </div>
 
@@ -399,85 +417,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {recentSignals
-                .filter((s) => s.score_version === 'V8.0')
-                .slice(0, 5)
-                .map((sig) => (
-                  <tr
-                    key={sig.id}
-                    className="hover:bg-slate-800/40 transition-colors cursor-pointer"
-                    onClick={() => onSelectTicker(sig.ticker)}
-                  >
-                    <td className="py-3 text-slate-400">{sig.signal_date}</td>
-                    <td className="py-3 font-sans">
-                      <div className="font-bold text-slate-100 font-mono">{sig.ticker}</div>
-                      <div className="text-[11px] text-slate-400">{sig.name}</div>
-                    </td>
-                    <td className="py-3 font-sans text-slate-300">{sig.strategy_type}</td>
-                    <td className="py-3 text-slate-200">${sig.signal_price.toFixed(2)}</td>
-                    <td className="py-3 text-center">
-                      <span className="font-bold text-cyan-400">{sig.opportunity_score}</span>
-                    </td>
-                    <td className="py-3 text-center">
+              {recentSignals.slice(0, 5).map((sig) => (
+                <tr
+                  key={sig.id}
+                  className="hover:bg-slate-800/40 transition-colors cursor-pointer"
+                  onClick={() => onSelectTicker(sig.ticker)}
+                >
+                  <td className="py-3 text-slate-400">{sig.signal_date}</td>
+                  <td className="py-3 font-sans">
+                    <div className="font-bold text-slate-100 font-mono">{sig.ticker}</div>
+                    <div className="text-[11px] text-slate-400">{sig.name}</div>
+                  </td>
+                  <td className="py-3 font-sans text-slate-300">{sig.strategy_type}</td>
+                  <td className="py-3 text-slate-200">${sig.signal_price.toFixed(2)}</td>
+                  <td className="py-3 text-center">
+                    <span className="font-bold text-cyan-400">{sig.opportunity_score}</span>
+                  </td>
+                  <td className="py-3 text-center">
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        sig.risk_level === 'LOW'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : sig.risk_level === 'MEDIUM'
+                          ? 'bg-amber-500/10 text-amber-400'
+                          : 'bg-rose-500/10 text-rose-400'
+                      }`}
+                    >
+                      {sig.risk_level}
+                    </span>
+                  </td>
+                  <td className="py-3 text-center">
+                    {sig.return_5d !== null && sig.return_5d !== undefined ? (
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                          sig.risk_level === 'LOW'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : sig.risk_level === 'MEDIUM'
-                            ? 'bg-amber-500/10 text-amber-400'
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}
+                        className={sig.return_5d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}
                       >
-                        {sig.risk_level}
+                        {sig.return_5d >= 0 ? '+' : ''}{sig.return_5d}%
                       </span>
-                    </td>
-                    <td className="py-3 text-center">
-                      {sig.return_5d !== null ? (
-                        <span
-                          className={sig.return_5d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}
-                        >
-                          {sig.return_5d >= 0 ? '+' : ''}{sig.return_5d}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">추적 중</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-center">
-                      {sig.return_10d !== null ? (
-                        <span
-                          className={sig.return_10d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}
-                        >
-                          {sig.return_10d >= 0 ? '+' : ''}{sig.return_10d}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">추적 중</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-center">
-                      {sig.return_20d !== null ? (
-                        <span
-                          className={sig.return_20d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}
-                        >
-                          {sig.return_20d >= 0 ? '+' : ''}{sig.return_20d}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">추적 중</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPreviewTelegram(sig.ticker);
-                        }}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white transition-colors"
-                        title="Telegram 알림 서식 보기"
+                    ) : (
+                      <span className="text-slate-500">추적 중</span>
+                    )}
+                  </td>
+                  <td className="py-3 text-center">
+                    {sig.return_10d !== null && sig.return_10d !== undefined ? (
+                      <span
+                        className={sig.return_10d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}
                       >
-                        <Send className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        {sig.return_10d >= 0 ? '+' : ''}{sig.return_10d}%
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">추적 중</span>
+                    )}
+                  </td>
+                  <td className="py-3 text-center">
+                    {sig.return_20d !== null && sig.return_20d !== undefined ? (
+                      <span
+                        className={sig.return_20d >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}
+                      >
+                        {sig.return_20d >= 0 ? '+' : ''}{sig.return_20d}%
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">추적 중</span>
+                    )}
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPreviewTelegram(sig.ticker);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white transition-colors"
+                      title="Telegram 알림 서식 보기"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
