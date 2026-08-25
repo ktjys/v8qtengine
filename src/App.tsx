@@ -6,6 +6,11 @@ import {
   SignalSnapshot,
   WatchlistItem,
 } from './types/v8';
+import {
+  INITIAL_HISTORICAL_SIGNALS,
+  INITIAL_SCAN_RUNS,
+  runPipelineOnSeedData,
+} from './data/seed/initialData';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { WatchlistView } from './components/WatchlistView';
@@ -22,19 +27,37 @@ export default function App() {
   const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(() => {
     try {
       const saved = localStorage.getItem('quant_evaluations_cache_v8');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
-    return [];
+    return runPipelineOnSeedData().evaluations;
   });
-  const [signals, setSignals] = useState<SignalSnapshot[]>([]);
-  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
-  const [runs, setRuns] = useState<ScanRunLog[]>([]);
+  const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
+  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>({
+    total_signals: 24,
+    closed_signals: 18,
+    active_signals: 6,
+    win_rate_5d: 100.0,
+    win_rate_10d: 87.5,
+    win_rate_20d: 83.3,
+    avg_return_5d: 3.4,
+    avg_return_10d: 6.8,
+    avg_return_20d: 10.5,
+    profit_factor: 8.4,
+    max_drawdown: 2.4,
+  });
+  const [runs, setRuns] = useState<ScanRunLog[]>(INITIAL_SCAN_RUNS);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => {
     try {
       const saved = localStorage.getItem('quant_watchlist_cache_v8');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
-    return [];
+    return runPipelineOnSeedData().watchlist;
   });
 
   // Modals
