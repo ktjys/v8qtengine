@@ -21,6 +21,7 @@ import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { DatabaseSettingsModal } from './components/DatabaseSettingsModal';
 import { BackfillModal } from './components/BackfillModal';
+import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs'>('dashboard');
@@ -65,6 +66,7 @@ export default function App() {
   const [selectedModalTab, setSelectedModalTab] = useState<'overview' | 'chart'>('overview');
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isDbModalOpen, setIsDbModalOpen] = useState(false);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -337,6 +339,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenScanModal={() => setIsScanModalOpen(true)}
         onOpenDbModal={() => setIsDbModalOpen(true)}
+        onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         totalCount={evaluations.length}
         signalsCount={signals.length}
       />
@@ -431,6 +434,15 @@ export default function App() {
           isOpen={isBackfillModalOpen}
           onClose={() => setIsBackfillModalOpen(false)}
           onBackfillSuccess={loadAllData}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* Auto Scan & Schedule Notification Modal */}
+      {isScheduleModalOpen && (
+        <AutoScanScheduleModal
+          isOpen={isScheduleModalOpen}
+          onClose={() => setIsScheduleModalOpen(false)}
           onShowToast={showToast}
         />
       )}

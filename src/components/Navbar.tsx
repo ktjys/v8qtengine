@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   Activity,
+  Bell,
+  Clock,
   Database,
   Layers,
   ListFilter,
@@ -14,6 +16,7 @@ interface NavbarProps {
   setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs') => void;
   onOpenScanModal: () => void;
   onOpenDbModal: () => void;
+  onOpenScheduleModal: () => void;
   totalCount: number;
   signalsCount: number;
 }
@@ -23,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   onOpenScanModal,
   onOpenDbModal,
+  onOpenScheduleModal,
   totalCount,
   signalsCount,
 }) => {
@@ -120,6 +124,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Action Trigger */}
           <div className="flex items-center space-x-2.5">
+            <button
+              id="header-schedule-btn"
+              onClick={onOpenScheduleModal}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition-all active:scale-95"
+              title="하루 3회 자동 스캔 & 텔레그램 알림 설정"
+            >
+              <Bell className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">자동 알림</span>
+            </button>
+
             <button
               id="header-db-settings-btn"
               onClick={onOpenDbModal}

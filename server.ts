@@ -39,6 +39,85 @@ async function startServer() {
   app.use('/api/v8/system', systemRouter);
   app.use('/api/v8/telegram', telegramRouter);
 
+  // Auto-scan / Cron route for local and production parity
+  app.all('/api/v8/cron-scan', async (req, res) => {
+    try {
+      const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+      const kstHour = nowKST.getUTCHours();
+      const kstMinute = nowKST.getUTCMinutes();
+      const kstTimeStr = `${String(kstHour).padStart(2, '0')}:${String(kstMinute).padStart(2, '0')} KST`;
+
+      let slotName = '수동/실시간 스캔';
+      if (kstHour >= 6 && kstHour <= 8) {
+        slotName = '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)';
+      } else if (kstHour >= 21 && kstHour <= 23) {
+        slotName = '🌃 [2회차] 프리마켓 갭 분석 & 당일 관심종목 압축';
+      } else if (kstHour >= 1 && kstHour <= 3) {
+        slotName = '🌙 [3회차] 장중 급변 & 모멘텀 브레이크아웃 감시';
+      }
+
+      const scanResult = await getInitialOrLatestEvaluations();
+      const evaluations = scanResult.evaluations || [];
+      const actionableSignals = evaluations.filter((e) => e.decision.actionable);
+
+      res.json({
+        success: true,
+        slot: slotName,
+        kst_time: kstTimeStr,
+        evaluated_count: evaluations.length,
+        actionable_signals_count: actionableSignals.length,
+        actionable_signals: actionableSignals.map((s) => ({
+          ticker: s.ticker,
+          name: s.name,
+          decision: s.decision.decision,
+          opportunity_score: s.opportunity.opportunity_score,
+          risk_level: s.risk.risk_level,
+          price: s.price,
+        })),
+        telegram_status: {
+          configured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+          message: process.env.TELEGRAM_BOT_TOKEN ? '발송 준비 완료' : '환경변수 미설정 (프리뷰 모드)',
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Schedule information endpoint
+  app.get('/api/v8/schedule/info', (req, res) => {
+    res.json({
+      success: true,
+      total_schedules: 3,
+      schedules: [
+        {
+          slot: 'POST_MARKET',
+          name: '미국 정규장 마감 브리핑 (종가 확정)',
+          timeKST: '06:30 KST (평일 화~토)',
+          cronUTC: '30 21 * * 1-5',
+          purpose: '전일 종가 기준 4대 팩터 최종 집계 및 일봉 확정 시그널 도출',
+          priority: 'HIGH',
+        },
+        {
+          slot: 'PRE_MARKET',
+          name: '프리마켓 갭 분석 & 당일 관심종목 압축',
+          timeKST: '22:00 KST (평일 월~금)',
+          cronUTC: '00 13 * * 1-5',
+          purpose: '프리마켓 변동성 반영, 당일 진입 유효 후보군 압축 및 포트폴리오 비중 브리핑',
+          priority: 'MEDIUM',
+        },
+        {
+          slot: 'INTRADAY',
+          name: '장중 급변 & 모멘텀 브레이크아웃 감시',
+          timeKST: '02:00 KST (평일 화~토)',
+          cronUTC: '00 17 * * 1-5',
+          purpose: '장중 거래량 폭증 및 변동성 브레이크아웃 종목 포착 시 실시간 긴급 신호 발송',
+          priority: 'MEDIUM',
+        },
+      ],
+    });
+  });
+
   app.post('/api/v8/telegram/preview', async (req, res) => {
     try {
       const { ticker } = req.body;

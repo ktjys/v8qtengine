@@ -32,15 +32,37 @@ This project can be deployed to **Cloudflare Pages** or **Cloudflare Workers**.
 ---
 
 ## ⚙️ Environment Variables on Cloudflare
-Configure the following in **Settings > Environment Variables** on Cloudflare Pages:
+Configure the following in **Pages > Settings > Environment Variables**:
+- `TELEGRAM_BOT_TOKEN`: *(Recommended)* Telegram Bot token from `@BotFather`
+- `TELEGRAM_CHAT_ID`: *(Recommended)* Your chat or channel ID from `@userinfobot`
+- `CRON_SECRET_TOKEN`: *(Optional)* Secret token to protect the `/api/v8/cron-scan` endpoint
 - `GEMINI_API_KEY`: *(Optional)* Your Google Gemini API Key
 - `SUPABASE_URL`: *(Optional)* Your Supabase project URL
 - `SUPABASE_KEY`: *(Optional)* Your Supabase public/service key
-- `TELEGRAM_BOT_TOKEN`: *(Optional)* For real-time signal broadcasts
-- `TELEGRAM_CHAT_ID`: *(Optional)* Telegram chat / channel ID
 - `V8_DATA_PROVIDER`: `yahoo` (or `seed`)
 
 ---
 
-## 📦 Static SPA Routing
-The `_redirects` file in `public/_redirects` ensures client-side routing (single-page application) redirects all non-asset requests to `index.html`.
+## ⏰ Automated Scanning Schedule (3 Daily Runs)
+
+The backend `/api/v8/cron-scan` endpoint automatically evaluates the quant decision engine and broadcasts Telegram alerts:
+
+1. **06:30 KST (화~토) - 미국 정규장 마감 브리핑**
+   - Cron (UTC): `30 21 * * 1-5`
+   - 전일 종가 기준 4대 팩터(기술/모멘텀/펀더/밸류) 최종 집계 및 일봉 확정 시그널 도출
+2. **22:00 KST (월~금) - 프리마켓 갭 분석 & 관심종목 압축**
+   - Cron (UTC): `00 13 * * 1-5`
+   - 당일 장전 진입 유효 후보군 압축 및 포트폴리오 비중 브리핑
+3. **02:00 KST (화~토) - 장중 급변 & 모멘텀 브레이크아웃 감시**
+   - Cron (UTC): `00 17 * * 1-5`
+   - 장중 거래량 폭증 및 변동성 브레이크아웃 급변 종목 포착 시 실시간 알림
+
+### 무료 자동 실행 설정 방법 (2가지):
+- **방법 1 (무료 Webhook):** [cron-job.org](https://cron-job.org)에 가입 후 `https://내서브도메인.pages.dev/api/v8/cron-scan` URL을 등록하고 위 시각으로 설정.
+- **방법 2 (대시보드 즉시 실행):** 상단 네비게이션 바의 **[자동 알림]** ➡️ **[지금 실행하기]** 버튼 클릭.
+
+---
+
+## 📦 Static SPA & Functions Routing
+- `functions/api/`: Cloudflare Pages Functions가 자동으로 엣지 API 엔드포인트를 제공합니다.
+- `public/_redirects`: 클라이언트 사이드 SPA 라우팅 새로고침 404를 방지합니다.
