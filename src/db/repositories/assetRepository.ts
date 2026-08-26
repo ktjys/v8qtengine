@@ -3,41 +3,43 @@ import { WatchlistItem } from '../../types/v8';
 
 export class AssetRepository {
   async getAll() {
-    // 1. Try to fetch from Supabase if connected
-    if (dbClient.isTableAvailable('assets') && dbClient.supabase) {
+    // 1. Always try Supabase FIRST - this is the source of truth
+    if (dbClient.supabase && dbClient.isSupabaseConnected) {
       try {
+        console.log('[AssetRepository] Querying Supabase assets table...');
         const { data, error } = await dbClient.supabase
           .from('assets')
           .select('*')
           .order('ticker', { ascending: true });
 
         if (error) {
-          console.warn('[AssetRepository] Supabase query error:', error);
-          // Fall through to in-memory
-        } else if (data && data.length > 0) {
-          // Sync to in-memory
+          console.warn('[AssetRepository] Supabase error:', error);
+        } else if (data && Array.isArray(data)) {
+          console.log(`[AssetRepository] ✅ Loaded ${data.length} assets from Supabase`);
+          // Sync all to in-memory
           data.forEach((row: any) => {
-            dbClient.assets.set(row.ticker, row);
+            if (row.ticker) {
+              dbClient.assets.set(row.ticker.toUpperCase(), row);
+            }
           });
-          console.log(`[AssetRepository] Loaded ${data.length} assets from Supabase`);
           return data;
         }
       } catch (err) {
-        console.warn('[AssetRepository] Exception fetching from Supabase:', err);
+        console.warn('[AssetRepository] Exception querying Supabase:', err);
       }
     }
 
-    // 2. Fall back to in-memory cache
+    // 2. Fall back to in-memory if Supabase fails or not connected
     const cached = Array.from(dbClient.assets.values());
-    console.log(`[AssetRepository] Returning ${cached.length} assets from in-memory cache`);
+    console.log(`[AssetRepository] ⚠️  Returning ${cached.length} assets from in-memory cache (Supabase unavailable)`);
     return cached;
   }
 
   async upsert(asset: any) {
-    const ticker = asset.ticker.toUpperCase();
+    const ticker = asset.ticker?.toUpperCase?.() || asset.ticker;
+    if (!ticker) return;
 
-    // 1. Always update in-memory
-    dbClient.assets.set(ticker, {
+    const cleanAsset = {
       ticker,
       name: asset.name || ticker,
       asset_type: asset.asset_type || 'equity',
@@ -46,26 +48,26 @@ export class AssetRepository {
       is_active: asset.is_active !== undefined ? asset.is_active : true,
       created_at: asset.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    };
+
+    // 1. Always update in-memory first
+    dbClient.assets.set(ticker, cleanAsset);
+    console.log(`[AssetRepository] Updated in-memory asset: ${ticker}`);
 
     // 2. Try to upsert to Supabase if connected
-    if (dbClient.isTableAvailable('assets') && dbClient.supabase) {
+    if (dbClient.supabase && dbClient.isSupabaseConnected) {
       try {
-        await dbClient.supabase.from('assets').upsert(
-          {
-            ticker,
-            name: asset.name || ticker,
-            asset_type: asset.asset_type || 'equity',
-            exchange: asset.exchange || 'US',
-            currency: asset.currency || 'USD',
-            is_active: asset.is_active !== undefined ? asset.is_active : true,
-            created_at: asset.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'ticker' }
-        );
+        const { error } = await dbClient.supabase
+          .from('assets')
+          .upsert([cleanAsset], { onConflict: 'ticker' });
+
+        if (error) {
+          console.warn(`[AssetRepository] Could not upsert to Supabase for ${ticker}:`, error);
+        } else {
+          console.log(`[AssetRepository] ✅ Upserted to Supabase: ${ticker}`);
+        }
       } catch (err) {
-        console.warn(`[AssetRepository] Could not upsert to Supabase for ${ticker}:`, err);
+        console.warn(`[AssetRepository] Exception upserting to Supabase for ${ticker}:`, err);
       }
     }
 
