@@ -57,164 +57,165 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const actionableSignalsToday = evaluations.filter((e) => e.decision.actionable);
 
   return (
-    <div className="space-y-8 animate-fadeIn">
+    <div className="space-y-6 sm:space-y-8 animate-fadeIn">
       {/* 1. Top KPI Telemetry Banner */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4.5 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 sm:p-4.5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2">
             <span>워치리스트 관찰</span>
-            <Layers className="w-4 h-4 text-cyan-400" />
+            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
           </div>
-          <div className="flex items-baseline space-x-2">
-            <span className="text-2xl font-bold text-slate-100 font-mono">{evaluations.length}</span>
-            <span className="text-xs text-slate-400">종목 상시 모니터링</span>
+          <div className="flex items-baseline space-x-1.5 sm:space-x-2">
+            <span className="text-xl sm:text-2xl font-bold text-slate-100 font-mono">{evaluations.length}</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">종목 모니터링</span>
           </div>
-          <div className="mt-2 text-xs text-emerald-400 flex items-center space-x-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>전체 100% 평가 완료 (실시간 파이프라인)</span>
+          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-emerald-400 flex items-center space-x-1 truncate">
+            <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span className="truncate">전체 평가 완료</span>
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4.5 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 sm:p-4.5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2">
             <span>오늘의 발생 시그널</span>
-            <Zap className="w-4 h-4 text-amber-400" />
+            <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
           </div>
-          <div className="flex items-baseline space-x-2">
-            <span className="text-2xl font-bold text-amber-400 font-mono">
+          <div className="flex items-baseline space-x-1.5 sm:space-x-2">
+            <span className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">
               {actionableSignalsToday.length}
             </span>
-            <span className="text-xs text-slate-400">건 진입 조건 충족</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">건 진입 조건</span>
           </div>
-          <div className="mt-2 text-xs text-slate-400 flex items-center space-x-1">
-            <span>스냅샷 불변 원장 저장 완료</span>
+          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-slate-400 flex items-center space-x-1 truncate">
+            <span className="truncate">불변 원장 저장 완료</span>
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4.5 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 sm:p-4.5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2">
             <span>20일 승률 (백테스트)</span>
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
           </div>
-          <div className="flex items-baseline space-x-2">
-            <span className="text-2xl font-bold text-emerald-400 font-mono">
+          <div className="flex items-baseline space-x-1.5 sm:space-x-2">
+            <span className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">
               {backtestSummary?.win_rate_20d ?? 83.3}%
             </span>
-            <span className="text-xs text-slate-400">
+            <span className="text-[10px] sm:text-xs text-slate-400">
               (5D: {backtestSummary?.win_rate_5d ?? 100.0}%)
             </span>
           </div>
-          <div className="mt-2 text-xs text-emerald-400/90 font-mono">
-            평균 수익률: +{backtestSummary?.avg_return_20d ?? 10.5}%
+          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-emerald-400/90 font-mono truncate">
+            평균: +{backtestSummary?.avg_return_20d ?? 10.5}%
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4.5 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 sm:p-4.5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2">
             <span>Profit Factor</span>
-            <BarChart3 className="w-4 h-4 text-blue-400" />
+            <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
           </div>
-          <div className="flex items-baseline space-x-2">
-            <span className="text-2xl font-bold text-blue-400 font-mono">
+          <div className="flex items-baseline space-x-1.5 sm:space-x-2">
+            <span className="text-xl sm:text-2xl font-bold text-blue-400 font-mono">
               {backtestSummary?.profit_factor ?? 8.4}x
             </span>
-            <span className="text-xs text-slate-400">수익/손실 비율</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">수익/손실</span>
           </div>
-          <div className="mt-2 text-xs text-cyan-400 font-mono">
-            최대 낙폭(MDD): -{backtestSummary?.max_drawdown ?? 2.4}%
+          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-cyan-400 font-mono truncate">
+            MDD: -{backtestSummary?.max_drawdown ?? 2.4}%
           </div>
         </div>
       </div>
 
       {/* 2. Closed-Loop Pipeline Architecture Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <span className="px-2 py-0.5 text-xs font-semibold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              <span className="px-2 py-0.5 text-[10px] sm:text-xs font-semibold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                 폐쇄 루프 아키텍처
               </span>
-              <h2 className="text-lg font-bold text-slate-100">
+              <h2 className="text-base sm:text-lg font-bold text-slate-100">
                 퀀트 의사결정 파이프라인
               </h2>
             </div>
-            <p className="text-xs text-slate-400 max-w-2xl">
+            <p className="text-[11px] sm:text-xs text-slate-400 max-w-2xl leading-relaxed">
               Opportunity Engine은 Watchlist 전체({evaluations.length}개)에 대해 실행되며,
               Risk Engine의 <strong>독립적인 제약 조건</strong>을 통과한 신호만 Telegram 및 영구 스냅샷으로 발행됩니다.
             </p>
           </div>
           <button
             onClick={onNavigateToWatchlist}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-all active:scale-95 whitespace-nowrap"
+            className="flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-all active:scale-95 whitespace-nowrap self-start sm:self-auto"
           >
-            <span>전종목 매트릭스 확인</span>
+            <span>전종목 매트릭스</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
         {/* Visual Pipeline Steps */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-5">
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-cyan-400 font-mono font-bold">STEP 01</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Watchlist</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">상시 관찰 집합</div>
+        <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 mt-4 sm:mt-5">
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
+            <div className="text-[9px] sm:text-[10px] text-cyan-400 font-mono font-bold">STEP 01</div>
+            <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Watchlist</div>
+            <div className="text-[9px] sm:text-[11px] text-slate-400 mt-0.5 truncate">상시 관찰</div>
           </div>
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-cyan-400 font-mono font-bold">STEP 02</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Asset Classification</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">ETF / 개별주 정체성</div>
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
+            <div className="text-[9px] sm:text-[10px] text-cyan-400 font-mono font-bold">STEP 02</div>
+            <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Classification</div>
+            <div className="text-[9px] sm:text-[11px] text-slate-400 mt-0.5 truncate">자산 분류</div>
           </div>
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-cyan-400 font-mono font-bold">STEP 03</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Opportunity (4대 팩터)</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Tech, Mom, Fund, Val</div>
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
+            <div className="text-[9px] sm:text-[10px] text-cyan-400 font-mono font-bold">STEP 03</div>
+            <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Opportunity</div>
+            <div className="text-[9px] sm:text-[11px] text-slate-400 mt-0.5 truncate">4대 팩터</div>
           </div>
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-amber-400 font-mono font-bold">STEP 04</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Risk Constraint</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">독립적 위험 필터</div>
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
+            <div className="text-[9px] sm:text-[10px] text-amber-400 font-mono font-bold">STEP 04</div>
+            <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Risk Constraint</div>
+            <div className="text-[9px] sm:text-[11px] text-slate-400 mt-0.5 truncate">독립 필터</div>
           </div>
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-emerald-400 font-mono font-bold">STEP 05</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Decision Matrix</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">행동 판단 생성</div>
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
+            <div className="text-[9px] sm:text-[10px] text-emerald-400 font-mono font-bold">STEP 05</div>
+            <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Decision</div>
+            <div className="text-[9px] sm:text-[11px] text-slate-400 mt-0.5 truncate">행동 판단</div>
           </div>
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-blue-400 font-mono font-bold">STEP 06</div>
-            <div className="text-xs font-semibold text-slate-200 mt-1">Signal & Return Track</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">5D/10D/20D 성과 추적</div>
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
+            <div className="text-[9px] sm:text-[10px] text-blue-400 font-mono font-bold">STEP 06</div>
+            <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Signal Ledger</div>
+            <div className="text-[9px] sm:text-[11px] text-slate-400 mt-0.5 truncate">성과 추적</div>
           </div>
         </div>
       </div>
 
       {/* 3. Today's Watch (Opportunity / Watch / Risk) */}
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4">
           <div className="flex items-center space-x-2">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-base font-bold text-slate-100">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+            <h3 className="text-sm sm:text-base font-bold text-slate-100">
               Today's Watch (오늘의 3대 행동 관찰 리스트)
             </h3>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             {onRecalculate && (
               <button
                 id="btn-dashboard-recalculate"
                 onClick={onRecalculate}
                 disabled={isRecalculating}
-                className="flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/50 transition-all active:scale-95 disabled:opacity-50"
+                className="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/50 transition-all active:scale-95 disabled:opacity-50"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
-                <span>{isRecalculating ? 'DB 퀀트 재계산 중...' : 'DB 데이터 새로고침 / 퀀트 재평가'}</span>
+                <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{isRecalculating ? 'DB 퀀트 재계산 중...' : 'DB 데이터 새로고침 / 퀀트 재평가'}</span>
+                <span className="sm:hidden">{isRecalculating ? '재계산 중...' : 'DB 새로고침'}</span>
               </button>
             )}
-            <span className="text-xs text-slate-400 font-mono">
-              최근 평가: {evaluations[0]?.evaluated_at ? new Date(evaluations[0].evaluated_at).toLocaleTimeString() : 'LIVE'}
+            <span className="text-[11px] sm:text-xs text-slate-400 font-mono">
+              최근: {evaluations[0]?.evaluated_at ? new Date(evaluations[0].evaluated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'LIVE'}
             </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Card 1: Opportunities */}
           <div className="bg-slate-900/80 border border-emerald-500/20 rounded-2xl p-4.5 flex flex-col shadow-sm">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">

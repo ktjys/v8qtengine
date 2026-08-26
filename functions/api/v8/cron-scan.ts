@@ -144,3 +144,16 @@ export async function onRequest(context: any) {
     );
   }
 }
+
+export const onRequestGet = onRequest;
+export const onRequestPost = onRequest;
+export async function onRequestOptions() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-cron-token',
+    },
+  });
+}

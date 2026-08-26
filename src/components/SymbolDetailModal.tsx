@@ -122,37 +122,37 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   const classification = evaluation.classification;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-2.5 sm:p-4 overflow-y-auto animate-fadeIn">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden my-auto">
         {/* Modal Header */}
-        <div className="p-5 sm:p-6 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-mono font-bold text-white text-lg shadow-lg shadow-cyan-500/20">
+        <div className="p-3.5 sm:p-5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-mono font-bold text-white text-sm sm:text-lg shadow-lg shadow-cyan-500/20 shrink-0">
               {evaluation.ticker}
             </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-xl font-bold text-slate-100">{evaluation.name}</h3>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold">
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
+                <h3 className="text-base sm:text-xl font-bold text-slate-100 truncate">{evaluation.name}</h3>
+                <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold">
                   {formatStockPrice(evaluation.price, evaluation.ticker)}
                 </span>
                 <span
-                  className={`text-xs font-semibold ${
+                  className={`text-[11px] sm:text-xs font-semibold ${
                     evaluation.change1d >= 0 ? 'text-emerald-400' : 'text-rose-400'
                   }`}
                 >
                   {formatChangePercent(evaluation.change1d)}
                 </span>
               </div>
-              <div className="flex items-center space-x-2 text-xs text-slate-400 mt-1">
-                <span className="uppercase px-1.5 py-0.5 rounded bg-slate-800/80 font-mono text-[10px]">
+              <div className="flex items-center space-x-1.5 sm:space-x-2 text-[10px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1 truncate">
+                <span className="uppercase px-1.5 py-0.5 rounded bg-slate-800/80 font-mono text-[9px] sm:text-[10px]">
                   {classification.asset_type}
                 </span>
                 <span>•</span>
                 <span className="text-cyan-400 font-medium">{classification.strategy_type}</span>
-                <span>•</span>
-                <span>
-                  분류 출처: {classification.classification_source === 'manual' ? '수동 지정(Manual)' : '자동 분석(Auto)'}
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">
+                  분류: {classification.classification_source === 'manual' ? '수동(Manual)' : '자동(Auto)'}
                 </span>
               </div>
             </div>
@@ -160,89 +160,89 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors shrink-0 ml-2"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Diagnostic Tabs */}
-        <div className="flex overflow-x-auto border-b border-slate-800 px-5 bg-slate-950/40 text-xs font-medium space-x-1 no-scrollbar">
+        <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-800 px-3 sm:px-5 bg-slate-950/40 text-xs font-medium space-x-1 shrink-0 no-scrollbar">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            종합 진단 (Overview)
+            종합 진단
           </button>
           <button
             onClick={() => setActiveTab('chart')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
               activeTab === 'chart'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <LineChart className="w-3.5 h-3.5 text-cyan-400" />
-            <span>일별 점수 & 지표 차트</span>
+            <span>차트 분석</span>
           </button>
           <button
             onClick={() => setActiveTab('opportunity')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'opportunity'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            기회 4대 서브 스코어 ({opp.opportunity_score}점)
+            기회 스코어 ({opp.opportunity_score}점)
           </button>
           <button
             onClick={() => setActiveTab('risk')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'risk'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            독립 리스크 제약 ({risk.risk_level})
+            리스크 제약 ({risk.risk_level})
           </button>
           <button
             onClick={() => setActiveTab('decision')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'decision'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            의사결정 매트릭스 ({decision.decision})
+            의사결정 ({decision.decision})
           </button>
           <button
             onClick={() => setActiveTab('signals')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'signals'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            과거 시그널 & 사후성과 ({tickerSignals.length}건)
+            과거 시그널 ({tickerSignals.length}건)
           </button>
           <button
             onClick={() => setActiveTab('override')}
-            className={`py-3 px-3.5 border-b-2 transition-all whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'override'
                 ? 'border-cyan-400 text-cyan-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            분류 수동 Override
+            수동 Override
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1 text-slate-200">
           {/* TAB: DAILY SCORE & INDICATORS CHART */}
           {activeTab === 'chart' && (
             <div className="space-y-6 animate-fadeIn">
