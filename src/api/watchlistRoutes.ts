@@ -23,7 +23,8 @@ watchlistRouter.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Ticker is required' });
     }
     const cleanTicker = ticker.toUpperCase().trim();
-    const item = await watchlistRepository.add({ ticker: cleanTicker, name, memo });
+    // 새 종목은 항상 is_active: true로 생성
+    const item = await watchlistRepository.add({ ticker: cleanTicker, name, memo, is_active: true });
 
     // Evaluate the new item and save to DB
     try {

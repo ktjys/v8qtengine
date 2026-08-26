@@ -145,7 +145,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <button
             onClick={onNavigateToWatchlist}
-            className="flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-all active:scale-95 whitespace-nowrap self-start sm:self-auto"
+            className="flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-all active:scale-95 shrink-0"
           >
             <span>전종목 매트릭스</span>
             <ChevronRight className="w-4 h-4" />
@@ -288,7 +288,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1">
-              {watchListItems.slice(0, 6).map((item) => (
+              {watchListItems.slice(0, 10).map((item) => (
                 <div
                   key={item.ticker}
                   onClick={() => onSelectTicker(item.ticker)}
@@ -418,7 +418,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {recentSignals.slice(0, 5).map((sig) => (
+              {recentSignals.slice(0, 10).map((sig) => (
                 <tr
                   key={sig.id}
                   className="hover:bg-slate-800/40 transition-colors cursor-pointer"

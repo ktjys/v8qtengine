@@ -11,16 +11,16 @@ export const evaluationRouter = Router();
 // GET /api/v8/evaluations
 evaluationRouter.get('/', async (req, res) => {
   try {
-    // 1. Get current active watchlist
+    // 1. Get entire watchlist (including inactive items for completeness)
     const watchlist = await watchlistRepository.getAll();
-    const activeWatchlist = watchlist.filter((w) => w.is_active);
-    const activeTickerSet = new Set(activeWatchlist.map((w) => w.ticker.toUpperCase()));
+    const watchlistTickerSet = new Set(watchlist.map((w) => w.ticker.toUpperCase()));
 
     // 2. Get existing evaluations
     let evaluations = await evaluationRepository.getAll();
     const evalMap = new Map(evaluations.map((e) => [e.ticker.toUpperCase(), e]));
 
-    // 3. Ensure all active tickers have fresh valuations & live quotes
+    // 3. Prioritize active tickers for fresh valuations & live quotes
+    const activeWatchlist = watchlist.filter((w) => w.is_active);
     let hasChanges = false;
     const now = Date.now();
 
@@ -60,10 +60,10 @@ evaluationRouter.get('/', async (req, res) => {
       })
     );
 
-    // 4. Filter only active watchlist tickers
+    // 4. Return all evaluations for tickers in watchlist (not just active)
     const finalEvaluations: typeof evaluations = [];
     for (const [ticker, ev] of evalMap.entries()) {
-      if (activeTickerSet.has(ticker)) {
+      if (watchlistTickerSet.has(ticker)) {
         finalEvaluations.push(ev);
       }
     }
