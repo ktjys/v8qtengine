@@ -162,7 +162,7 @@ class UniversalDatabaseClient {
       this.configSource = 'ENV_FALLBACK';
     } else {
       this.configSource = 'LOCAL_ONLY';
-      console.log('[SupabaseClient] No credentials found. Use the DB Settings modal to connect.');
+      console.warn('[SupabaseClient] ⚠️ No DB credentials found. Set SUPABASE_URL and SUPABASE_KEY via env vars or use the DB Settings modal.');
       return;
     }
 
@@ -190,6 +190,11 @@ class UniversalDatabaseClient {
     url: string,
     key: string
   ): Promise<{ success: boolean; error?: string; tables?: Record<string, TableStatusInfo> }> {
+    if (this.isSupabaseConnected) {
+      const tables = await this.checkTableStatus();
+      return { success: true, tables };
+    }
+
     const cleanUrl = url.trim();
     const cleanKey = key.trim();
 
@@ -225,10 +230,12 @@ class UniversalDatabaseClient {
       }
       this.missingTables.clear();
 
-      this.saveDbConfig({
-        url: cleanUrl,
-        key: cleanKey,
-      });
+      try {
+        this.saveDbConfig({
+          url: cleanUrl,
+          key: cleanKey,
+        });
+      } catch {}
 
       const tables = await this.checkTableStatus();
       return { success: true, tables };
