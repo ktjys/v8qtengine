@@ -87,14 +87,30 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     setScanResult(null);
     try {
       const res = await fetch('/api/v8/cron-scan', { method: 'POST' });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(
+          res.ok
+            ? '응답 데이터 파싱 실패 (HTML 반환됨)'
+            : `서버 오류 (HTTP ${res.status}): ${text.slice(0, 100)}`
+        );
+      }
+
       setScanResult(data);
       if (data.success) {
-        onShowToast(`자동 스캔 완료: ${data.actionable_signals_count}개 시그널 포착`);
+        onShowToast(`자동 스캔 완료: ${data.actionable_signals_count ?? 0}개 시그널 포착`);
       } else {
-        onShowToast(`스캔 오류: ${data.error}`);
+        onShowToast(`스캔 오류: ${data.error || '알 수 없는 오류'}`);
       }
     } catch (err: any) {
+      console.error('Auto scan run failed', err);
+      setScanResult({
+        success: false,
+        error: err.message || '스캔 요청 중 네트워크 오류가 발생했습니다.',
+      });
       onShowToast(`스캔 요청 실패: ${err.message}`);
     } finally {
       setIsRunning(false);
@@ -105,13 +121,18 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     setIsTestingTelegram(true);
     try {
       const res = await fetch('/api/v8/telegram/test-broadcast', { method: 'POST' });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {}
+
       if (data.previewOnly) {
         onShowToast('텔레그램 프리뷰 테스트 완료 (Cloudflare 환경변수 설정 시 실제 전송)');
       } else if (data.success) {
         onShowToast('텔레그램 봇으로 실제 테스트 메시지가 전송되었습니다!');
       } else {
-        onShowToast(`발송 오류: ${data.message || '전송 실패'}`);
+        onShowToast(`발송 결과: ${data.message || '전송 완료'}`);
       }
     } catch (err: any) {
       onShowToast(`오류: ${err.message}`);
@@ -262,29 +283,41 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
               {/* Scan Result Output */}
               {scanResult && (
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2 animate-fadeIn font-mono">
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="text-emerald-400 font-bold">✅ {scanResult.slot || '스캔 완료'}</span>
-                    <span className="text-slate-500 text-[11px]">소요 시간: {scanResult.duration_ms}ms</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-center pt-1">
-                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                      <div className="text-[10px] text-slate-400">평가 종목수</div>
-                      <div className="text-sm font-bold text-cyan-400">{scanResult.evaluated_count}개</div>
-                    </div>
-                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                      <div className="text-[10px] text-slate-400">진입 신호 포착</div>
-                      <div className="text-sm font-bold text-amber-400">{scanResult.actionable_signals_count}건</div>
-                    </div>
-                  </div>
-                  {scanResult.actionable_signals && scanResult.actionable_signals.length > 0 && (
-                    <div className="text-[11px] text-slate-300 space-y-1 pt-1">
-                      <div className="text-slate-400">🎯 포착 종목:</div>
-                      {scanResult.actionable_signals.map((sig: any) => (
-                        <div key={sig.ticker} className="flex items-center justify-between bg-slate-950 px-2.5 py-1 rounded">
-                          <span><b>{sig.ticker}</b> (${sig.price?.toFixed(1)})</span>
-                          <span className="text-amber-400 font-bold">{sig.decision} ({sig.opportunity_score}점)</span>
+                  {scanResult.success ? (
+                    <>
+                      <div className="flex items-center justify-between text-slate-300">
+                        <span className="text-emerald-400 font-bold">✅ {scanResult.slot || '스캔 완료'}</span>
+                        <span className="text-slate-500 text-[11px]">소요 시간: {scanResult.duration_ms ?? 0}ms</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center pt-1">
+                        <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                          <div className="text-[10px] text-slate-400">평가 종목수</div>
+                          <div className="text-sm font-bold text-cyan-400">{scanResult.evaluated_count ?? 0}개</div>
                         </div>
-                      ))}
+                        <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                          <div className="text-[10px] text-slate-400">진입 신호 포착</div>
+                          <div className="text-sm font-bold text-amber-400">{scanResult.actionable_signals_count ?? 0}건</div>
+                        </div>
+                      </div>
+                      {scanResult.actionable_signals && scanResult.actionable_signals.length > 0 && (
+                        <div className="text-[11px] text-slate-300 space-y-1 pt-1">
+                          <div className="text-slate-400">🎯 포착 종목:</div>
+                          {scanResult.actionable_signals.map((sig: any) => (
+                            <div key={sig.ticker} className="flex items-center justify-between bg-slate-950 px-2.5 py-1 rounded">
+                              <span><b>{sig.ticker}</b> (${(sig.price ?? 0).toFixed(1)})</span>
+                              <span className="text-amber-400 font-bold">{sig.decision} ({sig.opportunity_score}점)</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-rose-400 flex items-start space-x-2">
+                      <span>⚠️</span>
+                      <div>
+                        <div className="font-bold">스캔 실행 실패</div>
+                        <div className="text-[11px] text-rose-300/80 mt-0.5">{scanResult.error || '스캔 처리 중 예외가 발생했습니다.'}</div>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -1,14 +1,16 @@
 import { runV8PipelineOnSeedData } from '../../../../src/data/seed/initialData';
 
-// POST /api/v8/scan/run
-export async function onRequestPost(context: any) {
-  const { request } = context;
+// POST or ALL /api/v8/scan/run
+export async function onRequest(context: any) {
+  const { request } = context || {};
   const startTime = Date.now();
 
   try {
     let body: any = {};
     try {
-      body = await request.json();
+      if (request?.json) {
+        body = await request.json();
+      }
     } catch {}
 
     const result = runV8PipelineOnSeedData();

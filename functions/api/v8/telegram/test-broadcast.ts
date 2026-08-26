@@ -1,6 +1,6 @@
 // POST /api/v8/telegram/test-broadcast
 export async function onRequestPost(context: any) {
-  const { request, env } = context;
+  const { request, env = {} } = context || {};
 
   try {
     let body: any = {};
@@ -8,8 +8,8 @@ export async function onRequestPost(context: any) {
       body = await request.json();
     } catch {}
 
-    const botToken = env.TELEGRAM_BOT_TOKEN || body.botToken;
-    const chatId = env.TELEGRAM_CHAT_ID || body.chatId;
+    const botToken = env?.TELEGRAM_BOT_TOKEN || body.botToken;
+    const chatId = env?.TELEGRAM_CHAT_ID || body.chatId;
 
     const previewMode = !botToken || !chatId;
 

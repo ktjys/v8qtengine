@@ -25,6 +25,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [completedLog, setCompletedLog] = useState<ScanRunLog | null>(null);
   const [newSignals, setNewSignals] = useState<SignalSnapshot[]>([]);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const steps = [
     { title: '1. Watchlist 동기화', desc: '워치리스트 종목 시세 및 지표 로드' },
@@ -38,11 +39,12 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     setIsRunning(true);
     setCompletedLog(null);
     setNewSignals([]);
+    setScanError(null);
 
     // Step-by-step visual animation
     for (let i = 0; i < steps.length; i++) {
       setCurrentStep(i);
-      await new Promise((r) => setTimeout(r, 450));
+      await new Promise((r) => setTimeout(r, 350));
     }
 
     try {
@@ -51,15 +53,33 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ simulate_partial_failure: simulateFailure }),
       });
-      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(`서버 통신 상태 코드 오류: ${res.status}`);
+      }
+
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(
+          res.ok
+            ? '서버 응답 형식이 올바르지 않습니다 (HTML/텍스트 반환).'
+            : `서버 오류 (${res.status}): ${text.slice(0, 100)}`
+        );
+      }
 
       if (data.success) {
         setCompletedLog(data.scan_log);
         setNewSignals(data.new_signals || []);
         onScanCompleted(data);
+      } else {
+        throw new Error(data.error || '스캔 엔진 실행 중 오류가 발생했습니다.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Scan failed', err);
+      setScanError(err.message || '스캔 실행 중 문제가 발생했습니다.');
     } finally {
       setIsRunning(false);
     }
@@ -195,6 +215,14 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                 ⚠️ {completedLog.error_summary}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {scanError && !completedLog && (
+          <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs flex items-start space-x-2 animate-fadeIn">
+            <span className="font-bold text-rose-400">⚠️ 오류:</span>
+            <span className="leading-relaxed">{scanError}</span>
           </div>
         )}
 

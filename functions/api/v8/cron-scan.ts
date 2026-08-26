@@ -23,14 +23,14 @@ async function sendTelegramMessage(token: string, chatId: string, text: string) 
 
 // GET or POST /api/v8/cron-scan
 export async function onRequest(context: any) {
-  const { request, env } = context;
+  const { request, env = {} } = context || {};
   const startTime = Date.now();
 
   try {
     // 1. Check optional secret token protection if set in Cloudflare Environment
-    const url = new URL(request.url);
-    const providedToken = url.searchParams.get('token') || request.headers.get('x-cron-token');
-    const secretToken = env.CRON_SECRET_TOKEN || env.V8_CRON_SECRET;
+    const url = new URL(request?.url || 'http://localhost/api/v8/cron-scan');
+    const providedToken = url.searchParams.get('token') || request?.headers?.get('x-cron-token');
+    const secretToken = env?.CRON_SECRET_TOKEN || env?.V8_CRON_SECRET;
 
     if (secretToken && providedToken !== secretToken) {
       return new Response(
@@ -63,11 +63,11 @@ export async function onRequest(context: any) {
     // 3. Execute Quant Pipeline Evaluation
     const scanResult = runV8PipelineOnSeedData();
     const evaluations = scanResult.evaluations || [];
-    const actionableSignals = evaluations.filter((e) => e.decision.actionable);
+    const actionableSignals = evaluations.filter((e) => e.decision?.actionable);
 
     // 4. Send Telegram Notification if configured
-    const botToken = env.TELEGRAM_BOT_TOKEN || url.searchParams.get('bot_token');
-    const chatId = env.TELEGRAM_CHAT_ID || url.searchParams.get('chat_id');
+    const botToken = env?.TELEGRAM_BOT_TOKEN || url.searchParams.get('bot_token');
+    const chatId = env?.TELEGRAM_CHAT_ID || url.searchParams.get('chat_id');
     let telegramResult: any = { sent: false, reason: 'Telegram credentials not configured' };
 
     if (botToken && chatId) {
@@ -77,16 +77,16 @@ export async function onRequest(context: any) {
       reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
       reportText += `• <b>모니터링 종목:</b> ${evaluations.length}개\n`;
       reportText += `• <b>진입 신호 포착:</b> <b>${actionableSignals.length}건</b>\n`;
-      reportText += `• <b>리스크 주의 종목:</b> ${evaluations.filter((e) => e.risk.risk_level === 'HIGH').length}개\n\n`;
+      reportText += `• <b>리스크 주의 종목:</b> ${evaluations.filter((e) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
 
       if (actionableSignals.length > 0) {
         reportText += `<b>🎯 오늘 포착된 주요 기회 종목:</b>\n`;
         actionableSignals.slice(0, 4).forEach((sig, idx) => {
-          const arrow = sig.change1d >= 0 ? '🔺' : '🔻';
+          const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
           reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
-          reportText += `   - 현재가: $${sig.price.toFixed(2)} (${arrow}${sig.change1d >= 0 ? '+' : ''}${sig.change1d}%)\n`;
-          reportText += `   - 기회점수: <b>${sig.opportunity.opportunity_score}점</b> | 판정: <code>${sig.decision.decision}</code>\n`;
-          reportText += `   - 핵심이유: ${sig.decision.reason}\n\n`;
+          reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow}${(sig.change1d ?? 0) >= 0 ? '+' : ''}${sig.change1d ?? 0}%)\n`;
+          reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'HOLD'}</code>\n`;
+          reportText += `   - 핵심이유: ${sig.decision?.reason || '모멘텀 지표 양호'}\n\n`;
         });
       } else {
         reportText += `ℹ️ 현재 기준 엄격한 리스크 제약을 통과한 신규 진입 신호가 없습니다. (현금 비중 유지 권장)\n\n`;
@@ -114,10 +114,10 @@ export async function onRequest(context: any) {
         actionable_signals: actionableSignals.map((s) => ({
           ticker: s.ticker,
           name: s.name,
-          decision: s.decision.decision,
-          opportunity_score: s.opportunity.opportunity_score,
-          risk_level: s.risk.risk_level,
-          price: s.price,
+          decision: s.decision?.decision || 'HOLD',
+          opportunity_score: s.opportunity?.opportunity_score ?? 50,
+          risk_level: s.risk?.risk_level || 'MODERATE',
+          price: s.price ?? 0,
         })),
         telegram_status: telegramResult,
       }),

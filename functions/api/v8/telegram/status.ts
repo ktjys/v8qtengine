@@ -1,9 +1,9 @@
 // GET /api/v8/telegram/status
 export async function onRequestGet(context: any) {
-  const { env } = context;
+  const { env = {} } = context || {};
 
-  const botToken = env.TELEGRAM_BOT_TOKEN;
-  const chatId = env.TELEGRAM_CHAT_ID;
+  const botToken = env?.TELEGRAM_BOT_TOKEN;
+  const chatId = env?.TELEGRAM_CHAT_ID;
 
   return new Response(
     JSON.stringify({
@@ -22,3 +22,4 @@ export async function onRequestGet(context: any) {
     }
   );
 }
+
