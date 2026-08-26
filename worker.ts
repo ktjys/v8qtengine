@@ -9,6 +9,8 @@ import { createSignalSnapshot } from './src/engine/signalEngine';
 import { calculateBacktestMetrics } from './src/engine/backtestEngine';
 import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runV8PipelineOnSeedData } from './src/data/seed/initialData';
 import { SignalSnapshot } from './src/types/v8';
+import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
+import { runDatabaseDiagnostics } from './src/db/diagnostics';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -214,6 +216,95 @@ export default {
       const runs = await scanRunRepository.getAll();
       const combined = runs.length > 0 ? runs : INITIAL_SCAN_RUNS;
       return jsonResponse({ success: true, count: combined.length, runs: combined });
+    }
+
+    // ========== System Routes ==========
+
+    // GET /api/v8/system/status
+    if (path === '/api/v8/system/status') {
+      const dbStatus = dbClient.getStatus();
+      const dbConfig = dbClient.getConfig();
+      return jsonResponse({
+        success: true,
+        provider: evaluationService.getProviderName(),
+        db: dbStatus,
+        db_config: dbConfig,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // GET /api/v8/system/db/status
+    if (path === '/api/v8/system/db/status') {
+      try {
+        const status = dbClient.getStatus();
+        const config = dbClient.getConfig();
+        const tables = await dbClient.checkTableStatus();
+        return jsonResponse({ success: true, status, config, tables });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
+    // GET /api/v8/system/db/diagnostics
+    if (path === '/api/v8/system/db/diagnostics') {
+      try {
+        const diagnostics = await runDatabaseDiagnostics();
+        return jsonResponse({ success: true, ...diagnostics });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err?.message || '진단 실행 중 오류가 발생했습니다.' }, 500);
+      }
+    }
+
+    // POST /api/v8/system/db/config — UI에서 Supabase 연결 정보 수신
+    if (path === '/api/v8/system/db/config' && method === 'POST') {
+      try {
+        const body: any = await request.json();
+        const { url, key } = body;
+        if (!url || !key) {
+          return jsonResponse({ success: false, error: 'Supabase URL과 Key를 모두 전달해야 합니다.' }, 400);
+        }
+        const result = await dbClient.configureSupabase(url, key);
+        if (!result.success) {
+          return jsonResponse({ success: false, error: result.error }, 400);
+        }
+        return jsonResponse({
+          success: true,
+          message: 'Supabase 데이터베이스가 성공적으로 연결되었습니다.',
+          status: dbClient.getStatus(),
+          tables: result.tables,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
+    // POST /api/v8/system/db/disconnect
+    if (path === '/api/v8/system/db/disconnect' && method === 'POST') {
+      return jsonResponse({
+        success: true,
+        message: 'Supabase 기본 데이터베이스 연결이 유지됩니다.',
+        status: dbClient.getStatus(),
+      });
+    }
+
+    // GET /api/v8/system/db/schema-sql
+    if (path === '/api/v8/system/db/schema-sql') {
+      return jsonResponse({ success: true, sql: FULL_SCHEMA_SQL });
+    }
+
+    // POST /api/v8/system/provider
+    if (path === '/api/v8/system/provider' && method === 'POST') {
+      try {
+        const body: any = await request.json();
+        const { provider } = body;
+        if (provider === 'seed' || provider === 'yahoo') {
+          evaluationService.setProvider(provider);
+          return jsonResponse({ success: true, active_provider: provider });
+        }
+        return jsonResponse({ success: false, error: "Invalid provider. Must be 'yahoo' or 'seed'." }, 400);
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
     }
 
     // System DB Clear / Seed
