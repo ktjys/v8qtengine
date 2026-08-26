@@ -31,8 +31,8 @@ export interface TableStatusInfo {
   error?: string;
 }
 
-export const DEFAULT_SUPABASE_URL = 'https://xuzctskacealvvwlmica.supabase.co';
-export const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1emN0c2thY2VhbHZ2d2xtaWNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTAwNjUsImV4cCI6MjA3NTIyNjA2NX0.0O7d4e5kU4Y8KqC2wG9_9U3z_uH0vN4c1jB2vF5xR-M';
+// Credentials are loaded from: 1) UI-configured localStorage, 2) Environment variables
+// No hardcoded defaults — set SUPABASE_URL and SUPABASE_KEY via .env or Cloudflare runtime vars
 
 const CONFIG_STORAGE_KEY = 'quant_db_config';
 
@@ -40,7 +40,7 @@ class UniversalDatabaseClient {
   public supabase: SupabaseClient | null = null;
   public isSupabaseConnected = false;
   public missingTables = new Set<string>();
-  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'DEFAULT_DIRECT' = 'DEFAULT_DIRECT';
+  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'LOCAL_ONLY' = 'LOCAL_ONLY';
   private currentUrl = '';
   private currentKey = '';
   private state: DatabaseState = {
@@ -161,10 +161,9 @@ class UniversalDatabaseClient {
       this.currentKey = envKey;
       this.configSource = 'ENV_FALLBACK';
     } else {
-      // 3. Guaranteed Production Supabase (Never local-mode)
-      this.currentUrl = DEFAULT_SUPABASE_URL;
-      this.currentKey = DEFAULT_SUPABASE_KEY;
-      this.configSource = 'DEFAULT_DIRECT';
+      this.configSource = 'LOCAL_ONLY';
+      console.log('[SupabaseClient] No credentials found. Use the DB Settings modal to connect.');
+      return;
     }
 
     try {
@@ -473,7 +472,7 @@ class UniversalDatabaseClient {
   getConfig() {
     return {
       connected: this.isSupabaseConnected && this.supabase !== null,
-      url: this.currentUrl || DEFAULT_SUPABASE_URL,
+      url: this.currentUrl,
       maskedKey: this.currentKey
         ? this.currentKey.slice(0, 8) + '...' + this.currentKey.slice(-4)
         : '',
@@ -487,7 +486,7 @@ class UniversalDatabaseClient {
     return {
       connected: this.isSupabaseConnected && this.supabase !== null,
       type: 'supabase' as const,
-      url: this.currentUrl || DEFAULT_SUPABASE_URL,
+      url: this.currentUrl,
       configSource: this.configSource,
       isUiOverridden: this.configSource === 'UI_CONFIGURED',
       evaluationsCount: this.state.evaluations.size,

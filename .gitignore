@@ -6,3 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
+.db_config.json
+.data_persistence.json

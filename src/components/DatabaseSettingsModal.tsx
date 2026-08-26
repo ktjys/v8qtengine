@@ -173,7 +173,7 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
       if (loadedUrl) {
         setSupabaseUrl(loadedUrl);
       } else {
-        setSupabaseUrl('https://xuzctskacealvvwlmica.supabase.co');
+        setSupabaseUrl('');
       }
       if (loadedTables) {
         setTables(loadedTables);

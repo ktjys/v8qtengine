@@ -14,11 +14,40 @@ import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
 import { createSignalSnapshot, formatTelegramNotification } from './src/engine/signalEngine';
 
+function createRateLimiter(windowMs: number, max: number) {
+  const hits = new Map<string, number[]>();
+  const cleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, timestamps] of hits) {
+      const valid = timestamps.filter((t) => now - t < windowMs);
+      if (valid.length === 0) hits.delete(key);
+      else hits.set(key, valid);
+    }
+  }, windowMs);
+  if (cleanup.unref) cleanup.unref();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const timestamps = (hits.get(key) || []).filter((t) => now - t < windowMs);
+    if (timestamps.length >= max) {
+      res.status(429).json({ error: 'Too many requests. Please try again later.' });
+      return;
+    }
+    timestamps.push(now);
+    hits.set(key, timestamps);
+    next();
+  };
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(createRateLimiter(60_000, 120));
+  app.use('/api/v8/system', createRateLimiter(60_000, 30));
+  app.use('/api/v8/scan', createRateLimiter(60_000, 10));
 
   // 1. Health check
   app.get('/api/health', (req, res) => {
