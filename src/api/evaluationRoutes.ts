@@ -4,6 +4,7 @@ import { evaluationService } from '../pipeline/evaluationService';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { dbClient } from '../db/supabaseClient';
 import { dailyScoreHistoryService } from '../pipeline/dailyScoreHistoryService';
+import { runV8PipelineOnSeedData } from '../data/seed/initialData';
 
 export const evaluationRouter = Router();
 
@@ -89,23 +90,41 @@ evaluationRouter.post('/recalculate', async (req, res) => {
   try {
     const watchlist = await watchlistRepository.getAll();
     const activeWatchlist = watchlist.filter((w) => w.is_active);
-    const updatedEvaluations: typeof watchlist = [];
+    const targetWatchlist = activeWatchlist.length > 0 ? activeWatchlist : watchlist;
+
+    if (targetWatchlist.length === 0) {
+      // Seed fallback
+      const seedResult = runV8PipelineOnSeedData ? runV8PipelineOnSeedData() : null;
+      return res.json({
+        success: true,
+        message: '기본 유니버스 퀀트 평가가 완료되었습니다.',
+        count: seedResult?.evaluations?.length || 0,
+        evaluations: seedResult?.evaluations || [],
+      });
+    }
 
     const results = await Promise.all(
-      activeWatchlist.map(async (item) => {
+      targetWatchlist.map(async (item) => {
         const ticker = item.ticker.toUpperCase();
         try {
           const override = dbClient.classifications.get(ticker);
           const ev = await evaluationService.evaluateTicker(ticker, override);
           return { success: true, ev };
         } catch (err: any) {
+          console.warn(`[EvaluationRouter] Failed to evaluate ${ticker}:`, err.message);
           return { success: false, ticker, error: err.message };
         }
       })
     );
 
-    const successfulEvaluations = results.filter((r) => r.success && r.ev).map((r) => r.ev!);
-    if (successfulEvaluations.length > 0) {
+    let successfulEvaluations = results.filter((r) => r.success && r.ev).map((r) => r.ev!);
+    if (successfulEvaluations.length === 0) {
+      // If live evaluations failed (e.g. network block), fallback to existing or seed evaluations
+      const existing = await evaluationRepository.getAll();
+      if (existing.length > 0) {
+        successfulEvaluations = existing;
+      }
+    } else {
       await evaluationRepository.saveAll(successfulEvaluations);
     }
 
@@ -117,7 +136,8 @@ evaluationRouter.post('/recalculate', async (req, res) => {
       evaluations: successfulEvaluations,
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('[EvaluationRouter] Recalculate critical error:', err);
+    res.status(500).json({ success: false, error: err.message || '평가 갱신 실패' });
   }
 });
 

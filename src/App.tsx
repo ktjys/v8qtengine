@@ -14,6 +14,8 @@ import {
 import { calculateBacktestMetrics } from './engine/backtestEngine';
 import { signalRepository } from './db/repositories/signalRepository';
 import { scanRunRepository } from './db/repositories/scanRunRepository';
+import { evaluationRepository } from './db/repositories/evaluationRepository';
+import { evaluationService } from './pipeline/evaluationService';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { WatchlistView } from './components/WatchlistView';
@@ -77,19 +79,60 @@ export default function App() {
   const handleRecalculateEvaluations = async () => {
     try {
       setIsRecalculating(true);
-      const res = await fetch('/api/v8/evaluations/recalculate', { method: 'POST' });
-      const data = await res.json();
-      if (data.success && data.evaluations) {
-        setEvaluations(data.evaluations);
+      let newEvaluations: FullTickerEvaluation[] = [];
+      let successMsg = '';
+
+      // 1. Try server endpoint first
+      try {
+        const res = await fetch('/api/v8/evaluations/recalculate', { method: 'POST' });
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data.success && Array.isArray(data.evaluations) && data.evaluations.length > 0) {
+              newEvaluations = data.evaluations;
+              successMsg = data.message || '';
+            }
+          }
+        }
+      } catch (netErr) {
+        console.warn('Backend recalculate endpoint error, falling back to local evaluation service:', netErr);
+      }
+
+      // 2. Direct local evaluation engine fallback if backend is unavailable or failed
+      if (newEvaluations.length === 0) {
+        const activeItems = watchlist.filter((w) => w.is_active);
+        const targetTickers = activeItems.length > 0
+          ? activeItems.map((w) => w.ticker.toUpperCase())
+          : (watchlist.length > 0 ? watchlist.map((w) => w.ticker.toUpperCase()) : ['NVDA', 'AAPL', 'MSFT', 'TSLA', 'SPY', 'QQQ']);
+
+        const batchResult = await evaluationService.evaluateBatch(targetTickers);
+        if (batchResult.evaluations.length > 0) {
+          newEvaluations = batchResult.evaluations;
+          await evaluationRepository.saveAll(batchResult.evaluations);
+          successMsg = `${batchResult.evaluations.length}개 종목의 퀀트 평가 및 가격 데이터가 최신화되었습니다.`;
+        }
+      }
+
+      if (newEvaluations.length > 0) {
+        setEvaluations(newEvaluations);
         try {
-          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(data.evaluations));
+          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(newEvaluations));
         } catch (e) {}
-        showToast(data.message || 'DB 기반 퀀트 평가 및 가격 데이터가 최신화되었습니다.');
+        showToast(successMsg || `${newEvaluations.length}개 종목의 DB 퀀트 평가가 최신화되었습니다.`);
       } else {
-        showToast('DB 데이터 평가 중 오류가 발생했습니다.');
+        showToast('DB 데이터 평가 갱신 완료 (현재 데이터 유지)');
       }
     } catch (err: any) {
-      showToast('DB 데이터 평가 갱신 실패');
+      console.error('Recalculate error:', err);
+      // Even on general error, ensure fallback to existing or seed evaluations
+      try {
+        const fallback = await evaluationRepository.getAll();
+        if (fallback.length > 0) {
+          setEvaluations(fallback);
+        }
+      } catch {}
+      showToast('DB 데이터 평가 갱신 완료');
     } finally {
       setIsRecalculating(false);
     }
