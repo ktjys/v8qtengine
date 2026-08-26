@@ -59,13 +59,6 @@ export default {
 
     await ensureDbConnected(env);
 
-    const dbNotConnected = !dbClient.isSupabaseConnected;
-    const dbErrorResponse = jsonResponse({
-      success: false,
-      error: 'Supabase DB가 연결되지 않았습니다. Cloudflare 환경변수 SUPABASE_URL과 SUPABASE_KEY를 설정하거나, DB Settings에서 연결하세요.',
-      connected: false,
-    }, 503);
-
     // Health check
     if (path === '/api/health') {
       return jsonResponse({
@@ -78,7 +71,6 @@ export default {
 
     // Evaluations
     if (path === '/api/v8/evaluations/recalculate') {
-      if (dbNotConnected) return dbErrorResponse;
       try {
         const [allAssets, watchlist] = await Promise.all([
           assetRepository.getAll(),
@@ -120,7 +112,6 @@ export default {
     }
 
     if (path === '/api/v8/evaluations') {
-      if (dbNotConnected) return dbErrorResponse;
       try {
         const [existingEvaluations, allAssets] = await Promise.all([
           evaluationRepository.getAll(),
@@ -150,7 +141,6 @@ export default {
 
     // Watchlist
     if (path === '/api/v8/watchlist' || path.startsWith('/api/v8/watchlist/')) {
-      if (dbNotConnected && method === 'GET') return dbErrorResponse;
       if (method === 'POST') {
         try {
           const body: any = await request.json();
@@ -219,7 +209,6 @@ export default {
 
     // Signals
     if (path === '/api/v8/signals') {
-      if (dbNotConnected) return dbErrorResponse;
       const savedSignals = await signalRepository.getAll();
       const evals = await evaluationRepository.getAll();
       const liveSignals: SignalSnapshot[] = evals
@@ -239,7 +228,6 @@ export default {
 
     // Backtest
     if (path === '/api/v8/backtest') {
-      if (dbNotConnected) return dbErrorResponse;
       const allSignals = await signalRepository.getAll();
       const combined = allSignals.length > 0 ? allSignals : INITIAL_HISTORICAL_SIGNALS;
       const summary = calculateBacktestMetrics(combined);
@@ -248,7 +236,6 @@ export default {
 
     // Runs
     if (path === '/api/v8/runs') {
-      if (dbNotConnected) return dbErrorResponse;
       const runs = await scanRunRepository.getAll();
       const combined = runs.length > 0 ? runs : INITIAL_SCAN_RUNS;
       return jsonResponse({ success: true, count: combined.length, runs: combined });
