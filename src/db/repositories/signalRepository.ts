@@ -13,7 +13,8 @@ export class SignalRepository {
 
         if (error) {
           dbClient.handleDbError('signals', 'getAll', error);
-        } else if (data && data.length > 0) {
+        } else if (Array.isArray(data)) {
+          dbClient.signals.clear();
           // Attempt to fetch outcomes in a non-blocking separate query
           let outcomesMap = new Map<string, any>();
           if (dbClient.isTableAvailable('signal_outcomes')) {

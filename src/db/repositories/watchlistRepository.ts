@@ -13,7 +13,8 @@ export class WatchlistRepository {
 
         if (error) {
           dbClient.handleDbError('watchlist', 'getAll', error);
-        } else if (data && data.length > 0) {
+        } else if (Array.isArray(data)) {
+          dbClient.watchlist.clear();
           const list: WatchlistItem[] = data.map((row: any) => {
             const assetName = dbClient.assets.get(row.ticker)?.name;
             return {

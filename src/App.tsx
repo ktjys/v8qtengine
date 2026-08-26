@@ -170,48 +170,27 @@ export default function App() {
 
   const loadAllData = async () => {
     try {
-      // 1. Fetch watchlist (Server first, fallback to repository + localStorage)
+      // 1. Fetch watchlist (Server first, fallback to repository)
       const wlData = await safeFetchJson('/api/v8/watchlist');
       let currentWl: WatchlistItem[] = [];
-      if (wlData?.success && Array.isArray(wlData.watchlist) && wlData.watchlist.length > 0) {
+      if (wlData?.success && Array.isArray(wlData.watchlist)) {
         currentWl = wlData.watchlist;
       } else {
         currentWl = await watchlistRepository.getAll();
       }
 
-      // Reconcile with localStorage cache
-      try {
-        const cachedRaw = localStorage.getItem('quant_watchlist_cache_v8');
-        if (cachedRaw) {
-          const cachedItems: WatchlistItem[] = JSON.parse(cachedRaw);
-          const currentTickers = new Set(currentWl.map((w) => w.ticker.toUpperCase()));
-          for (const c of cachedItems) {
-            if (!currentTickers.has(c.ticker.toUpperCase())) {
-              currentWl.push(c);
-              await watchlistRepository.add(c);
-            }
-          }
-        }
-      } catch (e) {}
-
-      if (currentWl.length === 0) {
-        currentWl = runPipelineOnSeedData().watchlist;
-      }
       setWatchlist(currentWl);
-      try {
-        localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(currentWl));
-      } catch (e) {}
 
       // 2. Fetch all evaluations (Server first, fallback to repository)
       let loadedEvals: FullTickerEvaluation[] = [];
       const evalData = await safeFetchJson('/api/v8/evaluations');
-      if (evalData?.success && Array.isArray(evalData.evaluations) && evalData.evaluations.length > 0) {
+      if (evalData?.success && Array.isArray(evalData.evaluations)) {
         loadedEvals = evalData.evaluations;
       } else {
         loadedEvals = await evaluationRepository.getAll();
       }
 
-      // 3. Ensure evaluations cover ALL assets & watchlist items
+      // 3. Match evaluations with known assets/watchlist (if any exist)
       const evalMap = new Map(loadedEvals.map((e) => [e.ticker.toUpperCase(), e]));
       const allAssets = await assetRepository.getAll();
       const allTargetTickers = new Set<string>([
@@ -236,30 +215,23 @@ export default function App() {
       }
 
       const finalEvals = Array.from(evalMap.values());
-      if (finalEvals.length > 0) {
-        setEvaluations(finalEvals);
-        if (hasNewEvaluations) {
-          await evaluationRepository.saveAll(finalEvals);
-        }
-        try {
-          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(finalEvals));
-        } catch (e) {}
+      setEvaluations(finalEvals);
+      if (hasNewEvaluations && finalEvals.length > 0) {
+        await evaluationRepository.saveAll(finalEvals);
       }
 
       // 4. Fetch signals
       let latestSignals: SignalSnapshot[] = [];
       const sigData = await safeFetchJson('/api/v8/signals');
-      if (sigData?.success && Array.isArray(sigData.signals) && sigData.signals.length > 0) {
+      if (sigData?.success && Array.isArray(sigData.signals)) {
         latestSignals = sigData.signals;
       } else {
         const repoSignals = await signalRepository.getAll();
-        if (repoSignals && repoSignals.length > 0) {
+        if (repoSignals && Array.isArray(repoSignals)) {
           latestSignals = repoSignals;
         }
       }
-      if (latestSignals.length > 0) {
-        setSignals(latestSignals);
-      }
+      setSignals(latestSignals);
 
       // 5. Fetch backtest
       const btData = await safeFetchJson('/api/v8/backtest');
@@ -267,15 +239,17 @@ export default function App() {
         setBacktestSummary(btData.data?.summary || btData.summary || null);
       } else if (latestSignals.length > 0) {
         setBacktestSummary(calculateBacktestMetrics(latestSignals));
+      } else {
+        setBacktestSummary(null);
       }
 
       // 6. Fetch runs
       const runData = await safeFetchJson('/api/v8/runs');
-      if (runData?.success && Array.isArray(runData.runs) && runData.runs.length > 0) {
+      if (runData?.success && Array.isArray(runData.runs)) {
         setRuns(runData.runs);
       } else {
         const repoRuns = await scanRunRepository.getAll();
-        if (repoRuns && repoRuns.length > 0) {
+        if (repoRuns && Array.isArray(repoRuns)) {
           setRuns(repoRuns);
         }
       }
@@ -346,6 +320,10 @@ export default function App() {
     if (!cleanTicker) return;
 
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('quant_db_cleared_v8');
+      }
+
       // 1. Direct repository persistence (Immediate, robust, offline/Edge/SPA ready)
       await assetRepository.upsert({
         ticker: cleanTicker,

@@ -85,6 +85,22 @@ systemRouter.post('/db/disconnect', (req, res) => {
   });
 });
 
+// POST /api/v8/system/db/clear (Clear all records from DB and memory)
+systemRouter.post('/db/clear', async (req, res) => {
+  try {
+    const result = await dbClient.clearAllData();
+    const tables = await dbClient.checkTableStatus();
+    res.json({
+      success: true,
+      message: '모든 데이터베이스 테이블 및 메모리 레코드가 성공적으로 초기화/삭제되었습니다.',
+      clearedTables: result.clearedTables,
+      tables,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/v8/system/db/seed (Seed initial universe & signals to DB)
 systemRouter.post('/db/seed', async (req, res) => {
   try {

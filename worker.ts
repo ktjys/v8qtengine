@@ -117,9 +117,6 @@ export default {
         }
 
         let finalEvaluations = Array.from(evalMap.values());
-        if (finalEvaluations.length === 0) {
-          finalEvaluations = runV8PipelineOnSeedData().evaluations;
-        }
 
         if (hasChanges && finalEvaluations.length > 0) {
           await evaluationRepository.saveAll(finalEvaluations);
@@ -132,14 +129,12 @@ export default {
           provider: evaluationService.getProviderName(),
         });
       } catch (err: any) {
-        const fallback = runV8PipelineOnSeedData();
         return jsonResponse({
-          success: true,
-          count: fallback.evaluations.length,
-          evaluations: fallback.evaluations,
-          fallback: true,
+          success: false,
+          count: 0,
+          evaluations: [],
           error: err.message,
-        });
+        }, 500);
       }
     }
 
@@ -207,16 +202,13 @@ export default {
       }
 
       // GET
-      let list = await watchlistRepository.getAll();
-      if (!list || list.length === 0) {
-        list = runV8PipelineOnSeedData().watchlist;
-      }
+      const list = await watchlistRepository.getAll();
       return jsonResponse({ success: true, count: list.length, watchlist: list });
     }
 
     // Signals
     if (path === '/api/v8/signals') {
-      let savedSignals = await signalRepository.getAll();
+      const savedSignals = await signalRepository.getAll();
       const evals = await evaluationRepository.getAll();
       const liveSignals: SignalSnapshot[] = evals
         .filter((e) => e.decision?.actionable)
@@ -224,13 +216,12 @@ export default {
 
       const signalMap = new Map<string, any>();
       savedSignals.forEach((s) => signalMap.set(`${s.ticker}-${s.signal_date}`, s));
-      INITIAL_HISTORICAL_SIGNALS.forEach((s) => {
+      liveSignals.forEach((s) => {
         const key = `${s.ticker}-${s.signal_date}`;
         if (!signalMap.has(key)) signalMap.set(key, s);
       });
-      liveSignals.forEach((s) => signalMap.set(`${s.ticker}-${s.signal_date}`, s));
 
-      const combined = Array.from(signalMap.values());
+      const combined = Array.from(signalMap.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
       return jsonResponse({ success: true, count: combined.length, signals: combined });
     }
 
@@ -247,6 +238,25 @@ export default {
       const runs = await scanRunRepository.getAll();
       const combined = runs.length > 0 ? runs : INITIAL_SCAN_RUNS;
       return jsonResponse({ success: true, count: combined.length, runs: combined });
+    }
+
+    // System DB Clear / Seed
+    if (path === '/api/v8/system/db/clear' && method === 'POST') {
+      const result = await dbClient.clearAllData();
+      return jsonResponse({
+        success: true,
+        message: '모든 데이터베이스 테이블 및 메모리 레코드가 성공적으로 초기화/삭제되었습니다.',
+        clearedTables: result.clearedTables,
+      });
+    }
+
+    if (path === '/api/v8/system/db/seed' && method === 'POST') {
+      const result = await dbClient.seedToActiveDb();
+      return jsonResponse({
+        success: true,
+        message: `기본 유니버스 및 시그널 데이터(${result.seededCount}개)가 주입되었습니다.`,
+        seededCount: result.seededCount,
+      });
     }
 
     // Fallback to Cloudflare Static Assets if not an API route

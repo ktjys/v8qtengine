@@ -55,8 +55,9 @@ export class AssetRepository {
 
         if (error) {
           console.warn('[AssetRepository] Supabase error:', error);
-        } else if (data && Array.isArray(data)) {
+        } else if (Array.isArray(data)) {
           console.log(`[AssetRepository] ✅ Loaded ${data.length} assets from Supabase`);
+          dbClient.assets.clear();
           // Sync all to in-memory
           data.forEach((row: any) => {
             if (row.ticker) {

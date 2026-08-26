@@ -12,7 +12,8 @@ export class ScanRunRepository {
 
         if (error) {
           dbClient.handleDbError('scan_runs', 'getAll', error);
-        } else if (data && data.length > 0) {
+        } else if (Array.isArray(data)) {
+          dbClient.scan_runs.clear();
           const mapped: ScanRunLog[] = data.map((r: any) => ({
             run_id: r.id,
             status: r.status,

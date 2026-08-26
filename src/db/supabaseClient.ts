@@ -81,11 +81,24 @@ class UniversalDatabaseClient {
   }
 
   private loadInitialData() {
-    // 1. First seed initial default dataset
-    this.seedInitial();
+    let isCleared = false;
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        isCleared = window.localStorage.getItem('quant_db_cleared_v8') === 'true';
+      }
+    } catch {}
 
-    // 2. Then overlay persisted local snapshot if available
-    this.loadLocalSnapshot();
+    if (isCleared) {
+      // User explicitly cleared DB: keep completely empty
+      return;
+    }
+
+    // 1. Then overlay persisted local snapshot if available
+    const hasSnapshot = this.loadLocalSnapshot();
+    if (!hasSnapshot && !this.isSupabaseConnected && !this.currentUrl) {
+      // 2. Only seed on first virgin startup
+      this.seedInitial();
+    }
   }
 
   public saveLocalSnapshot() {
@@ -113,7 +126,7 @@ class UniversalDatabaseClient {
     }
   }
 
-  public loadLocalSnapshot() {
+  public loadLocalSnapshot(): boolean {
     try {
       if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
         const raw = window.localStorage.getItem(SNAPSHOT_STORAGE_KEY);
@@ -153,11 +166,13 @@ class UniversalDatabaseClient {
             }
           }
           console.log(`[SupabaseClient] Successfully restored local snapshot with ${this.state.watchlist.size} watchlist tickers, ${this.state.evaluations.size} evaluations`);
+          return true;
         }
       }
     } catch (err) {
       console.warn('[SupabaseClient] Could not read local snapshot', err);
     }
+    return false;
   }
 
   public isTableAvailable(tableName: string): boolean {
@@ -471,10 +486,76 @@ class UniversalDatabaseClient {
         count = this.state.watchlist.size;
       }
 
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.removeItem('quant_db_cleared_v8');
+      }
+
       return { success: true, seededCount: count };
     } catch (err: any) {
       console.error('[SupabaseClient] seedToActiveDb error:', err);
       return { success: false, seededCount: 0, error: err.message };
+    }
+  }
+
+  public async clearAllData(): Promise<{ success: boolean; clearedTables: string[]; error?: string }> {
+    const clearedTables: string[] = [];
+    try {
+      // 1. Clear Supabase tables if connected
+      if (this.supabase && this.isSupabaseConnected) {
+        const tablesToDelete = [
+          'signal_outcomes',
+          'scan_run_items',
+          'scan_runs',
+          'signals',
+          'evaluations',
+          'indicator_snapshots',
+          'market_data_daily',
+          'fundamentals',
+          'watchlist',
+          'assets',
+        ];
+
+        for (const table of tablesToDelete) {
+          try {
+            if (table === 'assets' || table === 'watchlist') {
+              const { error } = await this.supabase.from(table).delete().neq('ticker', '___DUMMY_NEVER_MATCH___');
+              if (!error) clearedTables.push(table);
+            } else if (table === 'market_data_daily' || table === 'fundamentals' || table === 'indicator_snapshots') {
+              const { error } = await this.supabase.from(table).delete().neq('ticker', '___DUMMY_NEVER_MATCH___');
+              if (!error) clearedTables.push(table);
+            } else {
+              const { error } = await this.supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+              if (!error) clearedTables.push(table);
+            }
+          } catch (tblErr) {
+            console.warn(`[SupabaseClient] Failed to truncate table ${table}:`, tblErr);
+          }
+        }
+      }
+
+      // 2. Clear all in-memory states
+      this.state.assets.clear();
+      this.state.watchlist.clear();
+      this.state.classifications.clear();
+      this.state.market_data_daily.clear();
+      this.state.fundamentals.clear();
+      this.state.indicator_snapshots.clear();
+      this.state.evaluations.clear();
+      this.state.signals.clear();
+      this.state.scan_runs.clear();
+
+      // 3. Clear localStorage snapshots & record explicit cleared flag
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.removeItem(SNAPSHOT_STORAGE_KEY);
+        window.localStorage.removeItem('quant_watchlist_cache_v8');
+        window.localStorage.removeItem('quant_evaluations_cache_v8');
+        window.localStorage.setItem('quant_db_cleared_v8', 'true');
+      }
+
+      return { success: true, clearedTables };
+    } catch (err: any) {
+      console.error('[SupabaseClient] clearAllData error:', err);
+      return { success: false, clearedTables, error: err.message };
     }
   }
 

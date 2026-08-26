@@ -86,6 +86,58 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleClearData = async () => {
+    if (!confirm('⚠️ 경고: 데이터베이스의 모든 레코드(워치리스트, 자산, 시그널, 퀀트 평가, 스캔 로그)를 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+    setIsClearing(true);
+    try {
+      let clearSuccess = false;
+      let errMsg = '';
+
+      try {
+        const res = await fetch('/api/v8/system/db/clear', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success) {
+            clearSuccess = true;
+            if (data.tables) setTables(data.tables);
+          } else {
+            errMsg = data?.error;
+          }
+        }
+      } catch {}
+
+      // Always clear client-side memory and caches
+      const localClear = await dbClient.clearAllData();
+      if (!clearSuccess && localClear.success) {
+        clearSuccess = true;
+        const freshTables = await dbClient.checkTableStatus();
+        setTables(freshTables);
+      }
+
+      if (clearSuccess) {
+        onShowToast('데이터베이스의 모든 레코드가 성공적으로 삭제/초기화되었습니다.');
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem('quant_watchlist_cache_v8');
+          window.localStorage.removeItem('quant_evaluations_cache_v8');
+          window.localStorage.removeItem('v8_quant_db_snapshot_v1');
+          window.localStorage.setItem('quant_db_cleared_v8', 'true');
+        }
+        await fetchDbStatus();
+        await runDiagnostics();
+        await onRefreshAllData();
+      } else {
+        onShowToast(`초기화 실패: ${errMsg || '데이터 삭제 중 오류가 발생했습니다.'}`);
+      }
+    } catch (err: any) {
+      onShowToast(`초기화 실패: ${err.message}`);
+    } finally {
+      setIsClearing(false);
+    }
+  };
   const [copiedSql, setCopiedSql] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -313,6 +365,9 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
       }
 
       if (seedSuccess) {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem('quant_db_cleared_v8');
+        }
         onShowToast(`기본 유니버스 및 시그널 데이터(${seededCount}개)가 성공적으로 주입되었습니다.`);
         await fetchDbStatus();
         await runDiagnostics();
@@ -572,6 +627,40 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
                   </button>
                 </div>
               </form>
+
+              {/* Data Management & Complete Reset Box */}
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-200">
+                    <Database className="w-4 h-4 text-cyan-400" />
+                    <span>데이터베이스 레코드 관리 및 전체 초기화</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  테이블 내 모든 종목, 워치리스트, 실시간 퀀트 평가, 과거 시그널 및 스캔 로그를 초기화하거나 기본 테스트 데이터를 다시 주입할 수 있습니다.
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleClearData}
+                    disabled={isClearing || isSeeding}
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-bold transition-all disabled:opacity-50"
+                  >
+                    {isClearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    <span>DB 전체 레코드 삭제 (완전 초기화)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSeedData}
+                    disabled={isClearing || isSeeding}
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-xs font-semibold transition-all disabled:opacity-50"
+                  >
+                    {isSeeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    <span>기본 데이터 주입 (Seed Data)</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

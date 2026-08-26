@@ -22,12 +22,5 @@ export async function getInitialOrLatestEvaluations(
   const existing = await evaluationRepository.getAll();
   const watchlist = await watchlistRepository.getAll();
 
-  if (existing.length > 0) {
-    return { evaluations: existing, watchlist };
-  }
-
-  // Initial seed bootstrap if empty
-  const seeded = runV8PipelineOnSeedData(manualOverrides);
-  await evaluationRepository.saveAll(seeded.evaluations);
-  return seeded;
+  return { evaluations: existing, watchlist };
 }

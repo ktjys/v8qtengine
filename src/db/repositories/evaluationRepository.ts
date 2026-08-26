@@ -71,7 +71,8 @@ export class EvaluationRepository {
 
         if (error) {
           dbClient.handleDbError('evaluations', 'getAll', error);
-        } else if (data && data.length > 0) {
+        } else if (Array.isArray(data)) {
+          dbClient.evaluations.clear();
           const map = new Map<string, FullTickerEvaluation>();
 
           // Batch fetch latest prices from market_data_daily if available in Supabase
@@ -175,9 +176,7 @@ export class EvaluationRepository {
             dbClient.evaluations.set(ticker, ev);
           }
 
-          if (map.size > 0) {
-            return Array.from(map.values());
-          }
+          return Array.from(map.values());
         }
       } catch (err) {
         dbClient.handleDbError('evaluations', 'getAll', err);
