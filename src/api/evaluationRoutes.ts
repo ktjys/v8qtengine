@@ -9,75 +9,20 @@ import { runV8PipelineOnSeedData } from '../data/seed/initialData';
 
 export const evaluationRouter = Router();
 
-// GET /api/v8/evaluations
+// GET /api/v8/evaluations (Fast Direct DB Read)
 evaluationRouter.get('/', async (req, res) => {
   try {
-    // 1. Get ALL assets from asset table (including those added via watchlist)
-    const allAssets = await assetRepository.getAll();
+    const [evaluations, allAssets] = await Promise.all([
+      evaluationRepository.getAll(),
+      assetRepository.getAll(),
+    ]);
+
     const assetTickerSet = new Set(allAssets.map((a) => a.ticker.toUpperCase()));
-
-    // 2. Get watchlist for priority (active items get fresh evaluations)
-    const watchlist = await watchlistRepository.getAll();
-    const watchlistTickerSet = new Set(watchlist.map((w) => w.ticker.toUpperCase()));
-    const activeWatchlist = watchlist.filter((w) => w.is_active);
-
-    // 3. Get existing evaluations
-    let evaluations = await evaluationRepository.getAll();
-    const evalMap = new Map(evaluations.map((e) => [e.ticker.toUpperCase(), e]));
-
-    // 4. Refresh active watchlist tickers with fresh data
-    let hasChanges = false;
-    const now = Date.now();
-
-    await Promise.all(
-      activeWatchlist.map(async (item) => {
-        const ticker = item.ticker.toUpperCase();
-        try {
-          const existing = evalMap.get(ticker);
-          const isSeedOrStale =
-            !existing ||
-            existing.data_quality?.source === 'seed' ||
-            !existing.evaluated_at ||
-            isNaN(new Date(existing.evaluated_at).getTime()) ||
-            now - new Date(existing.evaluated_at).getTime() > 15 * 60 * 1000;
-
-          if (isSeedOrStale) {
-            const override = dbClient.classifications.get(ticker);
-            const newEval = await evaluationService.evaluateTicker(ticker, override);
-            evalMap.set(ticker, newEval);
-            hasChanges = true;
-          } else {
-            const quote = await evaluationService.getLiveQuote(ticker);
-            if (quote && quote.price > 0) {
-              if (existing.price !== quote.price || existing.change1d !== quote.changePercent) {
-                existing.price = quote.price;
-                existing.change1d = quote.changePercent;
-                if (quote.shortName || quote.longName) {
-                  existing.name = quote.shortName || quote.longName;
-                }
-                hasChanges = true;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn(`[EvaluationRouter] Could not auto-evaluate or update ticker ${ticker}:`, (err as Error).message);
-        }
-      })
-    );
-
-    // 5. Return evaluations for ALL assets (not just watchlist)
-    // If an asset doesn't have evaluation yet, it will be evaluated on next request or recalculate
-    const finalEvaluations: typeof evaluations = [];
-    for (const [ticker, ev] of evalMap.entries()) {
-      if (assetTickerSet.has(ticker)) {
-        finalEvaluations.push(ev);
-      }
-    }
-
-    // 6. Persist any changes
-    if (hasChanges) {
-      await evaluationRepository.saveAll(finalEvaluations);
-    }
+    
+    // Filter evaluations to registered assets if assets exist, or return all evaluations
+    const finalEvaluations = assetTickerSet.size > 0
+      ? evaluations.filter((e) => assetTickerSet.has(e.ticker.toUpperCase()))
+      : evaluations;
 
     res.json({
       success: true,

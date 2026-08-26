@@ -88,39 +88,15 @@ export default {
 
     if (path === '/api/v8/evaluations') {
       try {
-        const [watchlist, allAssets] = await Promise.all([
-          watchlistRepository.getAll(),
+        const [existingEvaluations, allAssets] = await Promise.all([
+          evaluationRepository.getAll(),
           assetRepository.getAll(),
         ]);
-        const targetTickers = new Set<string>([
-          ...watchlist.map((w) => w.ticker.toUpperCase()),
-          ...allAssets.map((a) => a.ticker.toUpperCase()),
-        ]);
+        const assetTickerSet = new Set(allAssets.map((a) => a.ticker.toUpperCase()));
 
-        let existingEvaluations = await evaluationRepository.getAll();
-        const evalMap = new Map(existingEvaluations.map((e) => [e.ticker.toUpperCase(), e]));
-
-        let hasChanges = false;
-        for (const ticker of targetTickers) {
-          if (!evalMap.has(ticker)) {
-            try {
-              const override = dbClient.classifications.get(ticker);
-              const newEval = await evaluationService.evaluateTicker(ticker, override);
-              if (newEval) {
-                evalMap.set(ticker, newEval);
-                hasChanges = true;
-              }
-            } catch (e) {
-              console.warn(`Evaluation failed for ${ticker}:`, e);
-            }
-          }
-        }
-
-        let finalEvaluations = Array.from(evalMap.values());
-
-        if (hasChanges && finalEvaluations.length > 0) {
-          await evaluationRepository.saveAll(finalEvaluations);
-        }
+        const finalEvaluations = assetTickerSet.size > 0
+          ? existingEvaluations.filter((e) => assetTickerSet.has(e.ticker.toUpperCase()))
+          : existingEvaluations;
 
         return jsonResponse({
           success: true,

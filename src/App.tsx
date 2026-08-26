@@ -150,88 +150,65 @@ export default function App() {
 
   const loadAllData = async () => {
     try {
-      // 1. Fetch watchlist (Server first, fallback to repository)
-      const wlData = await safeFetchJson('/api/v8/watchlist');
-      let currentWl: WatchlistItem[] = [];
-      if (wlData?.success && Array.isArray(wlData.watchlist)) {
-        currentWl = wlData.watchlist;
-      } else {
-        currentWl = await watchlistRepository.getAll();
-      }
+      // Parallel execution for near-instant database read across all tables
+      const [currentWl, loadedEvals, latestSignals, btData, currentRuns] = await Promise.all([
+        safeFetchJson('/api/v8/watchlist')
+          .then(async (res) => (res?.success && Array.isArray(res.watchlist) ? res.watchlist : watchlistRepository.getAll()))
+          .catch(() => watchlistRepository.getAll()),
 
-      setWatchlist(currentWl);
+        safeFetchJson('/api/v8/evaluations')
+          .then(async (res) => (res?.success && Array.isArray(res.evaluations) ? res.evaluations : evaluationRepository.getAll()))
+          .catch(() => evaluationRepository.getAll()),
 
-      // 2. Fetch all evaluations (Server first, fallback to repository)
-      let loadedEvals: FullTickerEvaluation[] = [];
-      const evalData = await safeFetchJson('/api/v8/evaluations');
-      if (evalData?.success && Array.isArray(evalData.evaluations)) {
-        loadedEvals = evalData.evaluations;
-      } else {
-        loadedEvals = await evaluationRepository.getAll();
-      }
+        safeFetchJson('/api/v8/signals')
+          .then(async (res) => (res?.success && Array.isArray(res.signals) ? res.signals : signalRepository.getAll()))
+          .catch(() => signalRepository.getAll()),
 
-      // 3. Match evaluations with known assets/watchlist (if any exist)
-      const evalMap = new Map(loadedEvals.map((e) => [e.ticker.toUpperCase(), e]));
-      const allAssets = await assetRepository.getAll();
-      const allTargetTickers = new Set<string>([
-        ...currentWl.map((w) => w.ticker.toUpperCase()),
-        ...allAssets.map((a) => a.ticker.toUpperCase()),
+        safeFetchJson('/api/v8/backtest').catch(() => null),
+
+        safeFetchJson('/api/v8/runs')
+          .then(async (res) => (res?.success && Array.isArray(res.runs) ? res.runs : scanRunRepository.getAll()))
+          .catch(() => scanRunRepository.getAll()),
       ]);
 
-      let hasNewEvaluations = false;
-      for (const ticker of allTargetTickers) {
-        if (!evalMap.has(ticker)) {
-          try {
-            const override = dbClient.classifications.get(ticker);
-            const newEv = await evaluationService.evaluateTicker(ticker, override);
-            if (newEv) {
-              evalMap.set(ticker, newEv);
-              hasNewEvaluations = true;
-            }
-          } catch (e) {
-            console.warn(`Evaluation fallback for ${ticker}:`, e);
-          }
-        }
-      }
+      // Immediate UI update in a single paint batch
+      setWatchlist(currentWl || []);
+      setEvaluations(loadedEvals || []);
+      setSignals(latestSignals || []);
+      setRuns(currentRuns || []);
 
-      const finalEvals = Array.from(evalMap.values());
-      setEvaluations(finalEvals);
-      if (hasNewEvaluations && finalEvals.length > 0) {
-        await evaluationRepository.saveAll(finalEvals);
-      }
-
-      // 4. Fetch signals
-      let latestSignals: SignalSnapshot[] = [];
-      const sigData = await safeFetchJson('/api/v8/signals');
-      if (sigData?.success && Array.isArray(sigData.signals)) {
-        latestSignals = sigData.signals;
-      } else {
-        const repoSignals = await signalRepository.getAll();
-        if (repoSignals && Array.isArray(repoSignals)) {
-          latestSignals = repoSignals;
-        }
-      }
-      setSignals(latestSignals);
-
-      // 5. Fetch backtest
-      const btData = await safeFetchJson('/api/v8/backtest');
       if (btData?.success && (btData.data?.summary || btData.summary)) {
         setBacktestSummary(btData.data?.summary || btData.summary || null);
-      } else if (latestSignals.length > 0) {
+      } else if (latestSignals && latestSignals.length > 0) {
         setBacktestSummary(calculateBacktestMetrics(latestSignals));
       } else {
         setBacktestSummary(null);
       }
 
-      // 6. Fetch runs
-      const runData = await safeFetchJson('/api/v8/runs');
-      if (runData?.success && Array.isArray(runData.runs)) {
-        setRuns(runData.runs);
-      } else {
-        const repoRuns = await scanRunRepository.getAll();
-        if (repoRuns && Array.isArray(repoRuns)) {
-          setRuns(repoRuns);
-        }
+      // Background Non-blocking check for any newly added tickers without evaluations
+      const evalMap = new Map((loadedEvals || []).map((e) => [e.ticker.toUpperCase(), e]));
+      const unevaluated = (currentWl || []).filter((w) => !evalMap.has(w.ticker.toUpperCase()));
+      if (unevaluated.length > 0) {
+        setTimeout(async () => {
+          try {
+            const newEvals: FullTickerEvaluation[] = [];
+            for (const item of unevaluated) {
+              const ticker = item.ticker.toUpperCase();
+              const override = dbClient.classifications.get(ticker);
+              const newEv = await evaluationService.evaluateTicker(ticker, override);
+              if (newEv) {
+                newEvals.push(newEv);
+                evalMap.set(ticker, newEv);
+              }
+            }
+            if (newEvals.length > 0) {
+              await evaluationRepository.saveAll(newEvals);
+              setEvaluations(Array.from(evalMap.values()));
+            }
+          } catch (bgErr) {
+            console.warn('[App] Background evaluation update:', bgErr);
+          }
+        }, 100);
       }
     } catch (err) {
       console.error('Failed to load initial data', err);

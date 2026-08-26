@@ -23,17 +23,23 @@ interface AutoScanScheduleModalProps {
   onShowToast: (msg: string) => void;
 }
 
+const TELEGRAM_STORAGE_KEY = 'quant_telegram_config';
+
 export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   isOpen,
   onClose,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'schedule' | 'telegram' | 'cron_setup'>('schedule');
+  const [activeTab, setActiveTab] = useState<'schedule' | 'telegram' | 'cron_setup'>('telegram');
   const [isRunning, setIsRunning] = useState(false);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [isSavingTelegram, setIsSavingTelegram] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [telegramStatus, setTelegramStatus] = useState<any>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  const [inputBotToken, setInputBotToken] = useState('');
+  const [inputChatId, setInputChatId] = useState('');
 
   const schedules = [
     {
@@ -70,18 +76,93 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
   const fetchTelegramStatus = async () => {
     try {
+      let savedCfg: { botToken?: string; chatId?: string } | null = null;
+      try {
+        const raw = localStorage.getItem(TELEGRAM_STORAGE_KEY);
+        if (raw) savedCfg = JSON.parse(raw);
+      } catch {}
+
+      if (savedCfg) {
+        if (savedCfg.botToken && !inputBotToken) setInputBotToken(savedCfg.botToken);
+        if (savedCfg.chatId && !inputChatId) setInputChatId(savedCfg.chatId);
+      }
+
       const res = await fetch('/api/v8/telegram/status');
       const data = await res.json();
-      setTelegramStatus(data);
+
+      // If UI has saved config, synthesize status
+      if (savedCfg?.botToken && savedCfg?.chatId) {
+        setTelegramStatus({
+          ...data,
+          configured: true,
+          botTokenConfigured: true,
+          chatIdConfigured: true,
+          targetChatIdMasked: `${savedCfg.chatId.slice(0, 3)}****`,
+          source: 'UI_DIRECT_CONFIG',
+        });
+      } else {
+        setTelegramStatus(data);
+      }
     } catch {}
   };
 
   useEffect(() => {
     if (isOpen) {
+      try {
+        const raw = localStorage.getItem(TELEGRAM_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.botToken) setInputBotToken(parsed.botToken);
+          if (parsed.chatId) setInputChatId(parsed.chatId);
+        }
+      } catch {}
       fetchTelegramStatus();
       setScanResult(null);
     }
   }, [isOpen]);
+
+  const handleSaveTelegramConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanToken = inputBotToken.trim();
+    const cleanChatId = inputChatId.trim();
+
+    if (!cleanToken || !cleanChatId) {
+      onShowToast('Bot Token과 Chat ID를 모두 입력해주세요.');
+      return;
+    }
+
+    setIsSavingTelegram(true);
+    try {
+      try {
+        localStorage.setItem(
+          TELEGRAM_STORAGE_KEY,
+          JSON.stringify({ botToken: cleanToken, chatId: cleanChatId })
+        );
+      } catch {}
+
+      try {
+        await fetch('/api/v8/telegram/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botToken: cleanToken, chatId: cleanChatId }),
+        });
+      } catch {}
+
+      setTelegramStatus({
+        configured: true,
+        botTokenConfigured: true,
+        chatIdConfigured: true,
+        targetChatIdMasked: `${cleanChatId.slice(0, 3)}****`,
+        source: 'UI_DIRECT_CONFIG',
+      });
+
+      onShowToast('텔레그램 봇 연동 정보가 브라우저 및 시스템에 저장되었습니다!');
+    } catch (err: any) {
+      onShowToast(`저장 오류: ${err.message}`);
+    } finally {
+      setIsSavingTelegram(false);
+    }
+  };
 
   const handleRunScanNow = async () => {
     setIsRunning(true);
@@ -229,7 +310,18 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   const handleTestTelegram = async () => {
     setIsTestingTelegram(true);
     try {
-      const res = await fetch('/api/v8/telegram/test-broadcast', { method: 'POST' });
+      const token = inputBotToken.trim();
+      const chat = inputChatId.trim();
+
+      const res = await fetch('/api/v8/telegram/test-broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          botToken: token || undefined,
+          chatId: chat || undefined,
+        }),
+      });
+
       const text = await res.text();
       let data: any = {};
       try {
@@ -237,11 +329,11 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       } catch {}
 
       if (data.previewOnly) {
-        onShowToast('텔레그램 프리뷰 테스트 완료 (Cloudflare 환경변수 설정 시 실제 전송)');
+        onShowToast('텔레그램 봇 토큰/챗ID 미등록: 프리뷰 시뮬레이션 완료');
       } else if (data.success) {
         onShowToast('텔레그램 봇으로 실제 테스트 메시지가 전송되었습니다!');
       } else {
-        onShowToast(`발송 결과: ${data.message || '전송 완료'}`);
+        onShowToast(`발송 결과: ${data.message || data.error || '전송 실패'}`);
       }
     } catch (err: any) {
       onShowToast(`오류: ${err.message}`);
@@ -459,54 +551,144 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
         {/* Tab 2: Telegram Settings */}
         {activeTab === 'telegram' && (
           <div className="space-y-4">
-            <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-3">
+            {/* Status & Diagnostic Alert Box */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Bell className="w-4 h-4 text-cyan-400" />
-                  <h4 className="text-sm font-bold text-slate-200">텔레그램 봇 연결 상태</h4>
+                  <h4 className="text-sm font-bold text-slate-200">텔레그램 봇 연동 상태</h4>
                 </div>
-                <button
-                  onClick={handleTestTelegram}
-                  disabled={isTestingTelegram}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-semibold border border-slate-700 flex items-center space-x-1.5 transition-all"
-                >
-                  {isTestingTelegram ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Send className="w-3.5 h-3.5" />
-                  )}
-                  <span>테스트 알림 발송</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleTestTelegram}
+                    disabled={isTestingTelegram}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 text-xs font-semibold border border-cyan-500/30 flex items-center space-x-1.5 transition-all"
+                  >
+                    {isTestingTelegram ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>테스트 알림 발송</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                   <span className="text-slate-400">TELEGRAM_BOT_TOKEN</span>
-                  <span className={`font-mono font-semibold ${telegramStatus?.botTokenConfigured ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {telegramStatus?.botTokenConfigured ? '✅ 환경변수 등록됨' : '⚠️ 미등록 (프리뷰 모드 동작)'}
+                  <span
+                    className={`font-mono font-semibold text-[11px] ${
+                      telegramStatus?.botTokenConfigured || inputBotToken
+                        ? 'text-emerald-400'
+                        : 'text-amber-400'
+                    }`}
+                  >
+                    {telegramStatus?.botTokenConfigured || inputBotToken
+                      ? '✅ 등록됨'
+                      : '⚠️ 미등록'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                   <span className="text-slate-400">TELEGRAM_CHAT_ID</span>
-                  <span className={`font-mono font-semibold ${telegramStatus?.chatIdConfigured ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {telegramStatus?.chatIdConfigured ? `✅ 등록됨 (${telegramStatus?.targetChatIdMasked || 'ID'})` : '⚠️ 미등록'}
+                  <span
+                    className={`font-mono font-semibold text-[11px] ${
+                      telegramStatus?.chatIdConfigured || inputChatId
+                        ? 'text-emerald-400'
+                        : 'text-amber-400'
+                    }`}
+                  >
+                    {telegramStatus?.chatIdConfigured || inputChatId
+                      ? `✅ 등록됨 (${telegramStatus?.targetChatIdMasked || inputChatId.slice(0, 3) + '****'})`
+                      : '⚠️ 미등록'}
                   </span>
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
-                <div className="font-semibold text-slate-300">💡 텔레그램 알림을 실제로 내 폰으로 받는 방법:</div>
-                <ol className="list-decimal list-inside space-y-1 pl-1">
-                  <li>텔레그램에서 <code>@BotFather</code>에게 메시지를 보내 봇을 생성하고 <b>Token</b>을 받습니다.</li>
-                  <li><code>@userinfobot</code>에게 메시지를 보내 나의 <b>Chat ID</b>(숫자)를 확인합니다.</li>
-                  <li>Cloudflare 대시보드 ➡️ <b>Pages</b> ➡️ <b>Settings</b> ➡️ <b>Environment variables</b>에 아래 두 변수를 등록하면 끝!
-                    <div className="bg-slate-950 p-2 rounded-lg font-mono text-[10px] text-cyan-300 mt-1">
-                      TELEGRAM_BOT_TOKEN = "내_봇_토큰"<br />
-                      TELEGRAM_CHAT_ID = "내_챗_아이디"
-                    </div>
+              {/* Notice why Cloudflare variables might show as unregistered */}
+              <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-[11px] text-amber-200/90 space-y-1.5 leading-relaxed">
+                <div className="font-bold flex items-center space-x-1 text-amber-300">
+                  <span>📌 Cloudflare 세팅에 등록했는데 미등록으로 나오는 이유:</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] text-slate-300">
+                  <li>
+                    <b className="text-amber-200">재배포(Redeploy) 필요:</b> Cloudflare Pages는 환경변수(Runtime variables)를 추가한 후 <b>반드시 새 배포(Redeploy 또는 Git Push)</b>를 거쳐야만 Functions 런타임에 주입됩니다.
                   </li>
-                </ol>
+                  <li>
+                    <b className="text-amber-200">환경(Production vs Preview) 분기:</b> Cloudflare 대시보드에서 등록한 환경(Production/Preview)과 현재 접속한 도메인이 일치하는지 확인하세요.
+                  </li>
+                  <li>
+                    <b className="text-emerald-300">즉시 연동 방법:</b> 아래 입력창에 토큰과 Chat ID를 직접 입력 후 <b>[설정 저장 & 연동]</b>을 누르면 재배포 없이 즉시 브라우저 및 알림 발송이 활성화됩니다!
+                  </li>
+                </ul>
               </div>
+            </div>
+
+            {/* Direct Input & Save Form */}
+            <form
+              onSubmit={handleSaveTelegramConfig}
+              className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-200">
+                  💬 텔레그램 연동 정보 직접 입력 / 수정
+                </h4>
+                <span className="text-[10px] text-slate-400">브라우저 로컬스토리지 & 서버 동기화</span>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    텔레그램 Bot Token (<span className="text-cyan-400 font-mono">@BotFather</span> 발급)
+                  </label>
+                  <input
+                    type="password"
+                    value={inputBotToken}
+                    onChange={(e) => setInputBotToken(e.target.value)}
+                    placeholder="예: 7123456789:AAFxxx_your_bot_token_here"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono focus:border-cyan-500 focus:outline-none placeholder:text-slate-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    수신자 Chat ID (<span className="text-cyan-400 font-mono">@userinfobot</span> 확인)
+                  </label>
+                  <input
+                    type="text"
+                    value={inputChatId}
+                    onChange={(e) => setInputChatId(e.target.value)}
+                    placeholder="예: 123456789"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono focus:border-cyan-500 focus:outline-none placeholder:text-slate-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingTelegram}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/30 flex items-center space-x-1.5 transition-all"
+                >
+                  {isSavingTelegram ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>설정 저장 & 연동</span>
+                </button>
+              </div>
+            </form>
+
+            {/* How to create Bot Guide */}
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
+              <div className="font-semibold text-slate-300">💡 텔레그램 봇 1분 생성 가이드:</div>
+              <ol className="list-decimal list-inside space-y-1 pl-1">
+                <li>텔레그램 검색창에서 <code className="text-cyan-300">@BotFather</code> 검색 후 대화 시작 ➔ <code className="text-slate-300">/newbot</code> 입력</li>
+                <li>봇 이름과 사용자명을 입력하고 생성된 <b>HTTP API Token</b>을 복사하여 위 입력창에 붙여넣습니다.</li>
+                <li>텔레그램 검색창에서 <code className="text-cyan-300">@userinfobot</code> 검색 후 대화 시작 ➔ 표시되는 <b>Id (숫자)</b>를 복사하여 Chat ID에 붙여넣습니다.</li>
+                <li>새로 만든 봇 대화방에 들어가서 <b>[시작(Start)]</b> 버튼을 한 번 눌러줍니다.</li>
+              </ol>
             </div>
           </div>
         )}

@@ -10,12 +10,28 @@ export class TelegramNotifier {
     this.chatId = process.env.TELEGRAM_CHAT_ID || null;
   }
 
+  setConfig(botToken?: string, chatId?: string) {
+    if (botToken) this.botToken = botToken.trim();
+    if (chatId) this.chatId = chatId.trim();
+  }
+
+  getConfig() {
+    return {
+      botToken: this.botToken,
+      chatId: this.chatId,
+      isConfigured: this.isConfigured(),
+    };
+  }
+
   isConfigured(): boolean {
     return Boolean(this.botToken && this.chatId);
   }
 
-  async sendMessage(text: string): Promise<{ success: boolean; previewOnly?: boolean; error?: string }> {
-    if (!this.isConfigured()) {
+  async sendMessage(text: string, customToken?: string, customChatId?: string): Promise<{ success: boolean; previewOnly?: boolean; error?: string }> {
+    const token = customToken || this.botToken;
+    const chat = customChatId || this.chatId;
+
+    if (!token || !chat) {
       return {
         success: true,
         previewOnly: true,
@@ -23,19 +39,20 @@ export class TelegramNotifier {
     }
 
     try {
-      const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+      const url = `https://api.telegram.org/bot${token}/sendMessage`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: this.chatId,
+          chat_id: chat,
           text,
           parse_mode: 'HTML',
         }),
       });
 
       if (!res.ok) {
-        throw new Error(`Telegram API returned HTTP ${res.status}`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.description || `Telegram API returned HTTP ${res.status}`);
       }
 
       return { success: true };

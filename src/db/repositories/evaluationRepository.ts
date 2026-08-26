@@ -4,13 +4,20 @@ import { assetRepository } from './assetRepository';
 
 export class EvaluationRepository {
   async saveAll(evaluations: FullTickerEvaluation[]): Promise<void> {
+    if (!evaluations || evaluations.length === 0) return;
+
+    // 1. Update in-memory state
     for (const ev of evaluations) {
       const clean = ev.ticker.toUpperCase().trim();
       dbClient.evaluations.set(clean, ev);
+    }
 
-      if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
-        try {
-          await assetRepository.upsert({
+    if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
+      try {
+        // 2. Batch upsert assets
+        const assetRows = evaluations.map((ev) => {
+          const clean = ev.ticker.toUpperCase().trim();
+          return {
             ticker: clean,
             name: ev.name || clean,
             asset_type: ev.classification?.asset_type || 'equity',
@@ -19,9 +26,15 @@ export class EvaluationRepository {
             is_active: true,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          });
+          };
+        });
 
-          const payload = {
+        await dbClient.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
+
+        // 3. Batch insert evaluations
+        const evalPayloads = evaluations.map((ev) => {
+          const clean = ev.ticker.toUpperCase().trim();
+          return {
             ticker: clean,
             evaluation_date: ev.evaluated_at || new Date().toISOString(),
             strategy_type: ev.classification?.strategy_type || 'CORE_MOMENTUM',
@@ -45,17 +58,14 @@ export class EvaluationRepository {
               data_quality: ev.data_quality,
             },
           };
+        });
 
-          const { error } = await dbClient.supabase
-            .from('evaluations')
-            .insert(payload);
-
-          if (error) {
-            dbClient.handleDbError('evaluations', 'saveAll', error);
-          }
-        } catch (err) {
-          dbClient.handleDbError('evaluations', 'saveAll', err);
+        const { error } = await dbClient.supabase.from('evaluations').insert(evalPayloads);
+        if (error) {
+          dbClient.handleDbError('evaluations', 'saveAll', error);
         }
+      } catch (err) {
+        dbClient.handleDbError('evaluations', 'saveAll', err);
       }
     }
   }
@@ -74,30 +84,6 @@ export class EvaluationRepository {
           dbClient.evaluations.clear();
           const map = new Map<string, FullTickerEvaluation>();
 
-          // Batch fetch latest prices from market_data_daily if available in Supabase
-          const latestPrices = new Map<string, { price: number; change1d: number; date: string }>();
-          if (dbClient.isTableAvailable('market_data_daily') && dbClient.supabase) {
-            try {
-              const { data: mData } = await dbClient.supabase
-                .from('market_data_daily')
-                .select('ticker, close, open, trade_date')
-                .order('trade_date', { ascending: false });
-              if (mData) {
-                for (const m of mData) {
-                  const t = m.ticker.toUpperCase();
-                  if (!latestPrices.has(t)) {
-                    const close = Number(m.close);
-                    const open = Number(m.open) || close;
-                    const change1d = open > 0 ? Math.round(((close - open) / open) * 10000) / 100 : 0;
-                    latestPrices.set(t, { price: close, change1d, date: m.trade_date });
-                  }
-                }
-              }
-            } catch (mErr) {
-              // Ignore optional market data price enrichment failure
-            }
-          }
-
           // data is sorted by evaluation_date DESC, so first occurrence of ticker is the newest
           for (const row of data) {
             const ticker = row.ticker?.toUpperCase()?.trim();
@@ -115,10 +101,9 @@ export class EvaluationRepository {
               r = {};
             }
 
-            const dbMarketPrice = latestPrices.get(ticker);
             const assetName = dbClient.assets.get(ticker)?.name;
-            const price = Number(r.price || dbMarketPrice?.price || 0);
-            const change1d = Number(r.change1d || dbMarketPrice?.change1d || 0);
+            const price = Number(r.price || 0);
+            const change1d = Number(r.change1d || 0);
 
             const ev: FullTickerEvaluation = {
               ticker,
