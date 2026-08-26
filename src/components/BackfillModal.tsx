@@ -14,12 +14,12 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { BackfillResult } from '../engine/backfillEngine';
+import { BackfillResult, runHistoricalBackfill } from '../engine/backfillEngine';
 
 interface BackfillModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBackfillSuccess: () => Promise<void>;
+  onBackfillSuccess: () => Promise<void> | void;
   onShowToast: (msg: string) => void;
 }
 
@@ -45,39 +45,66 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
     setResult(null);
     setCurrentStep('벤치마크(SPY) 및 워치리스트 1년치 일봉 데이터 수집 중...');
 
+    const stepTimer1 = setTimeout(() => {
+      setCurrentStep('Point-in-Time 롤링 시그널 시뮬레이션 및 5D/10D/20D 사후 수익률 계산 중...');
+    }, 800);
+
+    const stepTimer2 = setTimeout(() => {
+      setCurrentStep('데이터베이스 및 시그널 원장 일괄 인제스천 중...');
+    }, 1600);
+
     try {
-      const stepTimer1 = setTimeout(() => {
-        setCurrentStep('Point-in-Time 롤링 시그널 시뮬레이션 및 5D/10D/20D 사후 수익률 계산 중...');
-      }, 1200);
+      let finalResult: BackfillResult | null = null;
 
-      const stepTimer2 = setTimeout(() => {
-        setCurrentStep('데이터베이스(Supabase / MarketData & Signals) 일괄 인제스천 중...');
-      }, 2500);
+      // 1. Try server endpoint
+      try {
+        const res = await fetch('/api/v8/backtest/backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lookbackRange,
+            opportunityThreshold: threshold,
+            replaceExisting,
+          }),
+        });
 
-      const res = await fetch('/api/v8/backtest/backfill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().startsWith('{')) {
+            const data = JSON.parse(text);
+            if (data.success && data.result) {
+              finalResult = data.result;
+            }
+          }
+        }
+      } catch (netErr) {
+        console.warn('Backend backfill request failed, using local engine fallback:', netErr);
+      }
+
+      // 2. Direct fallback to internal engine if network/server is unavailable
+      if (!finalResult) {
+        finalResult = await runHistoricalBackfill({
           lookbackRange,
           opportunityThreshold: threshold,
           replaceExisting,
-        }),
-      });
+        });
+      }
 
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || '백필 실행 중 오류가 발생했습니다.');
+      if (!finalResult || !finalResult.success) {
+        throw new Error('백필 실행 중 유효한 결과를 생성하지 못했습니다.');
       }
 
-      setResult(data.result);
-      onShowToast(`과거 ${lookbackRange} 백필 완료: ${data.result.totalSignalsGenerated}개 시그널 생성`);
+      setResult(finalResult);
+      onShowToast(`과거 ${lookbackRange} 백필 완료: ${finalResult.totalSignalsGenerated}개 시그널 생성`);
       await onBackfillSuccess();
-    } catch (err) {
-      setError((err as Error).message);
+    } catch (err: any) {
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      console.error('Backfill error:', err);
+      setError(err?.message || '백필 실행 중 예기치 않은 오류가 발생했습니다.');
     } finally {
       setIsRunning(false);
       setCurrentStep('');

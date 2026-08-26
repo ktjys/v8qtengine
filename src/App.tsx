@@ -12,6 +12,8 @@ import {
   runPipelineOnSeedData,
 } from './data/seed/initialData';
 import { calculateBacktestMetrics } from './engine/backtestEngine';
+import { signalRepository } from './db/repositories/signalRepository';
+import { scanRunRepository } from './db/repositories/scanRunRepository';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { WatchlistView } from './components/WatchlistView';
@@ -163,21 +165,37 @@ export default function App() {
       }
 
       // 3. Fetch signals
+      let latestSignals: SignalSnapshot[] = [];
       const sigData = await safeFetchJson('/api/v8/signals');
-      if (sigData?.success && sigData.signals) {
-        setSignals(sigData.signals);
+      if (sigData?.success && sigData.signals && sigData.signals.length > 0) {
+        latestSignals = sigData.signals;
+      } else {
+        const repoSignals = await signalRepository.getAll();
+        if (repoSignals && repoSignals.length > 0) {
+          latestSignals = repoSignals;
+        }
+      }
+      if (latestSignals.length > 0) {
+        setSignals(latestSignals);
       }
 
       // 4. Fetch backtest
       const btData = await safeFetchJson('/api/v8/backtest');
-      if (btData?.success) {
+      if (btData?.success && (btData.data?.summary || btData.summary)) {
         setBacktestSummary(btData.data?.summary || btData.summary || null);
+      } else if (latestSignals.length > 0) {
+        setBacktestSummary(calculateBacktestMetrics(latestSignals));
       }
 
       // 5. Fetch runs
       const runData = await safeFetchJson('/api/v8/runs');
-      if (runData?.success && runData.runs) {
+      if (runData?.success && runData.runs && runData.runs.length > 0) {
         setRuns(runData.runs);
+      } else {
+        const repoRuns = await scanRunRepository.getAll();
+        if (repoRuns && repoRuns.length > 0) {
+          setRuns(repoRuns);
+        }
       }
     } catch (err) {
       console.error('Failed to load initial data', err);

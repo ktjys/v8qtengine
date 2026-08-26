@@ -1,6 +1,4 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import fs from 'fs';
-import path from 'path';
 import {
   AssetClassification,
   FullTickerEvaluation,
@@ -33,6 +31,9 @@ export interface TableStatusInfo {
   error?: string;
 }
 
+const CONFIG_STORAGE_KEY = 'quant_db_config';
+const SNAPSHOT_STORAGE_KEY = 'quant_data_persistence';
+
 class UniversalDatabaseClient {
   public supabase: SupabaseClient | null = null;
   public isSupabaseConnected = false;
@@ -40,9 +41,6 @@ class UniversalDatabaseClient {
   public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'LOCAL' = 'LOCAL';
   private currentUrl = '';
   private currentKey = '';
-  private configFilePath = path.join(process.cwd(), '.db_config.json');
-  private snapshotFilePath = path.join(process.cwd(), '.data_persistence.json');
-  private saveDebounceTimer: NodeJS.Timeout | null = null;
   private state: DatabaseState = {
     assets: new Map(),
     watchlist: new Map(),
@@ -62,16 +60,9 @@ class UniversalDatabaseClient {
 
   private readSavedConfig(): { url?: string; key?: string; is_disconnected?: boolean } | null {
     try {
-      if (fs.existsSync(this.configFilePath)) {
-        const raw = fs.readFileSync(this.configFilePath, 'utf-8');
-        return JSON.parse(raw);
-      }
-      if (fs.existsSync(this.snapshotFilePath)) {
-        const raw = fs.readFileSync(this.snapshotFilePath, 'utf-8');
-        const data = JSON.parse(raw);
-        if (data.supabase_url) {
-          return { url: data.supabase_url, key: data.supabase_key };
-        }
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        const raw = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
       }
     } catch (e) {
       console.warn('[SupabaseClient] Could not read saved DB config:', e);
@@ -81,9 +72,11 @@ class UniversalDatabaseClient {
 
   private saveDbConfig(cfg: { url?: string; key?: string; is_disconnected?: boolean }) {
     try {
-      fs.writeFileSync(this.configFilePath, JSON.stringify(cfg, null, 2), 'utf-8');
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(cfg));
+      }
     } catch (e) {
-      console.warn('[SupabaseClient] Could not write .db_config.json:', e);
+      console.warn('[SupabaseClient] Could not write DB config:', e);
     }
   }
 
@@ -91,7 +84,7 @@ class UniversalDatabaseClient {
     // 1. First seed initial default dataset
     this.seedInitial();
 
-    // 2. Then overlay persisted local file snapshot if available
+    // 2. Then overlay persisted local snapshot if available
     this.loadLocalSnapshot();
   }
 
@@ -109,57 +102,61 @@ class UniversalDatabaseClient {
         classifications: Array.from(this.state.classifications.entries()),
         evaluations: Array.from(this.state.evaluations.entries()),
       };
-      fs.writeFileSync(this.snapshotFilePath, JSON.stringify(payload, null, 2), 'utf-8');
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
+      }
       if (this.currentUrl) {
         this.saveDbConfig({ url: this.currentUrl, key: this.currentKey, is_disconnected: false });
       }
     } catch (err) {
-      // Silently handle if filesystem is readonly in certain sandbox layers
+      // Silently handle
     }
   }
 
   public loadLocalSnapshot() {
     try {
-      if (fs.existsSync(this.snapshotFilePath)) {
-        const raw = fs.readFileSync(this.snapshotFilePath, 'utf-8');
-        const data = JSON.parse(raw);
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        const raw = window.localStorage.getItem(SNAPSHOT_STORAGE_KEY);
+        if (raw) {
+          const data = JSON.parse(raw);
 
-        if (data.watchlist && Array.isArray(data.watchlist) && data.watchlist.length > 0) {
-          this.state.watchlist.clear();
-          for (const [k, v] of data.watchlist) {
-            this.state.watchlist.set(k, v);
+          if (data.watchlist && Array.isArray(data.watchlist) && data.watchlist.length > 0) {
+            this.state.watchlist.clear();
+            for (const [k, v] of data.watchlist) {
+              this.state.watchlist.set(k, v);
+            }
           }
-        }
-        if (data.assets && Array.isArray(data.assets) && data.assets.length > 0) {
-          for (const [k, v] of data.assets) {
-            this.state.assets.set(k, v);
+          if (data.assets && Array.isArray(data.assets) && data.assets.length > 0) {
+            for (const [k, v] of data.assets) {
+              this.state.assets.set(k, v);
+            }
           }
-        }
-        if (data.signals && Array.isArray(data.signals) && data.signals.length > 0) {
-          for (const [k, v] of data.signals) {
-            this.state.signals.set(k, v);
+          if (data.signals && Array.isArray(data.signals) && data.signals.length > 0) {
+            for (const [k, v] of data.signals) {
+              this.state.signals.set(k, v);
+            }
           }
-        }
-        if (data.scan_runs && Array.isArray(data.scan_runs) && data.scan_runs.length > 0) {
-          for (const [k, v] of data.scan_runs) {
-            this.state.scan_runs.set(k, v);
+          if (data.scan_runs && Array.isArray(data.scan_runs) && data.scan_runs.length > 0) {
+            for (const [k, v] of data.scan_runs) {
+              this.state.scan_runs.set(k, v);
+            }
           }
-        }
-        if (data.classifications && Array.isArray(data.classifications) && data.classifications.length > 0) {
-          for (const [k, v] of data.classifications) {
-            this.state.classifications.set(k, v);
+          if (data.classifications && Array.isArray(data.classifications) && data.classifications.length > 0) {
+            for (const [k, v] of data.classifications) {
+              this.state.classifications.set(k, v);
+            }
           }
-        }
-        if (data.evaluations && Array.isArray(data.evaluations) && data.evaluations.length > 0) {
-          this.state.evaluations.clear();
-          for (const [k, v] of data.evaluations) {
-            this.state.evaluations.set(k, v);
+          if (data.evaluations && Array.isArray(data.evaluations) && data.evaluations.length > 0) {
+            this.state.evaluations.clear();
+            for (const [k, v] of data.evaluations) {
+              this.state.evaluations.set(k, v);
+            }
           }
+          console.log(`[SupabaseClient] Successfully restored local snapshot with ${this.state.watchlist.size} watchlist tickers, ${this.state.evaluations.size} evaluations`);
         }
-        console.log(`[SupabaseClient] Successfully restored local snapshot with ${this.state.watchlist.size} watchlist tickers, ${this.state.evaluations.size} evaluations`);
       }
     } catch (err) {
-      console.warn('[SupabaseClient] Could not read local snapshot file', err);
+      console.warn('[SupabaseClient] Could not read local snapshot', err);
     }
   }
 
@@ -219,8 +216,10 @@ class UniversalDatabaseClient {
             },
           });
           this.isSupabaseConnected = true;
-          process.env.SUPABASE_URL = saved.url;
-          process.env.SUPABASE_KEY = saved.key;
+          if (typeof process !== 'undefined' && process.env) {
+            process.env.SUPABASE_URL = saved.url;
+            process.env.SUPABASE_KEY = saved.key;
+          }
           console.log(`[SupabaseClient] Initialized with UI-configured settings (PRIORITIZED OVER ENV): ${saved.url}`);
           return;
         } catch (err) {
@@ -235,12 +234,24 @@ class UniversalDatabaseClient {
     }
 
     // 2. Fallback to Environment Variables (Only if no UI configuration exists)
-    const envUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const envKey =
-      process.env.SUPABASE_KEY ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY;
+    let envUrl = '';
+    let envKey = '';
+    try {
+      if (typeof process !== 'undefined' && process.env) {
+        envUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+        envKey =
+          process.env.SUPABASE_KEY ||
+          process.env.SUPABASE_SERVICE_ROLE_KEY ||
+          process.env.SUPABASE_ANON_KEY ||
+          process.env.VITE_SUPABASE_ANON_KEY ||
+          '';
+      }
+    } catch {}
+
+    if (!envUrl && typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      envUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
+      envKey = envKey || (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
+    }
 
     if (envUrl && envKey) {
       this.currentUrl = this.currentUrl || envUrl;
@@ -301,8 +312,10 @@ class UniversalDatabaseClient {
       this.currentUrl = cleanUrl;
       this.currentKey = cleanKey;
       this.configSource = 'UI_CONFIGURED';
-      process.env.SUPABASE_URL = cleanUrl;
-      process.env.SUPABASE_KEY = cleanKey;
+      if (typeof process !== 'undefined' && process.env) {
+        process.env.SUPABASE_URL = cleanUrl;
+        process.env.SUPABASE_KEY = cleanKey;
+      }
       this.missingTables.clear();
 
       this.saveDbConfig({
@@ -327,7 +340,9 @@ class UniversalDatabaseClient {
     this.configSource = 'LOCAL';
     const oldUrl = this.currentUrl;
     this.currentKey = '';
-    delete process.env.SUPABASE_KEY;
+    if (typeof process !== 'undefined' && process.env) {
+      delete process.env.SUPABASE_KEY;
+    }
 
     this.saveDbConfig({
       url: oldUrl,

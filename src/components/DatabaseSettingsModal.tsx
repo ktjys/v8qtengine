@@ -17,6 +17,9 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { dbClient } from '../db/supabaseClient';
+import { runDatabaseDiagnostics } from '../db/diagnostics';
+import { FULL_SCHEMA_SQL } from '../db/schemaSql';
 
 interface TableStatusInfo {
   name: string;
@@ -89,28 +92,60 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   const fetchDbStatus = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/v8/system/db/status');
-      const data = await res.json();
-      if (data.success) {
-        setDbStatus(data.status);
-        if (data.config?.url) {
-          setSupabaseUrl(data.config.url);
-        } else {
-          setSupabaseUrl('https://xuzctskacealvvwlmica.supabase.co');
+      let loadedStatus = null;
+      let loadedTables = null;
+      let loadedUrl = '';
+
+      try {
+        const res = await fetch('/api/v8/system/db/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success) {
+            loadedStatus = data.status;
+            loadedUrl = data.config?.url || '';
+            loadedTables = data.tables;
+          }
         }
-        if (data.tables) {
-          setTables(data.tables);
-        }
+      } catch (e) {
+        console.warn('API /api/v8/system/db/status failed, using local dbClient fallback', e);
       }
 
-      // Also fetch schema SQL
-      const sqlRes = await fetch('/api/v8/system/db/schema-sql');
-      const sqlData = await sqlRes.json();
-      if (sqlData.success) {
-        setSchemaSql(sqlData.sql);
+      if (!loadedStatus) {
+        loadedStatus = dbClient.getStatus();
+        const cfg = dbClient.getConfig();
+        loadedUrl = cfg.url || '';
+        loadedTables = await dbClient.checkTableStatus();
+      }
+
+      setDbStatus(loadedStatus);
+      if (loadedUrl) {
+        setSupabaseUrl(loadedUrl);
+      } else {
+        setSupabaseUrl('https://xuzctskacealvvwlmica.supabase.co');
+      }
+      if (loadedTables) {
+        setTables(loadedTables);
+      }
+
+      // Schema SQL
+      try {
+        const sqlRes = await fetch('/api/v8/system/db/schema-sql');
+        if (sqlRes.ok) {
+          const sqlData = await sqlRes.json();
+          if (sqlData?.success && sqlData.sql) {
+            setSchemaSql(sqlData.sql);
+          } else {
+            setSchemaSql(FULL_SCHEMA_SQL);
+          }
+        } else {
+          setSchemaSql(FULL_SCHEMA_SQL);
+        }
+      } catch {
+        setSchemaSql(FULL_SCHEMA_SQL);
       }
     } catch (err: any) {
       console.error('Failed to load DB status', err);
+      setSchemaSql(FULL_SCHEMA_SQL);
     } finally {
       setIsLoading(false);
     }
@@ -119,13 +154,31 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   const runDiagnostics = async () => {
     setIsDiagnosing(true);
     try {
-      const res = await fetch('/api/v8/system/db/diagnostics');
-      const data = await res.json();
-      if (data.success) {
-        setDiagnostics(data);
+      let diagData: any = null;
+      try {
+        const res = await fetch('/api/v8/system/db/diagnostics');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success) {
+            diagData = data;
+          }
+        }
+      } catch (e) {
+        console.warn('API /api/v8/system/db/diagnostics fetch failed, falling back to local runner', e);
       }
+
+      if (!diagData) {
+        diagData = await runDatabaseDiagnostics();
+      }
+      setDiagnostics(diagData);
     } catch (err: any) {
       console.error('Diagnostics failed', err);
+      try {
+        const fallbackDiag = await runDatabaseDiagnostics();
+        setDiagnostics(fallbackDiag);
+      } catch (e) {
+        console.error('Local fallback diagnostics also failed', e);
+      }
     } finally {
       setIsDiagnosing(false);
     }
@@ -141,7 +194,10 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
 
   const handleSaveConnection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabaseUrl.trim() || !supabaseKey.trim()) {
+    const cleanUrl = supabaseUrl.trim();
+    const cleanKey = supabaseKey.trim();
+
+    if (!cleanUrl || !cleanKey) {
       setConnectionMessage({ type: 'error', text: 'Supabase URL과 API Key를 모두 입력해야 합니다.' });
       return;
     }
@@ -150,22 +206,48 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
     setConnectionMessage(null);
 
     try {
-      const res = await fetch('/api/v8/system/db/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: supabaseUrl.trim(), key: supabaseKey.trim() }),
-      });
-      const data = await res.json();
+      let success = false;
+      let tablesResult: any = null;
+      let errorMsg = '';
 
-      if (data.success) {
+      try {
+        const res = await fetch('/api/v8/system/db/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: cleanUrl, key: cleanKey }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success) {
+            success = true;
+            tablesResult = data.tables;
+          } else {
+            errorMsg = data?.error || '연결 실패';
+          }
+        }
+      } catch {
+        // Fallback to local DB client direct connection
+      }
+
+      if (!success) {
+        const clientRes = await dbClient.configureSupabase(cleanUrl, cleanKey);
+        if (clientRes.success) {
+          success = true;
+          tablesResult = clientRes.tables;
+        } else {
+          errorMsg = clientRes.error || errorMsg || 'Supabase 연결에 실패했습니다.';
+        }
+      }
+
+      if (success) {
         setConnectionMessage({ type: 'success', text: 'Supabase DB가 성공적으로 연결되었습니다!' });
         onShowToast('Supabase 데이터베이스가 연결되었습니다.');
-        setDbStatus(data.status);
-        if (data.tables) setTables(data.tables);
+        setDbStatus(dbClient.getStatus());
+        if (tablesResult) setTables(tablesResult);
         await runDiagnostics();
         await onRefreshAllData();
       } else {
-        setConnectionMessage({ type: 'error', text: data.error || '연결 실패' });
+        setConnectionMessage({ type: 'error', text: errorMsg });
       }
     } catch (err: any) {
       setConnectionMessage({ type: 'error', text: err.message || '네트워크 요청 중 오류가 발생했습니다.' });
@@ -177,18 +259,19 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   const handleDisconnect = async () => {
     setIsSaving(true);
     try {
-      const res = await fetch('/api/v8/system/db/disconnect', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        setConnectionMessage({ type: 'success', text: '로컬 영속 모드로 전환되었습니다.' });
-        onShowToast('로컬 메모리 영속 모드로 전환되었습니다.');
-        setSupabaseUrl('');
-        setSupabaseKey('');
-        setDbStatus(data.status);
-        await fetchDbStatus();
-        await runDiagnostics();
-        await onRefreshAllData();
-      }
+      try {
+        await fetch('/api/v8/system/db/disconnect', { method: 'POST' });
+      } catch {}
+
+      dbClient.disconnectSupabase();
+      setConnectionMessage({ type: 'success', text: '로컬 영속 모드로 전환되었습니다.' });
+      onShowToast('로컬 메모리 영속 모드로 전환되었습니다.');
+      setSupabaseUrl('');
+      setSupabaseKey('');
+      setDbStatus(dbClient.getStatus());
+      await fetchDbStatus();
+      await runDiagnostics();
+      await onRefreshAllData();
     } catch (err: any) {
       setConnectionMessage({ type: 'error', text: err.message });
     } finally {
@@ -199,16 +282,43 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   const handleSeedData = async () => {
     setIsSeeding(true);
     try {
-      const res = await fetch('/api/v8/system/db/seed', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        onShowToast(data.message);
-        if (data.tables) setTables(data.tables);
+      let seedSuccess = false;
+      let seededCount = 0;
+      let errMsg = '';
+
+      try {
+        const res = await fetch('/api/v8/system/db/seed', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success) {
+            seedSuccess = true;
+            seededCount = data.seededCount || 0;
+            if (data.tables) setTables(data.tables);
+          } else {
+            errMsg = data?.error;
+          }
+        }
+      } catch {}
+
+      if (!seedSuccess) {
+        const localSeed = await dbClient.seedToActiveDb();
+        if (localSeed.success) {
+          seedSuccess = true;
+          seededCount = localSeed.seededCount;
+          const freshTables = await dbClient.checkTableStatus();
+          setTables(freshTables);
+        } else {
+          errMsg = localSeed.error || errMsg;
+        }
+      }
+
+      if (seedSuccess) {
+        onShowToast(`기본 유니버스 및 시그널 데이터(${seededCount}개)가 성공적으로 주입되었습니다.`);
         await fetchDbStatus();
         await runDiagnostics();
         await onRefreshAllData();
       } else {
-        onShowToast(`초기화 실패: ${data.error}`);
+        onShowToast(`초기화 실패: ${errMsg || '데이터 주입 중 오류가 발생했습니다.'}`);
       }
     } catch (err: any) {
       onShowToast(`초기화 실패: ${err.message}`);
@@ -218,8 +328,9 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   };
 
   const handleCopySql = () => {
-    if (!schemaSql) return;
-    navigator.clipboard.writeText(schemaSql);
+    const textToCopy = schemaSql || FULL_SCHEMA_SQL;
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
     setCopiedSql(true);
     onShowToast('전체 SQL 마이그레이션 스크립트가 클립보드에 복사되었습니다.');
     setTimeout(() => setCopiedSql(false), 2500);
