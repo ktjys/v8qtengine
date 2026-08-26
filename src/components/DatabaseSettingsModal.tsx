@@ -262,6 +262,8 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
       let tablesResult: any = null;
       let errorMsg = '';
 
+      let serverStatus: any = null;
+
       try {
         const res = await fetch('/api/v8/system/db/config', {
           method: 'POST',
@@ -273,12 +275,13 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
           if (data?.success) {
             success = true;
             tablesResult = data.tables;
+            serverStatus = data.status;
           } else {
             errorMsg = data?.error || '연결 실패';
           }
         }
       } catch {
-        // Fallback to local DB client direct connection
+        // Worker API not available, fall through to client-side
       }
 
       if (!success) {
@@ -286,6 +289,7 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
         if (clientRes.success) {
           success = true;
           tablesResult = clientRes.tables;
+          serverStatus = dbClient.getStatus();
         } else {
           errorMsg = clientRes.error || errorMsg || 'Supabase 연결에 실패했습니다.';
         }
@@ -294,7 +298,7 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
       if (success) {
         setConnectionMessage({ type: 'success', text: 'Supabase DB가 성공적으로 연결되었습니다!' });
         onShowToast('Supabase 데이터베이스가 연결되었습니다.');
-        setDbStatus(dbClient.getStatus());
+        setDbStatus(serverStatus || dbClient.getStatus());
         if (tablesResult) setTables(tablesResult);
         await runDiagnostics();
         await onRefreshAllData();
