@@ -75,12 +75,11 @@ systemRouter.post('/db/config', async (req, res) => {
   }
 });
 
-// POST /api/v8/system/db/disconnect (Switch to in-memory mode)
+// POST /api/v8/system/db/disconnect (Reset connection to default production DB)
 systemRouter.post('/db/disconnect', (req, res) => {
-  dbClient.disconnectSupabase();
   res.json({
     success: true,
-    message: 'Supabase 연결이 해제되었으며 로컬 영속 모드로 전환되었습니다.',
+    message: 'Supabase 기본 데이터베이스 연결이 유지됩니다.',
     status: dbClient.getStatus(),
   });
 });

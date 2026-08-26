@@ -31,14 +31,16 @@ export interface TableStatusInfo {
   error?: string;
 }
 
+export const DEFAULT_SUPABASE_URL = 'https://xuzctskacealvvwlmica.supabase.co';
+export const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1emN0c2thY2VhbHZ2d2xtaWNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTAwNjUsImV4cCI6MjA3NTIyNjA2NX0.0O7d4e5kU4Y8KqC2wG9_9U3z_uH0vN4c1jB2vF5xR-M';
+
 const CONFIG_STORAGE_KEY = 'quant_db_config';
-const SNAPSHOT_STORAGE_KEY = 'quant_data_persistence';
 
 class UniversalDatabaseClient {
   public supabase: SupabaseClient | null = null;
   public isSupabaseConnected = false;
   public missingTables = new Set<string>();
-  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'LOCAL' = 'LOCAL';
+  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'DEFAULT_DIRECT' = 'DEFAULT_DIRECT';
   private currentUrl = '';
   private currentKey = '';
   private state: DatabaseState = {
@@ -55,10 +57,9 @@ class UniversalDatabaseClient {
 
   constructor() {
     this.initSupabase();
-    this.loadInitialData();
   }
 
-  private readSavedConfig(): { url?: string; key?: string; is_disconnected?: boolean } | null {
+  private readSavedConfig(): { url?: string; key?: string } | null {
     try {
       if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
         const raw = window.localStorage.getItem(CONFIG_STORAGE_KEY);
@@ -70,7 +71,7 @@ class UniversalDatabaseClient {
     return null;
   }
 
-  private saveDbConfig(cfg: { url?: string; key?: string; is_disconnected?: boolean }) {
+  private saveDbConfig(cfg: { url?: string; key?: string }) {
     try {
       if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
         window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(cfg));
@@ -78,101 +79,6 @@ class UniversalDatabaseClient {
     } catch (e) {
       console.warn('[SupabaseClient] Could not write DB config:', e);
     }
-  }
-
-  private loadInitialData() {
-    let isCleared = false;
-    try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        isCleared = window.localStorage.getItem('quant_db_cleared_v8') === 'true';
-      }
-    } catch {}
-
-    if (isCleared) {
-      // User explicitly cleared DB: keep completely empty
-      return;
-    }
-
-    // 1. Then overlay persisted local snapshot if available
-    const hasSnapshot = this.loadLocalSnapshot();
-    if (!hasSnapshot && !this.isSupabaseConnected && !this.currentUrl) {
-      // 2. Only seed on first virgin startup
-      this.seedInitial();
-    }
-  }
-
-  public saveLocalSnapshot() {
-    try {
-      const payload = {
-        timestamp: new Date().toISOString(),
-        supabase_url: this.currentUrl || undefined,
-        supabase_key: this.currentKey || undefined,
-        config_source: this.configSource,
-        watchlist: Array.from(this.state.watchlist.entries()),
-        assets: Array.from(this.state.assets.entries()),
-        signals: Array.from(this.state.signals.entries()),
-        scan_runs: Array.from(this.state.scan_runs.entries()),
-        classifications: Array.from(this.state.classifications.entries()),
-        evaluations: Array.from(this.state.evaluations.entries()),
-      };
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        window.localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
-      }
-      if (this.currentUrl) {
-        this.saveDbConfig({ url: this.currentUrl, key: this.currentKey, is_disconnected: false });
-      }
-    } catch (err) {
-      // Silently handle
-    }
-  }
-
-  public loadLocalSnapshot(): boolean {
-    try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        const raw = window.localStorage.getItem(SNAPSHOT_STORAGE_KEY);
-        if (raw) {
-          const data = JSON.parse(raw);
-
-          if (data.watchlist && Array.isArray(data.watchlist) && data.watchlist.length > 0) {
-            this.state.watchlist.clear();
-            for (const [k, v] of data.watchlist) {
-              this.state.watchlist.set(k, v);
-            }
-          }
-          if (data.assets && Array.isArray(data.assets) && data.assets.length > 0) {
-            for (const [k, v] of data.assets) {
-              this.state.assets.set(k, v);
-            }
-          }
-          if (data.signals && Array.isArray(data.signals) && data.signals.length > 0) {
-            for (const [k, v] of data.signals) {
-              this.state.signals.set(k, v);
-            }
-          }
-          if (data.scan_runs && Array.isArray(data.scan_runs) && data.scan_runs.length > 0) {
-            for (const [k, v] of data.scan_runs) {
-              this.state.scan_runs.set(k, v);
-            }
-          }
-          if (data.classifications && Array.isArray(data.classifications) && data.classifications.length > 0) {
-            for (const [k, v] of data.classifications) {
-              this.state.classifications.set(k, v);
-            }
-          }
-          if (data.evaluations && Array.isArray(data.evaluations) && data.evaluations.length > 0) {
-            this.state.evaluations.clear();
-            for (const [k, v] of data.evaluations) {
-              this.state.evaluations.set(k, v);
-            }
-          }
-          console.log(`[SupabaseClient] Successfully restored local snapshot with ${this.state.watchlist.size} watchlist tickers, ${this.state.evaluations.size} evaluations`);
-          return true;
-        }
-      }
-    } catch (err) {
-      console.warn('[SupabaseClient] Could not read local snapshot', err);
-    }
-    return false;
   }
 
   public isTableAvailable(tableName: string): boolean {
@@ -184,7 +90,7 @@ class UniversalDatabaseClient {
   public markTableMissing(tableName: string) {
     if (!this.missingTables.has(tableName)) {
       this.missingTables.add(tableName);
-      console.warn(`[SupabaseClient] '${tableName}' 테이블이 Supabase에 없거나 준비되지 않아 인메모리 저장소로 자동 전환합니다.`);
+      console.warn(`[SupabaseClient] '${tableName}' 테이블이 Supabase에 없거나 준비되지 않았습니다.`);
     }
   }
 
@@ -205,50 +111,32 @@ class UniversalDatabaseClient {
   }
 
   private initSupabase() {
-    // 1. Check UI-configured saved credentials FIRST (Highest Priority)
+    // 1. Check UI-configured saved credentials
     const saved = this.readSavedConfig();
-
-    if (saved) {
-      if (saved.is_disconnected) {
-        console.log('[SupabaseClient] Saved config indicates explicit disconnection (Local Mode active)');
-        this.currentUrl = saved.url || '';
-        this.currentKey = saved.key || '';
-        this.configSource = 'LOCAL';
-        this.supabase = null;
-        this.isSupabaseConnected = false;
-        return;
-      }
-
-      if (saved.url && saved.key) {
-        this.currentUrl = saved.url;
-        this.currentKey = saved.key;
-        this.configSource = 'UI_CONFIGURED';
-        try {
-          this.supabase = createClient(saved.url, saved.key, {
-            auth: {
-              persistSession: false,
-              autoRefreshToken: false,
-            },
-          });
-          this.isSupabaseConnected = true;
-          if (typeof process !== 'undefined' && process.env) {
-            process.env.SUPABASE_URL = saved.url;
-            process.env.SUPABASE_KEY = saved.key;
-          }
-          console.log(`[SupabaseClient] Initialized with UI-configured settings (PRIORITIZED OVER ENV): ${saved.url}`);
-          return;
-        } catch (err) {
-          console.warn('[SupabaseClient] Failed to initialize UI-configured Supabase client:', err);
-          this.supabase = null;
-          this.isSupabaseConnected = false;
-          return;
+    if (saved && saved.url && saved.key) {
+      this.currentUrl = saved.url;
+      this.currentKey = saved.key;
+      this.configSource = 'UI_CONFIGURED';
+      try {
+        this.supabase = createClient(saved.url, saved.key, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        });
+        this.isSupabaseConnected = true;
+        if (typeof process !== 'undefined' && process.env) {
+          process.env.SUPABASE_URL = saved.url;
+          process.env.SUPABASE_KEY = saved.key;
         }
-      } else if (saved.url) {
-        this.currentUrl = saved.url;
+        console.log(`[SupabaseClient] Initialized with UI-configured Supabase: ${saved.url}`);
+        return;
+      } catch (err) {
+        console.warn('[SupabaseClient] Failed to initialize UI-configured Supabase:', err);
       }
     }
 
-    // 2. Fallback to Environment Variables (Only if no UI configuration exists)
+    // 2. Check Environment Variables
     let envUrl = '';
     let envKey = '';
     try {
@@ -269,26 +157,33 @@ class UniversalDatabaseClient {
     }
 
     if (envUrl && envKey) {
-      this.currentUrl = this.currentUrl || envUrl;
+      this.currentUrl = envUrl;
       this.currentKey = envKey;
       this.configSource = 'ENV_FALLBACK';
-      try {
-        this.supabase = createClient(envUrl, envKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        });
-        this.isSupabaseConnected = true;
-        console.log('[SupabaseClient] Initialized with ENV fallback Supabase credentials:', envUrl);
-      } catch (err) {
-        console.warn('[SupabaseClient] Failed to initialize ENV Supabase client:', err);
-        this.supabase = null;
-        this.isSupabaseConnected = false;
-      }
     } else {
-      console.log('[SupabaseClient] No Supabase credentials found, using in-memory persistent fallback');
-      this.configSource = 'LOCAL';
+      // 3. Guaranteed Production Supabase (Never local-mode)
+      this.currentUrl = DEFAULT_SUPABASE_URL;
+      this.currentKey = DEFAULT_SUPABASE_KEY;
+      this.configSource = 'DEFAULT_DIRECT';
+    }
+
+    try {
+      this.supabase = createClient(this.currentUrl, this.currentKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      });
+      this.isSupabaseConnected = true;
+      if (typeof process !== 'undefined' && process.env) {
+        process.env.SUPABASE_URL = this.currentUrl;
+        process.env.SUPABASE_KEY = this.currentKey;
+      }
+      console.log(`[SupabaseClient] ✅ Supabase Client connected to ${this.currentUrl} (${this.configSource})`);
+    } catch (err) {
+      console.error('[SupabaseClient] CRITICAL: Failed to create Supabase client:', err);
+      this.supabase = null;
+      this.isSupabaseConnected = false;
     }
   }
 
@@ -314,9 +209,7 @@ class UniversalDatabaseClient {
       // Test connection by checking assets table
       const { error } = await client.from('assets').select('ticker', { count: 'exact', head: true });
 
-      // If we got a network / auth error (e.g., invalid key or bad URL)
       if (error && error.code !== '42P01' && !error.message.includes('relation "assets" does not exist')) {
-        // Table not existing is ok (code 42P01 or relation doesn't exist), but invalid key/host is not
         if (error.message.includes('JWT') || error.message.includes('Invalid API key') || error.message.includes('fetch failed')) {
           return { success: false, error: `Supabase 연결 실패: ${error.message}` };
         }
@@ -336,34 +229,13 @@ class UniversalDatabaseClient {
       this.saveDbConfig({
         url: cleanUrl,
         key: cleanKey,
-        is_disconnected: false,
       });
-      this.saveLocalSnapshot();
 
       const tables = await this.checkTableStatus();
-
       return { success: true, tables };
     } catch (err: any) {
       return { success: false, error: err.message || 'Supabase 클라이언트 생성 중 오류가 발생했습니다.' };
     }
-  }
-
-  public disconnectSupabase() {
-    this.supabase = null;
-    this.isSupabaseConnected = false;
-    this.missingTables.clear();
-    this.configSource = 'LOCAL';
-    const oldUrl = this.currentUrl;
-    this.currentKey = '';
-    if (typeof process !== 'undefined' && process.env) {
-      delete process.env.SUPABASE_KEY;
-    }
-
-    this.saveDbConfig({
-      url: oldUrl,
-      is_disconnected: true,
-    });
-    this.saveLocalSnapshot();
   }
 
   public async checkTableStatus(): Promise<Record<string, TableStatusInfo>> {
@@ -385,7 +257,7 @@ class UniversalDatabaseClient {
     if (!this.supabase) {
       this.missingTables.clear();
       tableNames.forEach((t) => {
-        result[t] = { name: t, exists: false, count: 0, error: 'DB 미연결 (로컬 메모리 모드)' };
+        result[t] = { name: t, exists: false, count: 0, error: 'Supabase 클라이언트 미초기화' };
       });
       return result;
     }
@@ -429,111 +301,130 @@ class UniversalDatabaseClient {
   public async seedToActiveDb(): Promise<{ success: boolean; seededCount: number; error?: string }> {
     let count = 0;
     try {
-      if (this.supabase) {
-        // 1. Seed Assets
-        const assetRows = INITIAL_WATCHLIST_RAW.map((item) => ({
-          ticker: item.ticker,
-          name: item.name,
-          asset_type: item.metadata.quoteType === 'ETF' ? 'etf' : 'equity',
-          exchange: 'NASDAQ',
-          sector: item.metadata.sector || 'Technology',
-          industry: item.metadata.industry || 'Semiconductors',
-          currency: 'USD',
-          is_active: true,
-          metadata_json: item.metadata,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
-
-        await this.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
-
-        // 2. Seed Watchlist
-        const watchlistRows = INITIAL_WATCHLIST_RAW.map((item) => ({
-          ticker: item.ticker,
-          is_active: true,
-          memo: item.memo,
-          priority: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
-
-        await this.supabase.from('watchlist').upsert(watchlistRows, { onConflict: 'ticker' });
-
-        // 3. Seed Signals
-        const signalRows = INITIAL_HISTORICAL_SIGNALS.map((sig) => ({
-          id: sig.id.startsWith('sig-') ? undefined : sig.id,
-          ticker: sig.ticker,
-          signal_date: sig.signal_date,
-          strategy_type: sig.strategy_type,
-          opportunity_score: sig.opportunity_score,
-          risk_score: sig.risk_score,
-          risk_level: sig.risk_level,
-          decision: sig.decision,
-          confidence: sig.signal_confidence,
-          entry_price: sig.signal_price,
-          technical_score: sig.technical_score,
-          momentum_score: sig.momentum_score,
-          fundamental_score: sig.fundamental_score,
-          valuation_score: sig.valuation_score,
-          status: 'ACTIVE',
-          created_at: new Date().toISOString(),
-        }));
-
-        await this.supabase.from('signals').upsert(signalRows);
-        count = assetRows.length;
-      } else {
-        this.seedInitial();
-        count = this.state.watchlist.size;
+      if (!this.supabase) {
+        return { success: false, seededCount: 0, error: 'Supabase DB가 연결되어 있지 않습니다.' };
       }
 
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        window.localStorage.removeItem('quant_db_cleared_v8');
-      }
+      // 1. Seed Assets
+      const assetRows = INITIAL_WATCHLIST_RAW.map((item) => ({
+        ticker: item.ticker,
+        name: item.name,
+        asset_type: item.metadata.quoteType === 'ETF' ? 'etf' : 'equity',
+        exchange: 'NASDAQ',
+        sector: item.metadata.sector || 'Technology',
+        industry: item.metadata.industry || 'Semiconductors',
+        currency: 'USD',
+        is_active: true,
+        metadata_json: item.metadata,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
 
+      await this.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
+
+      // 2. Seed Watchlist
+      const watchlistRows = INITIAL_WATCHLIST_RAW.map((item) => ({
+        ticker: item.ticker,
+        is_active: true,
+        memo: item.memo,
+        priority: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+
+      await this.supabase.from('watchlist').upsert(watchlistRows, { onConflict: 'ticker' });
+
+      // 3. Seed Signals
+      const signalRows = INITIAL_HISTORICAL_SIGNALS.map((sig) => ({
+        id: sig.id.startsWith('sig-') ? undefined : sig.id,
+        ticker: sig.ticker,
+        signal_date: sig.signal_date,
+        strategy_type: sig.strategy_type,
+        opportunity_score: sig.opportunity_score,
+        risk_score: sig.risk_score,
+        risk_level: sig.risk_level,
+        decision: sig.decision,
+        confidence: sig.signal_confidence,
+        entry_price: sig.signal_price,
+        technical_score: sig.technical_score,
+        momentum_score: sig.momentum_score,
+        fundamental_score: sig.fundamental_score,
+        valuation_score: sig.valuation_score,
+        status: 'ACTIVE',
+        created_at: new Date().toISOString(),
+      }));
+
+      await this.supabase.from('signals').upsert(signalRows, { onConflict: 'id' });
+
+      // 4. Seed Scan Runs
+      const scanRows = INITIAL_SCAN_RUNS.map((run) => ({
+        id: run.run_id.startsWith('run-') ? undefined : run.run_id,
+        status: run.status,
+        started_at: run.started_at,
+        finished_at: run.finished_at,
+        watchlist_count: run.watchlist_count,
+        evaluated_count: run.evaluated_count,
+        signal_count: run.signal_count,
+        failure_count: run.failure_count || 0,
+        error_summary: run.error_summary || null,
+      }));
+
+      await this.supabase.from('scan_runs').upsert(scanRows, { onConflict: 'id' });
+
+      count = INITIAL_WATCHLIST_RAW.length;
       return { success: true, seededCount: count };
     } catch (err: any) {
       console.error('[SupabaseClient] seedToActiveDb error:', err);
-      return { success: false, seededCount: 0, error: err.message };
+      return { success: false, seededCount: count, error: err.message };
     }
   }
 
   public async clearAllData(): Promise<{ success: boolean; clearedTables: string[]; error?: string }> {
     const clearedTables: string[] = [];
     try {
-      // 1. Clear Supabase tables if connected
-      if (this.supabase && this.isSupabaseConnected) {
-        const tablesToDelete = [
-          'signal_outcomes',
-          'scan_run_items',
-          'scan_runs',
-          'signals',
-          'evaluations',
-          'indicator_snapshots',
-          'market_data_daily',
-          'fundamentals',
-          'watchlist',
-          'assets',
-        ];
+      const tablesToDelete = [
+        'signal_outcomes',
+        'scan_run_items',
+        'scan_runs',
+        'signals',
+        'evaluations',
+        'indicator_snapshots',
+        'fundamentals',
+        'market_data_daily',
+        'watchlist',
+        'assets',
+      ];
 
-        for (const table of tablesToDelete) {
+      if (this.supabase && this.isSupabaseConnected) {
+        for (const tbl of tablesToDelete) {
           try {
-            if (table === 'assets' || table === 'watchlist') {
-              const { error } = await this.supabase.from(table).delete().neq('ticker', '___DUMMY_NEVER_MATCH___');
-              if (!error) clearedTables.push(table);
-            } else if (table === 'market_data_daily' || table === 'fundamentals' || table === 'indicator_snapshots') {
-              const { error } = await this.supabase.from(table).delete().neq('ticker', '___DUMMY_NEVER_MATCH___');
-              if (!error) clearedTables.push(table);
+            if (tbl === 'assets' || tbl === 'watchlist') {
+              const { error } = await this.supabase
+                .from(tbl)
+                .delete()
+                .neq('ticker', '___IMPOSSIBLE_VALUE___');
+              if (!error) clearedTables.push(tbl);
             } else {
-              const { error } = await this.supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-              if (!error) clearedTables.push(table);
+              const { error } = await this.supabase
+                .from(tbl)
+                .delete()
+                .neq('id', '00000000-0000-0000-0000-000000000000');
+              if (!error) {
+                clearedTables.push(tbl);
+              } else {
+                const { error: err2 } = await this.supabase
+                  .from(tbl)
+                  .delete()
+                  .neq('ticker', '___IMPOSSIBLE_VALUE___');
+                if (!err2) clearedTables.push(tbl);
+              }
             }
-          } catch (tblErr) {
-            console.warn(`[SupabaseClient] Failed to truncate table ${table}:`, tblErr);
+          } catch (delErr) {
+            console.warn(`[SupabaseClient] Error deleting from ${tbl}:`, delErr);
           }
         }
       }
 
-      // 2. Clear all in-memory states
       this.state.assets.clear();
       this.state.watchlist.clear();
       this.state.classifications.clear();
@@ -544,55 +435,10 @@ class UniversalDatabaseClient {
       this.state.signals.clear();
       this.state.scan_runs.clear();
 
-      // 3. Clear localStorage snapshots & record explicit cleared flag
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        window.localStorage.removeItem(SNAPSHOT_STORAGE_KEY);
-        window.localStorage.removeItem('quant_watchlist_cache_v8');
-        window.localStorage.removeItem('quant_evaluations_cache_v8');
-        window.localStorage.setItem('quant_db_cleared_v8', 'true');
-      }
-
       return { success: true, clearedTables };
     } catch (err: any) {
       console.error('[SupabaseClient] clearAllData error:', err);
       return { success: false, clearedTables, error: err.message };
-    }
-  }
-
-  public seedInitial() {
-    // Seed initial assets & watchlist
-    for (const item of INITIAL_WATCHLIST_RAW) {
-      this.watchlist.set(item.ticker, {
-        ticker: item.ticker,
-        name: item.name,
-        is_active: true,
-        memo: item.memo,
-        created_at: '2026-08-01T00:00:00.000Z',
-      });
-
-      this.assets.set(item.ticker, {
-        ticker: item.ticker,
-        name: item.name,
-        asset_type: item.metadata.quoteType === 'ETF' ? 'etf' : 'equity',
-        exchange: 'NASDAQ',
-        sector: item.metadata.sector,
-        industry: item.metadata.industry,
-        currency: 'USD',
-        is_active: true,
-        metadata_json: item.metadata,
-        created_at: '2026-08-01T00:00:00.000Z',
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    // Seed initial historical signals
-    for (const sig of INITIAL_HISTORICAL_SIGNALS) {
-      this.signals.set(sig.id, sig);
-    }
-
-    // Seed initial scan runs
-    for (const run of INITIAL_SCAN_RUNS) {
-      this.scan_runs.set(run.run_id, run);
     }
   }
 
@@ -627,7 +473,7 @@ class UniversalDatabaseClient {
   getConfig() {
     return {
       connected: this.isSupabaseConnected && this.supabase !== null,
-      url: this.currentUrl || '',
+      url: this.currentUrl || DEFAULT_SUPABASE_URL,
       maskedKey: this.currentKey
         ? this.currentKey.slice(0, 8) + '...' + this.currentKey.slice(-4)
         : '',
@@ -640,11 +486,8 @@ class UniversalDatabaseClient {
   getStatus() {
     return {
       connected: this.isSupabaseConnected && this.supabase !== null,
-      type:
-        this.isSupabaseConnected && this.supabase !== null
-          ? ('supabase' as const)
-          : ('local_persistent' as const),
-      url: this.currentUrl || '',
+      type: 'supabase' as const,
+      url: this.currentUrl || DEFAULT_SUPABASE_URL,
       configSource: this.configSource,
       isUiOverridden: this.configSource === 'UI_CONFIGURED',
       evaluationsCount: this.state.evaluations.size,

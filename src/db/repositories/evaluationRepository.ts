@@ -58,7 +58,6 @@ export class EvaluationRepository {
         }
       }
     }
-    dbClient.saveLocalSnapshot();
   }
 
   async getAll(): Promise<FullTickerEvaluation[]> {

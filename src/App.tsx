@@ -33,31 +33,11 @@ import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs'>('dashboard');
-  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(() => {
-    try {
-      const saved = localStorage.getItem('quant_evaluations_cache_v8');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return runPipelineOnSeedData().evaluations;
-  });
-  const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
-  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(() => {
-    return calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
-  });
-  const [runs, setRuns] = useState<ScanRunLog[]>(INITIAL_SCAN_RUNS);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('quant_watchlist_cache_v8');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return runPipelineOnSeedData().watchlist;
-  });
+  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>([]);
+  const [signals, setSignals] = useState<SignalSnapshot[]>([]);
+  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
+  const [runs, setRuns] = useState<ScanRunLog[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
 
   // Modals
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -280,7 +260,6 @@ export default function App() {
         classified_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      dbClient.saveLocalSnapshot();
 
       try {
         await fetch('/api/v8/classification/override', {
@@ -300,7 +279,6 @@ export default function App() {
   const handleResetOverride = async (ticker: string) => {
     try {
       dbClient.classifications.delete(ticker.toUpperCase());
-      dbClient.saveLocalSnapshot();
 
       try {
         await fetch(`/api/v8/classification/override/${ticker}`, {

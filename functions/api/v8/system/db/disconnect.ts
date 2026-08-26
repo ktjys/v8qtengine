@@ -3,11 +3,10 @@ import { dbClient } from '../../../../../src/db/supabaseClient';
 // POST /api/v8/system/db/disconnect
 export async function onRequest(context: any) {
   try {
-    dbClient.disconnectSupabase();
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Supabase 연결이 해제되었으며 로컬 영속 모드로 전환되었습니다.',
+        message: 'Supabase 중앙 데이터베이스 연결이 유지됩니다.',
         status: dbClient.getStatus(),
       }),
       {

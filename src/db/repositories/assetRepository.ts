@@ -112,8 +112,6 @@ export class AssetRepository {
         console.warn(`[AssetRepository] Exception upserting to Supabase for ${ticker}:`, err);
       }
     }
-
-    dbClient.saveLocalSnapshot();
   }
 }
 

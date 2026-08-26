@@ -170,7 +170,6 @@ export class SignalRepository {
     }
 
     dbClient.signals.set(signal.id, signal);
-    dbClient.saveLocalSnapshot();
     return signal;
   }
 

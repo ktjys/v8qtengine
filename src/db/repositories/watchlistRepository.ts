@@ -118,7 +118,6 @@ export class WatchlistRepository {
       }
 
       dbClient.watchlist.set(clean, existing);
-      dbClient.saveLocalSnapshot();
       return existing;
     }
 
@@ -149,7 +148,6 @@ export class WatchlistRepository {
     }
 
     dbClient.watchlist.set(clean, newItem);
-    dbClient.saveLocalSnapshot();
     return newItem;
   }
 
@@ -187,7 +185,6 @@ export class WatchlistRepository {
     }
 
     dbClient.watchlist.set(clean, updated);
-    dbClient.saveLocalSnapshot();
     return updated;
   }
 
@@ -219,7 +216,6 @@ export class WatchlistRepository {
 
     dbClient.evaluations.delete(clean);
     const res = dbClient.watchlist.delete(clean);
-    dbClient.saveLocalSnapshot();
     return res;
   }
 }

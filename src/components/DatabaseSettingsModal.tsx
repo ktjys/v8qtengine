@@ -308,29 +308,6 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
     }
   };
 
-  const handleDisconnect = async () => {
-    setIsSaving(true);
-    try {
-      try {
-        await fetch('/api/v8/system/db/disconnect', { method: 'POST' });
-      } catch {}
-
-      dbClient.disconnectSupabase();
-      setConnectionMessage({ type: 'success', text: '로컬 영속 모드로 전환되었습니다.' });
-      onShowToast('로컬 메모리 영속 모드로 전환되었습니다.');
-      setSupabaseUrl('');
-      setSupabaseKey('');
-      setDbStatus(dbClient.getStatus());
-      await fetchDbStatus();
-      await runDiagnostics();
-      await onRefreshAllData();
-    } catch (err: any) {
-      setConnectionMessage({ type: 'error', text: err.message });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSeedData = async () => {
     setIsSeeding(true);
     try {
@@ -518,8 +495,8 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
                   <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                     <span className="text-slate-400 block text-[10px]">엔진 모드</span>
-                    <strong className={isConnected ? 'text-emerald-400' : 'text-amber-400'}>
-                      {isConnected ? 'SUPABASE_PROD' : 'LOCAL_IN_MEMORY'}
+                    <strong className="text-emerald-400">
+                      SUPABASE_LIVE
                     </strong>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
@@ -542,12 +519,10 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
                 <Database className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div className="space-y-1 text-slate-300">
                   <p className="font-semibold text-cyan-300">
-                    화면(UI) 설정값 최우선 적용 원칙
+                    Supabase 클라우드 실시간 동기화
                   </p>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    환경 변수(<code className="text-slate-300 font-mono">.env</code>)와 화면 설정값이 상이할 경우,
-                    <strong className="text-cyan-300"> 화면에서 입력 및 저장한 Supabase URL 및 Key가 시스템 전체에 최우선 적용</strong>되며
-                    영구 파일(<code className="text-slate-300 font-mono">.db_config.json</code>)에 동기화되어 재부팅 후에도 지속됩니다.
+                    로컬 모드가 완전히 제거되었으며, 모든 배포본과 브라우저에서 동일한 <strong>Supabase 중앙 데이터베이스</strong>를 직접 조회하고 갱신합니다.
                   </p>
                 </div>
               </div>
@@ -603,20 +578,7 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-2">
-                  {isConnected ? (
-                    <button
-                      type="button"
-                      onClick={handleDisconnect}
-                      disabled={isSaving}
-                      className="px-3.5 py-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30 text-xs font-semibold transition-colors"
-                    >
-                      연결 해제 (로컬 모드로 복구)
-                    </button>
-                  ) : (
-                    <div></div>
-                  )}
-
+                <div className="flex items-center justify-end pt-2">
                   <button
                     type="submit"
                     disabled={isSaving}

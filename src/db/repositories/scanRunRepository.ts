@@ -69,7 +69,6 @@ export class ScanRunRepository {
     }
 
     dbClient.scan_runs.set(log.run_id, log);
-    dbClient.saveLocalSnapshot();
     return log;
   }
 
