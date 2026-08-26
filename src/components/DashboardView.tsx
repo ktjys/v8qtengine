@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpRight,
   BarChart3,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Database,
   Eye,
   Flame,
@@ -41,6 +43,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onRecalculate,
   isRecalculating = false,
 }) => {
+  const [showAllWatch, setShowAllWatch] = useState(false);
+  const [showAllSignals, setShowAllSignals] = useState(false);
+
   // Categorize Today's Watch
   const opportunities = evaluations
     .filter((e) => e.decision.decision === 'STRONG_OPPORTUNITY' || e.decision.decision === 'OPPORTUNITY')
@@ -55,6 +60,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .sort((a, b) => b.risk.risk_score - a.risk.risk_score);
 
   const actionableSignalsToday = evaluations.filter((e) => e.decision.actionable);
+
+  const displayedWatchItems = showAllWatch ? watchListItems : watchListItems.slice(0, 10);
+  const displayedSignals = showAllSignals ? recentSignals : recentSignals.slice(0, 10);
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-fadeIn">
@@ -145,7 +153,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <button
             onClick={onNavigateToWatchlist}
-            className="flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-all active:scale-95 shrink-0"
+            className="flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-all active:scale-95 whitespace-nowrap self-start sm:self-auto"
           >
             <span>전종목 매트릭스</span>
             <ChevronRight className="w-4 h-4" />
@@ -287,8 +295,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </span>
             </div>
 
-            <div className="mt-3 space-y-2 flex-1">
-              {watchListItems.slice(0, 10).map((item) => (
+            <div className="mt-3 space-y-2 flex-1 max-h-[480px] overflow-y-auto pr-1">
+              {displayedWatchItems.map((item) => (
                 <div
                   key={item.ticker}
                   onClick={() => onSelectTicker(item.ticker)}
@@ -332,6 +340,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               ))}
             </div>
+
+            {watchListItems.length > 10 && (
+              <button
+                onClick={() => setShowAllWatch(!showAllWatch)}
+                className="mt-3 w-full py-1.5 px-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center space-x-1 transition-colors"
+              >
+                {showAllWatch ? (
+                  <>
+                    <span>상위 10개만 접기</span>
+                    <ChevronUp className="w-3.5 h-3.5 ml-1" />
+                  </>
+                ) : (
+                  <>
+                    <span>전체 {watchListItems.length}개 모두 보기</span>
+                    <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Card 3: High Risk Constraints */}
@@ -418,7 +445,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {recentSignals.slice(0, 10).map((sig) => (
+              {displayedSignals.map((sig) => (
                 <tr
                   key={sig.id}
                   className="hover:bg-slate-800/40 transition-colors cursor-pointer"
@@ -497,6 +524,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </tbody>
           </table>
         </div>
+
+        {recentSignals.length > 10 && (
+          <div className="mt-3 text-center border-t border-slate-800/80 pt-3">
+            <button
+              onClick={() => setShowAllSignals(!showAllSignals)}
+              className="py-1.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold inline-flex items-center space-x-1 transition-colors"
+            >
+              {showAllSignals ? (
+                <>
+                  <span>최근 10건만 접기</span>
+                  <ChevronUp className="w-3.5 h-3.5 ml-1" />
+                </>
+              ) : (
+                <>
+                  <span>전체 {recentSignals.length}건 시그널 모두 보기</span>
+                  <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

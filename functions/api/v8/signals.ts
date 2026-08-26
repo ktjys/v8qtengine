@@ -1,10 +1,14 @@
+import { signalRepository } from '../../../src/db/repositories/signalRepository';
+import { evaluationRepository } from '../../../src/db/repositories/evaluationRepository';
 import { INITIAL_HISTORICAL_SIGNALS, runV8PipelineOnSeedData } from '../../../src/data/seed/initialData';
 
 // GET /api/v8/signals
 export async function onRequest(context: any) {
   try {
-    const { evaluations } = runV8PipelineOnSeedData();
-    const liveSignals = evaluations
+    let savedSignals = await signalRepository.getAll();
+    const evals = await evaluationRepository.getAll();
+
+    const liveSignals = evals
       .filter((e) => e.decision?.actionable)
       .map((ev) => ({
         id: `sig-${ev.ticker}-${Date.now()}`,
@@ -22,10 +26,18 @@ export async function onRequest(context: any) {
         classification_confidence: ev.classification.confidence,
         primary_reason: ev.decision.reason,
         created_at: new Date().toISOString(),
-        status: 'ACTIVE',
+        status: 'ACTIVE' as const,
       }));
 
-    const combined = [...liveSignals, ...INITIAL_HISTORICAL_SIGNALS];
+    const signalMap = new Map<string, any>();
+    savedSignals.forEach((s) => signalMap.set(`${s.ticker}-${s.signal_date}`, s));
+    INITIAL_HISTORICAL_SIGNALS.forEach((s) => {
+      const key = `${s.ticker}-${s.signal_date}`;
+      if (!signalMap.has(key)) signalMap.set(key, s);
+    });
+    liveSignals.forEach((s) => signalMap.set(`${s.ticker}-${s.signal_date}`, s));
+
+    const combined = Array.from(signalMap.values());
 
     return new Response(
       JSON.stringify({
@@ -37,6 +49,8 @@ export async function onRequest(context: any) {
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       }
     );
@@ -49,4 +63,16 @@ export async function onRequest(context: any) {
       }
     );
   }
+}
+
+export const onRequestGet = onRequest;
+export async function onRequestOptions() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
