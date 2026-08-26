@@ -75,10 +75,11 @@ export class WatchlistRepository {
     return dbClient.watchlist.get(clean) || null;
   }
 
-  async add(item: { ticker: string; name?: string; memo?: string }): Promise<WatchlistItem> {
+  async add(item: { ticker: string; name?: string; memo?: string; is_active?: boolean }): Promise<WatchlistItem> {
     const clean = item.ticker.toUpperCase().trim();
     const existing = dbClient.watchlist.get(clean);
     const now = new Date().toISOString();
+    const isActive = item.is_active !== undefined ? item.is_active : true;
 
     // Ensure asset entry exists
     await assetRepository.upsert({

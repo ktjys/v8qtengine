@@ -1,8 +1,49 @@
 import { dbClient } from '../supabaseClient';
-import { WatchlistItem } from '../../types/v8';
+import { AssetType } from '../../types/v8';
+
+export interface AssetRecord {
+  ticker: string;
+  name: string;
+  asset_type?: AssetType | string;
+  exchange?: string;
+  sector?: string;
+  industry?: string;
+  currency?: string;
+  is_active?: boolean;
+  metadata_json?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export class AssetRepository {
-  async getAll() {
+  async findByTicker(ticker: string): Promise<AssetRecord | null> {
+    const clean = ticker.toUpperCase().trim();
+
+    // 1. Always try Supabase FIRST if connected
+    if (dbClient.supabase && dbClient.isSupabaseConnected) {
+      try {
+        const { data, error } = await dbClient.supabase
+          .from('assets')
+          .select('*')
+          .eq('ticker', clean)
+          .maybeSingle();
+
+        if (error) {
+          console.warn(`[AssetRepository] findByTicker error for ${clean}:`, error);
+        } else if (data) {
+          dbClient.assets.set(clean, data);
+          return data;
+        }
+      } catch (err) {
+        console.warn(`[AssetRepository] findByTicker exception for ${clean}:`, err);
+      }
+    }
+
+    // 2. Fall back to in-memory
+    return dbClient.assets.get(clean) || null;
+  }
+
+  async getAll(): Promise<AssetRecord[]> {
     // 1. Always try Supabase FIRST - this is the source of truth
     if (dbClient.supabase && dbClient.isSupabaseConnected) {
       try {
@@ -31,7 +72,7 @@ export class AssetRepository {
 
     // 2. Fall back to in-memory if Supabase fails or not connected
     const cached = Array.from(dbClient.assets.values());
-    console.log(`[AssetRepository] ⚠️  Returning ${cached.length} assets from in-memory cache (Supabase unavailable)`);
+    console.log(`[AssetRepository] ⚠️ Returning ${cached.length} assets from in-memory cache`);
     return cached;
   }
 
@@ -39,7 +80,7 @@ export class AssetRepository {
     const ticker = asset.ticker?.toUpperCase?.() || asset.ticker;
     if (!ticker) return;
 
-    const cleanAsset = {
+    const cleanAsset: AssetRecord = {
       ticker,
       name: asset.name || ticker,
       asset_type: asset.asset_type || 'equity',
@@ -76,3 +117,4 @@ export class AssetRepository {
 }
 
 export const assetRepository = new AssetRepository();
+
