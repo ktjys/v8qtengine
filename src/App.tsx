@@ -198,7 +198,7 @@ export default function App() {
         } catch (e) {}
       }
 
-      // 2. Fetch live evaluations (now synchronized with all active watchlist items)
+      // 2. Fetch live evaluations (now includes ALL assets from DB)
       const evalData = await safeFetchJson('/api/v8/evaluations');
       if (evalData?.success && evalData.evaluations) {
         setEvaluations(evalData.evaluations);
@@ -316,6 +316,8 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         showToast(`${cleanTicker} 종목이 워치리스트에 추가되고 즉시 퀀트 평가가 완료되었습니다.`);
+        // 🔑 중요: 새 종목 추가 후 무조건 데이터 재로드 (화면에 표시되도록)
+        await new Promise((resolve) => setTimeout(resolve, 500));
         await loadAllData();
       } else {
         showToast(`추가 실패: ${data.error}`);

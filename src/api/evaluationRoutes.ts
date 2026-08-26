@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { evaluationService } from '../pipeline/evaluationService';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
+import { assetRepository } from '../db/repositories/assetRepository';
 import { dbClient } from '../db/supabaseClient';
 import { dailyScoreHistoryService } from '../pipeline/dailyScoreHistoryService';
 import { runV8PipelineOnSeedData } from '../data/seed/initialData';
@@ -11,16 +12,20 @@ export const evaluationRouter = Router();
 // GET /api/v8/evaluations
 evaluationRouter.get('/', async (req, res) => {
   try {
-    // 1. Get entire watchlist (including inactive items for completeness)
+    // 1. Get ALL assets from asset table (including those added via watchlist)
+    const allAssets = await assetRepository.getAll();
+    const assetTickerSet = new Set(allAssets.map((a) => a.ticker.toUpperCase()));
+
+    // 2. Get watchlist for priority (active items get fresh evaluations)
     const watchlist = await watchlistRepository.getAll();
     const watchlistTickerSet = new Set(watchlist.map((w) => w.ticker.toUpperCase()));
+    const activeWatchlist = watchlist.filter((w) => w.is_active);
 
-    // 2. Get existing evaluations
+    // 3. Get existing evaluations
     let evaluations = await evaluationRepository.getAll();
     const evalMap = new Map(evaluations.map((e) => [e.ticker.toUpperCase(), e]));
 
-    // 3. Prioritize active tickers for fresh valuations & live quotes
-    const activeWatchlist = watchlist.filter((w) => w.is_active);
+    // 4. Refresh active watchlist tickers with fresh data
     let hasChanges = false;
     const now = Date.now();
 
@@ -60,16 +65,17 @@ evaluationRouter.get('/', async (req, res) => {
       })
     );
 
-    // 4. Return all evaluations for tickers in watchlist (not just active)
+    // 5. Return evaluations for ALL assets (not just watchlist)
+    // If an asset doesn't have evaluation yet, it will be evaluated on next request or recalculate
     const finalEvaluations: typeof evaluations = [];
     for (const [ticker, ev] of evalMap.entries()) {
-      if (watchlistTickerSet.has(ticker)) {
+      if (assetTickerSet.has(ticker)) {
         finalEvaluations.push(ev);
       }
     }
 
-    // 5. If new evaluations were computed or updated, persist them
-    if (hasChanges || finalEvaluations.length !== evaluations.length) {
+    // 6. Persist any changes
+    if (hasChanges) {
       await evaluationRepository.saveAll(finalEvaluations);
     }
 
@@ -85,14 +91,13 @@ evaluationRouter.get('/', async (req, res) => {
   }
 });
 
-// POST /api/v8/evaluations/recalculate (Force re-evaluation of all active watchlist tickers)
+// POST /api/v8/evaluations/recalculate (Force re-evaluation of all assets in database)
 evaluationRouter.post('/recalculate', async (req, res) => {
   try {
-    const watchlist = await watchlistRepository.getAll();
-    const activeWatchlist = watchlist.filter((w) => w.is_active);
-    const targetWatchlist = activeWatchlist.length > 0 ? activeWatchlist : watchlist;
-
-    if (targetWatchlist.length === 0) {
+    // Get all assets from DB (not just watchlist)
+    const allAssets = await assetRepository.getAll();
+    
+    if (allAssets.length === 0) {
       // Seed fallback
       const seedResult = runV8PipelineOnSeedData ? runV8PipelineOnSeedData() : null;
       return res.json({
@@ -104,8 +109,8 @@ evaluationRouter.post('/recalculate', async (req, res) => {
     }
 
     const results = await Promise.all(
-      targetWatchlist.map(async (item) => {
-        const ticker = item.ticker.toUpperCase();
+      allAssets.map(async (asset) => {
+        const ticker = asset.ticker.toUpperCase();
         try {
           const override = dbClient.classifications.get(ticker);
           const ev = await evaluationService.evaluateTicker(ticker, override);
@@ -119,7 +124,7 @@ evaluationRouter.post('/recalculate', async (req, res) => {
 
     let successfulEvaluations = results.filter((r) => r.success && r.ev).map((r) => r.ev!);
     if (successfulEvaluations.length === 0) {
-      // If live evaluations failed (e.g. network block), fallback to existing or seed evaluations
+      // If live evaluations failed, fallback to existing evaluations
       const existing = await evaluationRepository.getAll();
       if (existing.length > 0) {
         successfulEvaluations = existing;
