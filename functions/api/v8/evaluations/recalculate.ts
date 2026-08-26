@@ -1,18 +1,25 @@
 import { evaluationRepository } from '../../../../src/db/repositories/evaluationRepository';
 import { evaluationService } from '../../../../src/pipeline/evaluationService';
 import { watchlistRepository } from '../../../../src/db/repositories/watchlistRepository';
+import { assetRepository } from '../../../../src/db/repositories/assetRepository';
 import { dbClient } from '../../../../src/db/supabaseClient';
 
 // POST /api/v8/evaluations/recalculate
 export async function onRequest(context: any) {
   try {
-    const watchlist = await watchlistRepository.getAll();
-    const activeWatchlist = watchlist.filter((w) => w.is_active);
-    const targetWatchlist = activeWatchlist.length > 0 ? activeWatchlist : watchlist;
+    const [allAssets, watchlist] = await Promise.all([
+      assetRepository.getAll(),
+      watchlistRepository.getAll(),
+    ]);
+
+    const tickerSet = new Set<string>([
+      ...allAssets.map((a) => a.ticker.toUpperCase()),
+      ...watchlist.map((w) => w.ticker.toUpperCase()),
+    ]);
+    const targetTickers = Array.from(tickerSet);
 
     const results = await Promise.all(
-      targetWatchlist.map(async (item) => {
-        const ticker = item.ticker.toUpperCase();
+      targetTickers.map(async (ticker) => {
         try {
           const override = dbClient.classifications.get(ticker);
           const ev = await evaluationService.evaluateTicker(ticker, override);

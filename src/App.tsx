@@ -15,7 +15,10 @@ import { calculateBacktestMetrics } from './engine/backtestEngine';
 import { signalRepository } from './db/repositories/signalRepository';
 import { scanRunRepository } from './db/repositories/scanRunRepository';
 import { evaluationRepository } from './db/repositories/evaluationRepository';
+import { watchlistRepository } from './db/repositories/watchlistRepository';
+import { assetRepository } from './db/repositories/assetRepository';
 import { evaluationService } from './pipeline/evaluationService';
+import { dbClient } from './db/supabaseClient';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { WatchlistView } from './components/WatchlistView';
@@ -101,16 +104,22 @@ export default function App() {
 
       // 2. Direct local evaluation engine fallback if backend is unavailable or failed
       if (newEvaluations.length === 0) {
+        const allAssets = await assetRepository.getAll();
         const activeItems = watchlist.filter((w) => w.is_active);
-        const targetTickers = activeItems.length > 0
-          ? activeItems.map((w) => w.ticker.toUpperCase())
-          : (watchlist.length > 0 ? watchlist.map((w) => w.ticker.toUpperCase()) : ['NVDA', 'AAPL', 'MSFT', 'TSLA', 'SPY', 'QQQ']);
+        const allTickerSet = new Set<string>([
+          ...activeItems.map((w) => w.ticker.toUpperCase()),
+          ...allAssets.map((a) => a.ticker.toUpperCase()),
+          ...watchlist.map((w) => w.ticker.toUpperCase()),
+        ]);
+        const targetTickers = Array.from(allTickerSet);
 
-        const batchResult = await evaluationService.evaluateBatch(targetTickers);
-        if (batchResult.evaluations.length > 0) {
-          newEvaluations = batchResult.evaluations;
-          await evaluationRepository.saveAll(batchResult.evaluations);
-          successMsg = `${batchResult.evaluations.length}개 종목의 퀀트 평가 및 가격 데이터가 최신화되었습니다.`;
+        if (targetTickers.length > 0) {
+          const batchResult = await evaluationService.evaluateBatch(targetTickers);
+          if (batchResult.evaluations.length > 0) {
+            newEvaluations = batchResult.evaluations;
+            await evaluationRepository.saveAll(batchResult.evaluations);
+            successMsg = `${batchResult.evaluations.length}개 종목의 퀀트 평가 및 가격 데이터가 최신화되었습니다.`;
+          }
         }
       }
 
@@ -125,7 +134,6 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Recalculate error:', err);
-      // Even on general error, ensure fallback to existing or seed evaluations
       try {
         const fallback = await evaluationRepository.getAll();
         if (fallback.length > 0) {
@@ -162,55 +170,86 @@ export default function App() {
 
   const loadAllData = async () => {
     try {
-      // 1. Fetch watchlist first and reconcile with client-side localStorage additions
+      // 1. Fetch watchlist (Server first, fallback to repository + localStorage)
       const wlData = await safeFetchJson('/api/v8/watchlist');
-      let currentWl: WatchlistItem[] = wlData?.success && wlData.watchlist ? wlData.watchlist : [];
+      let currentWl: WatchlistItem[] = [];
+      if (wlData?.success && Array.isArray(wlData.watchlist) && wlData.watchlist.length > 0) {
+        currentWl = wlData.watchlist;
+      } else {
+        currentWl = await watchlistRepository.getAll();
+      }
 
+      // Reconcile with localStorage cache
       try {
         const cachedRaw = localStorage.getItem('quant_watchlist_cache_v8');
         if (cachedRaw) {
           const cachedItems: WatchlistItem[] = JSON.parse(cachedRaw);
-          const serverTickers = new Set(currentWl.map((w) => w.ticker.toUpperCase()));
-          const missingItems = cachedItems.filter((c) => !serverTickers.has(c.ticker.toUpperCase()));
-
-          if (missingItems.length > 0) {
-            for (const m of missingItems) {
-              await fetch('/api/v8/watchlist', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker: m.ticker, name: m.name, memo: m.memo }),
-              });
-            }
-            const reloadedWl = await safeFetchJson('/api/v8/watchlist');
-            if (reloadedWl?.success && reloadedWl.watchlist) {
-              currentWl = reloadedWl.watchlist;
+          const currentTickers = new Set(currentWl.map((w) => w.ticker.toUpperCase()));
+          for (const c of cachedItems) {
+            if (!currentTickers.has(c.ticker.toUpperCase())) {
+              currentWl.push(c);
+              await watchlistRepository.add(c);
             }
           }
         }
-      } catch (e) {
-        // Ignore localStorage parsing errors
-      }
+      } catch (e) {}
 
-      if (currentWl.length > 0) {
-        setWatchlist(currentWl);
-        try {
-          localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(currentWl));
-        } catch (e) {}
+      if (currentWl.length === 0) {
+        currentWl = runPipelineOnSeedData().watchlist;
       }
+      setWatchlist(currentWl);
+      try {
+        localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(currentWl));
+      } catch (e) {}
 
-      // 2. Fetch live evaluations (now includes ALL assets from DB)
+      // 2. Fetch all evaluations (Server first, fallback to repository)
+      let loadedEvals: FullTickerEvaluation[] = [];
       const evalData = await safeFetchJson('/api/v8/evaluations');
-      if (evalData?.success && evalData.evaluations) {
-        setEvaluations(evalData.evaluations);
+      if (evalData?.success && Array.isArray(evalData.evaluations) && evalData.evaluations.length > 0) {
+        loadedEvals = evalData.evaluations;
+      } else {
+        loadedEvals = await evaluationRepository.getAll();
+      }
+
+      // 3. Ensure evaluations cover ALL assets & watchlist items
+      const evalMap = new Map(loadedEvals.map((e) => [e.ticker.toUpperCase(), e]));
+      const allAssets = await assetRepository.getAll();
+      const allTargetTickers = new Set<string>([
+        ...currentWl.map((w) => w.ticker.toUpperCase()),
+        ...allAssets.map((a) => a.ticker.toUpperCase()),
+      ]);
+
+      let hasNewEvaluations = false;
+      for (const ticker of allTargetTickers) {
+        if (!evalMap.has(ticker)) {
+          try {
+            const override = dbClient.classifications.get(ticker);
+            const newEv = await evaluationService.evaluateTicker(ticker, override);
+            if (newEv) {
+              evalMap.set(ticker, newEv);
+              hasNewEvaluations = true;
+            }
+          } catch (e) {
+            console.warn(`Evaluation fallback for ${ticker}:`, e);
+          }
+        }
+      }
+
+      const finalEvals = Array.from(evalMap.values());
+      if (finalEvals.length > 0) {
+        setEvaluations(finalEvals);
+        if (hasNewEvaluations) {
+          await evaluationRepository.saveAll(finalEvals);
+        }
         try {
-          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(evalData.evaluations));
+          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(finalEvals));
         } catch (e) {}
       }
 
-      // 3. Fetch signals
+      // 4. Fetch signals
       let latestSignals: SignalSnapshot[] = [];
       const sigData = await safeFetchJson('/api/v8/signals');
-      if (sigData?.success && sigData.signals && sigData.signals.length > 0) {
+      if (sigData?.success && Array.isArray(sigData.signals) && sigData.signals.length > 0) {
         latestSignals = sigData.signals;
       } else {
         const repoSignals = await signalRepository.getAll();
@@ -222,7 +261,7 @@ export default function App() {
         setSignals(latestSignals);
       }
 
-      // 4. Fetch backtest
+      // 5. Fetch backtest
       const btData = await safeFetchJson('/api/v8/backtest');
       if (btData?.success && (btData.data?.summary || btData.summary)) {
         setBacktestSummary(btData.data?.summary || btData.summary || null);
@@ -230,9 +269,9 @@ export default function App() {
         setBacktestSummary(calculateBacktestMetrics(latestSignals));
       }
 
-      // 5. Fetch runs
+      // 6. Fetch runs
       const runData = await safeFetchJson('/api/v8/runs');
-      if (runData?.success && runData.runs && runData.runs.length > 0) {
+      if (runData?.success && Array.isArray(runData.runs) && runData.runs.length > 0) {
         setRuns(runData.runs);
       } else {
         const repoRuns = await scanRunRepository.getAll();
@@ -257,16 +296,28 @@ export default function App() {
     reason: string
   ) => {
     try {
-      const res = await fetch('/api/v8/classification/override', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker, asset_type, strategy_type, confidence, reason }),
+      dbClient.classifications.set(ticker.toUpperCase(), {
+        ticker: ticker.toUpperCase(),
+        asset_type,
+        strategy_type,
+        confidence,
+        reason,
+        classification_source: 'manual',
+        classified_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`${ticker} 자산 분류 수동 지정이 영구 저장되었습니다.`);
-        await loadAllData();
-      }
+      dbClient.saveLocalSnapshot();
+
+      try {
+        await fetch('/api/v8/classification/override', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, asset_type, strategy_type, confidence, reason }),
+        });
+      } catch {}
+
+      showToast(`${ticker} 자산 분류 수동 지정이 저장되었습니다.`);
+      await loadAllData();
     } catch (err) {
       console.error('Failed to save override', err);
     }
@@ -274,14 +325,17 @@ export default function App() {
 
   const handleResetOverride = async (ticker: string) => {
     try {
-      const res = await fetch(`/api/v8/classification/override/${ticker}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`${ticker} 분류가 자동 분석으로 복원되었습니다.`);
-        await loadAllData();
-      }
+      dbClient.classifications.delete(ticker.toUpperCase());
+      dbClient.saveLocalSnapshot();
+
+      try {
+        await fetch(`/api/v8/classification/override/${ticker}`, {
+          method: 'DELETE',
+        });
+      } catch {}
+
+      showToast(`${ticker} 분류가 자동 분석으로 복원되었습니다.`);
+      await loadAllData();
     } catch (err) {
       console.error('Failed to reset override', err);
     }
@@ -292,38 +346,49 @@ export default function App() {
     if (!cleanTicker) return;
 
     try {
-      // Optimistically update localStorage cache
-      try {
-        const cachedRaw = localStorage.getItem('quant_watchlist_cache_v8');
-        const cached: WatchlistItem[] = cachedRaw ? JSON.parse(cachedRaw) : [];
-        if (!cached.some((c) => c.ticker.toUpperCase() === cleanTicker)) {
-          cached.push({
-            ticker: cleanTicker,
-            name: name || cleanTicker,
-            memo: memo || '관심 종목',
-            is_active: true,
-            created_at: new Date().toISOString(),
-          });
-          localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(cached));
-        }
-      } catch (e) {}
-
-      const res = await fetch('/api/v8/watchlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker: cleanTicker, name, memo }),
+      // 1. Direct repository persistence (Immediate, robust, offline/Edge/SPA ready)
+      await assetRepository.upsert({
+        ticker: cleanTicker,
+        name: name || cleanTicker,
+        is_active: true,
       });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`${cleanTicker} 종목이 워치리스트에 추가되고 즉시 퀀트 평가가 완료되었습니다.`);
-        // 🔑 중요: 새 종목 추가 후 무조건 데이터 재로드 (화면에 표시되도록)
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        await loadAllData();
-      } else {
-        showToast(`추가 실패: ${data.error}`);
+      await watchlistRepository.add({
+        ticker: cleanTicker,
+        name: name || cleanTicker,
+        memo: memo || '관심 종목',
+        is_active: true,
+      });
+
+      // 2. Direct quant evaluation
+      try {
+        const override = dbClient.classifications.get(cleanTicker);
+        const evalResult = await evaluationService.evaluateTicker(cleanTicker, override);
+        if (evalResult) {
+          await evaluationRepository.saveAll([evalResult]);
+          setEvaluations((prev) => {
+            const map = new Map(prev.map((e) => [e.ticker.toUpperCase(), e]));
+            map.set(cleanTicker, evalResult);
+            return Array.from(map.values());
+          });
+        }
+      } catch (evErr) {
+        console.warn('Instant local evaluation error:', evErr);
       }
-    } catch (err) {
+
+      // 3. Notify backend server if available
+      try {
+        await fetch('/api/v8/watchlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker: cleanTicker, name, memo, is_active: true }),
+        });
+      } catch {}
+
+      showToast(`${cleanTicker} 종목이 워치리스트에 추가되고 즉시 퀀트 평가가 완료되었습니다.`);
+      await loadAllData();
+    } catch (err: any) {
       console.error('Failed to add ticker', err);
+      showToast(`추가 실패: ${err.message}`);
     }
   };
 
@@ -332,34 +397,18 @@ export default function App() {
     if (!confirm(`${cleanTicker} 종목을 워치리스트에서 삭제하시겠습니까?`)) return;
 
     try {
-      // Remove from localStorage cache immediately
-      try {
-        const cachedRaw = localStorage.getItem('quant_watchlist_cache_v8');
-        if (cachedRaw) {
-          const cachedItems: WatchlistItem[] = JSON.parse(cachedRaw);
-          const filtered = cachedItems.filter((c) => c.ticker.toUpperCase() !== cleanTicker);
-          localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(filtered));
-        }
-        const cachedEvalRaw = localStorage.getItem('quant_evaluations_cache_v8');
-        if (cachedEvalRaw) {
-          const cachedEvals: FullTickerEvaluation[] = JSON.parse(cachedEvalRaw);
-          const filtered = cachedEvals.filter((c) => c.ticker.toUpperCase() !== cleanTicker);
-          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(filtered));
-        }
-      } catch (e) {}
-
-      // Optimistically update React state
+      await watchlistRepository.remove(cleanTicker);
       setEvaluations((prev) => prev.filter((e) => e.ticker.toUpperCase() !== cleanTicker));
       setWatchlist((prev) => prev.filter((w) => w.ticker.toUpperCase() !== cleanTicker));
 
-      const res = await fetch(`/api/v8/watchlist/${cleanTicker}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`${cleanTicker} 종목이 삭제되었습니다.`);
-        await loadAllData();
-      }
+      try {
+        await fetch(`/api/v8/watchlist/${cleanTicker}`, {
+          method: 'DELETE',
+        });
+      } catch {}
+
+      showToast(`${cleanTicker} 종목이 삭제되었습니다.`);
+      await loadAllData();
     } catch (err) {
       console.error('Failed to delete ticker', err);
     }
@@ -367,11 +416,14 @@ export default function App() {
 
   const handleToggleActive = async (ticker: string, is_active: boolean) => {
     try {
-      await fetch(`/api/v8/watchlist/${ticker}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active }),
-      });
+      await watchlistRepository.toggleActive(ticker, is_active);
+      try {
+        await fetch(`/api/v8/watchlist/${ticker}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active }),
+        });
+      } catch {}
       await loadAllData();
     } catch (err) {
       console.error('Failed to toggle active', err);

@@ -1,6 +1,7 @@
 name = "quant-decision-engine"
+main = "./worker.ts"
 compatibility_date = "2024-09-23"
-pages_build_output_dir = "./dist"
+compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "./dist"
@@ -9,3 +10,4 @@ not_found_handling = "single-page-application"
 [vars]
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
+

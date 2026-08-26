@@ -152,6 +152,10 @@ export class WatchlistRepository {
     return newItem;
   }
 
+  async toggleActive(ticker: string, isActive: boolean): Promise<WatchlistItem | null> {
+    return this.update(ticker, { is_active: isActive });
+  }
+
   async update(ticker: string, updates: Partial<WatchlistItem>): Promise<WatchlistItem | null> {
     const clean = ticker.toUpperCase().trim();
     const existing = dbClient.watchlist.get(clean);
