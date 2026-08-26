@@ -4,7 +4,7 @@ export interface DiagnosticTableResult {
   tableName: string;
   initialized: boolean;
   recordCount: number;
-  storageMode: 'SUPABASE' | 'IN_MEMORY';
+  storageMode: 'SUPABASE' | 'DISCONNECTED';
   latencyMs: number;
   status: 'HEALTHY' | 'EMPTY' | 'NOT_INITIALIZED' | 'ERROR';
   sampleInfo?: {
@@ -18,7 +18,7 @@ export interface DiagnosticReport {
   timestamp: string;
   connection: {
     connected: boolean;
-    storageMode: 'SUPABASE' | 'IN_MEMORY';
+    storageMode: 'SUPABASE' | 'DISCONNECTED';
     url: string | null;
     pingLatencyMs: number;
   };
@@ -27,7 +27,7 @@ export interface DiagnosticReport {
     initializedTablesCount: number;
     missingTablesCount: number;
     totalRecordsAcrossTables: number;
-    persistenceHealth: 'FULLY_INITIALIZED' | 'PARTIALLY_INITIALIZED' | 'IN_MEMORY_ONLY' | 'ERROR';
+    persistenceHealth: 'FULLY_INITIALIZED' | 'PARTIALLY_INITIALIZED' | 'DB_NOT_CONNECTED' | 'ERROR';
     recommendation: string;
   };
   tables: Record<string, DiagnosticTableResult>;
@@ -104,7 +104,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
             tableName,
             initialized: false,
             recordCount: inMemCount,
-            storageMode: 'IN_MEMORY',
+            storageMode: 'DISCONNECTED',
             latencyMs: latency,
             status: 'NOT_INITIALIZED',
             error: error.message,
@@ -143,7 +143,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
           tableName,
           initialized: false,
           recordCount: inMemCount,
-          storageMode: 'IN_MEMORY',
+          storageMode: 'DISCONNECTED',
           latencyMs: Date.now() - tStart,
           status: 'ERROR',
           error: err?.message || 'Query execution failed',
@@ -151,33 +151,30 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
       }
     }
   } else {
-    // Supabase is not connected -> Fallback In-Memory Diagnostics
+    // Supabase is not connected -> Disconnected State
     for (const tableName of targetTables) {
-      const inMemCount = getInMemoryRecordCount(tableName);
-      totalRecords += inMemCount;
       tableResults[tableName] = {
         tableName,
-        initialized: true,
-        recordCount: inMemCount,
-        storageMode: 'IN_MEMORY',
+        initialized: false,
+        recordCount: 0,
+        storageMode: 'DISCONNECTED',
         latencyMs: 0,
-        status: inMemCount > 0 ? 'HEALTHY' : 'EMPTY',
+        status: 'NOT_INITIALIZED',
         sampleInfo: {
-          idOrKey: 'local-memory',
+          idOrKey: 'db-not-connected',
           updatedAt: new Date().toISOString(),
         },
       };
-      initializedCount++;
     }
   }
 
   // Determine overall persistence health
-  let persistenceHealth: 'FULLY_INITIALIZED' | 'PARTIALLY_INITIALIZED' | 'IN_MEMORY_ONLY' | 'ERROR';
+  let persistenceHealth: 'FULLY_INITIALIZED' | 'PARTIALLY_INITIALIZED' | 'DB_NOT_CONNECTED' | 'ERROR';
   let recommendation = '';
 
   if (!isConnected) {
-    persistenceHealth = 'IN_MEMORY_ONLY';
-    recommendation = 'Supabase DB가 연결되지 않아 로컬 인메모리 저장소에 상태가 유지되고 있습니다. 영구 저장을 위해 Supabase URL 및 Key를 설정하세요.';
+    persistenceHealth = 'DB_NOT_CONNECTED';
+    recommendation = 'Supabase DB가 연결되지 않았습니다. Cloudflare 환경변수 SUPABASE_URL과 SUPABASE_KEY를 설정하거나, DB Settings에서 연결하세요.';
   } else if (missingCount === 0) {
     persistenceHealth = 'FULLY_INITIALIZED';
     recommendation = `모든 ${targetTables.length}개 테이블이 Supabase에 올바르게 초기화되어 총 ${totalRecords}개 레코드가 클라우드에 영구 저장되고 있습니다.`;
@@ -193,7 +190,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
     timestamp: new Date().toISOString(),
     connection: {
       connected: isConnected,
-      storageMode: isConnected ? 'SUPABASE' : 'IN_MEMORY',
+      storageMode: isConnected ? 'SUPABASE' : 'DISCONNECTED',
       url: maskedUrl,
       pingLatencyMs,
     },

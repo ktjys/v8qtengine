@@ -80,8 +80,7 @@ export class SignalRepository {
       }
     }
 
-    const list = Array.from(dbClient.signals.values());
-    return list.sort((a, b) => b.signal_date.localeCompare(a.signal_date));
+    return [];
   }
 
   async save(signal: SignalSnapshot): Promise<SignalSnapshot> {
@@ -265,16 +264,7 @@ export class SignalRepository {
     return updated;
   }
 
-  async findByTickerRecent(ticker: string, days = 3): Promise<SignalSnapshot | null> {
-    const clean = ticker.toUpperCase().trim();
-    const now = Date.now();
-    for (const sig of dbClient.signals.values()) {
-      if (sig.ticker === clean) {
-        const sigTime = new Date(sig.signal_date).getTime();
-        const diffDays = (now - sigTime) / (1000 * 60 * 60 * 24);
-        if (diffDays < days) return sig;
-      }
-    }
+  async findByTickerRecent(_ticker: string, _days = 3): Promise<SignalSnapshot | null> {
     return null;
   }
 }

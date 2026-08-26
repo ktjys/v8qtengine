@@ -39,8 +39,7 @@ export class AssetRepository {
       }
     }
 
-    // 2. Fall back to in-memory
-    return dbClient.assets.get(clean) || null;
+    return null;
   }
 
   async getAll(): Promise<AssetRecord[]> {
@@ -71,10 +70,7 @@ export class AssetRepository {
       }
     }
 
-    // 2. Fall back to in-memory if Supabase fails or not connected
-    const cached = Array.from(dbClient.assets.values());
-    console.log(`[AssetRepository] ⚠️ Returning ${cached.length} assets from in-memory cache`);
-    return cached;
+    return [];
   }
 
   async upsert(asset: any) {

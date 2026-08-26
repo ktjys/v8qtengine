@@ -31,16 +31,14 @@ export interface TableStatusInfo {
   error?: string;
 }
 
-// Credentials are loaded from: 1) UI-configured localStorage, 2) Environment variables
+// Credentials are loaded from environment variables or UI-configured at runtime.
 // No hardcoded defaults — set SUPABASE_URL and SUPABASE_KEY via .env or Cloudflare runtime vars
-
-const CONFIG_STORAGE_KEY = 'quant_db_config';
 
 class UniversalDatabaseClient {
   public supabase: SupabaseClient | null = null;
   public isSupabaseConnected = false;
   public missingTables = new Set<string>();
-  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'LOCAL_ONLY' = 'LOCAL_ONLY';
+  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'UNCONFIGURED' = 'UNCONFIGURED';
   private currentUrl = '';
   private currentKey = '';
   private state: DatabaseState = {
@@ -57,28 +55,6 @@ class UniversalDatabaseClient {
 
   constructor() {
     this.initSupabase();
-  }
-
-  private readSavedConfig(): { url?: string; key?: string } | null {
-    try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        const raw = window.localStorage.getItem(CONFIG_STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-      }
-    } catch (e) {
-      console.warn('[SupabaseClient] Could not read saved DB config:', e);
-    }
-    return null;
-  }
-
-  private saveDbConfig(cfg: { url?: string; key?: string }) {
-    try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(cfg));
-      }
-    } catch (e) {
-      console.warn('[SupabaseClient] Could not write DB config:', e);
-    }
   }
 
   public isTableAvailable(tableName: string): boolean {
@@ -111,32 +87,7 @@ class UniversalDatabaseClient {
   }
 
   private initSupabase() {
-    // 1. Check UI-configured saved credentials
-    const saved = this.readSavedConfig();
-    if (saved && saved.url && saved.key) {
-      this.currentUrl = saved.url;
-      this.currentKey = saved.key;
-      this.configSource = 'UI_CONFIGURED';
-      try {
-        this.supabase = createClient(saved.url, saved.key, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        });
-        this.isSupabaseConnected = true;
-        if (typeof process !== 'undefined' && process.env) {
-          process.env.SUPABASE_URL = saved.url;
-          process.env.SUPABASE_KEY = saved.key;
-        }
-        console.log(`[SupabaseClient] Initialized with UI-configured Supabase: ${saved.url}`);
-        return;
-      } catch (err) {
-        console.warn('[SupabaseClient] Failed to initialize UI-configured Supabase:', err);
-      }
-    }
-
-    // 2. Check Environment Variables
+    // 1. Check Environment Variables
     let envUrl = '';
     let envKey = '';
     try {
@@ -161,7 +112,7 @@ class UniversalDatabaseClient {
       this.currentKey = envKey;
       this.configSource = 'ENV_FALLBACK';
     } else {
-      this.configSource = 'LOCAL_ONLY';
+      this.configSource = 'UNCONFIGURED';
       console.warn('[SupabaseClient] ⚠️ No DB credentials found. Set SUPABASE_URL and SUPABASE_KEY via env vars or use the DB Settings modal.');
       return;
     }
@@ -229,13 +180,6 @@ class UniversalDatabaseClient {
         process.env.SUPABASE_KEY = cleanKey;
       }
       this.missingTables.clear();
-
-      try {
-        this.saveDbConfig({
-          url: cleanUrl,
-          key: cleanKey,
-        });
-      } catch {}
 
       const tables = await this.checkTableStatus();
       return { success: true, tables };

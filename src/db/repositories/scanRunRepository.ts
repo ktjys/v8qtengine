@@ -34,8 +34,7 @@ export class ScanRunRepository {
       }
     }
 
-    const list = Array.from(dbClient.scan_runs.values());
-    return list.sort((a, b) => b.started_at.localeCompare(a.started_at));
+    return [];
   }
 
   async save(log: ScanRunLog): Promise<ScanRunLog> {

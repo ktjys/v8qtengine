@@ -35,7 +35,7 @@ export class WatchlistRepository {
       }
     }
 
-    return Array.from(dbClient.watchlist.values());
+    return [];
   }
 
   async getActive(): Promise<WatchlistItem[]> {
@@ -73,7 +73,7 @@ export class WatchlistRepository {
       }
     }
 
-    return dbClient.watchlist.get(clean) || null;
+    return null;
   }
 
   async add(item: { ticker: string; name?: string; memo?: string; is_active?: boolean }): Promise<WatchlistItem> {

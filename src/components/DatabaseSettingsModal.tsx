@@ -41,7 +41,7 @@ interface DiagnosticReport {
     initializedTablesCount: number;
     missingTablesCount: number;
     totalRecordsAcrossTables: number;
-    persistenceHealth: 'FULLY_INITIALIZED' | 'PARTIALLY_INITIALIZED' | 'IN_MEMORY_ONLY' | 'ERROR';
+    persistenceHealth: 'FULLY_INITIALIZED' | 'PARTIALLY_INITIALIZED' | 'DB_NOT_CONNECTED' | 'ERROR';
     recommendation: string;
   };
   tables: Record<
@@ -144,7 +144,7 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
   const fetchDbStatus = async () => {
     setIsLoading(true);
     try {
-      let loadedStatus = null;
+      let loadedStatus: any = null;
       let loadedTables = null;
       let loadedUrl = '';
 
@@ -158,15 +158,18 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
             loadedTables = data.tables;
           }
         }
-      } catch (e) {
-        console.warn('API /api/v8/system/db/status failed, using local dbClient fallback', e);
-      }
+      } catch {}
 
       if (!loadedStatus) {
-        loadedStatus = dbClient.getStatus();
-        const cfg = dbClient.getConfig();
-        loadedUrl = cfg.url || '';
-        loadedTables = await dbClient.checkTableStatus();
+        loadedStatus = {
+          connected: false,
+          configSource: 'UNCONFIGURED',
+          url: '',
+          evaluationsCount: 0,
+          signalsCount: 0,
+          scanRunsCount: 0,
+          watchlistCount: 0,
+        };
       }
 
       setDbStatus(loadedStatus);
@@ -480,11 +483,15 @@ export const DatabaseSettingsModal: React.FC<DatabaseSettingsModalProps> = ({
                       </span>
                     ) : dbStatus?.configSource === 'ENV_FALLBACK' ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                        환경변수(.env) 기본값 적용
+                        환경변수 설정 적용 중
+                      </span>
+                    ) : dbStatus?.connected ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Supabase 연결됨
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        로컬 지속성 모드
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">
+                        DB 미연결 — 환경변수 또는 DB Settings에서 연결 필요
                       </span>
                     )}
                   </div>

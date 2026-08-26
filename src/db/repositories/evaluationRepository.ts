@@ -167,7 +167,7 @@ export class EvaluationRepository {
       }
     }
 
-    return Array.from(dbClient.evaluations.values());
+    return [];
   }
 
   async findByTicker(ticker: string): Promise<FullTickerEvaluation | null> {
