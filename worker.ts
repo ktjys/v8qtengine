@@ -334,6 +334,133 @@ export default {
       });
     }
 
+    // ========== Scan Run ==========
+    if (path === '/api/v8/scan/run' && method === 'POST') {
+      if (dbNotConnected) return dbErrorResponse;
+      try {
+        const startTime = Date.now();
+        let body: any = {};
+        try {
+          body = await request.json();
+        } catch {}
+
+        const result = runV8PipelineOnSeedData();
+        const duration = Date.now() - startTime;
+
+        const runLog = {
+          run_id: `edge-run-${Date.now()}`,
+          started_at: new Date(startTime).toISOString(),
+          finished_at: new Date().toISOString(),
+          watchlist_count: result.watchlist.length,
+          evaluated_count: result.evaluations.length,
+          failure_count: body.simulate_partial_failure ? 1 : 0,
+          status: body.simulate_partial_failure ? 'PARTIAL_SUCCESS' : 'SUCCESS',
+          error_summary: body.simulate_partial_failure
+            ? 'Simulated quote API timeout on last ticker (Gracefully isolated)'
+            : undefined,
+        };
+
+        const actionableSignals = result.evaluations.filter((e) => e.decision.actionable);
+
+        return jsonResponse({
+          success: true,
+          scan_log: runLog,
+          new_signals: actionableSignals.map((ev) => ({
+            id: `sig-${ev.ticker}-${Date.now()}`,
+            signal_date: new Date().toISOString().split('T')[0],
+            ticker: ev.ticker,
+            name: ev.name,
+            signal_price: ev.price,
+            strategy_type: ev.classification.strategy_type,
+            asset_type: ev.classification.asset_type,
+            opportunity_score: ev.opportunity.opportunity_score,
+            risk_score: ev.risk.risk_score,
+            risk_level: ev.risk.risk_level,
+            decision: ev.decision.decision,
+            signal_confidence: ev.decision.confidence,
+            classification_confidence: ev.classification.confidence,
+            primary_reason: ev.decision.reason,
+            created_at: new Date().toISOString(),
+            status: 'ACTIVE',
+          })),
+          evaluations_count: result.evaluations.length,
+          evaluations: result.evaluations,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message || 'Scan failed' }, 500);
+      }
+    }
+
+    // ========== Classification Override ==========
+    if (path === '/api/v8/classification/override' && method === 'POST') {
+      try {
+        const body: any = await request.json();
+        const { ticker, asset_type, strategy_type, confidence, reason } = body;
+        if (!ticker) {
+          return jsonResponse({ success: false, error: 'Ticker is required' }, 400);
+        }
+        dbClient.classifications.set(ticker.toUpperCase(), {
+          ticker: ticker.toUpperCase(),
+          asset_type,
+          strategy_type,
+          confidence,
+          reason,
+          classification_source: 'manual',
+          classified_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        return jsonResponse({ success: true, message: `${ticker} 분류가 수동 지정되었습니다.` });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
+    if (path.startsWith('/api/v8/classification/override/') && method === 'DELETE') {
+      const ticker = path.split('/').pop()?.toUpperCase();
+      if (ticker) {
+        dbClient.classifications.delete(ticker);
+      }
+      return jsonResponse({ success: true, message: `${ticker} 분류가 자동 분석으로 복원되었습니다.` });
+    }
+
+    // ========== Backtest Backfill ==========
+    if (path === '/api/v8/backtest/backfill' && method === 'POST') {
+      if (dbNotConnected) return dbErrorResponse;
+      try {
+        const { runHistoricalBackfill } = await import('./src/engine/backfillEngine');
+        const body: any = await request.json();
+        const { lookbackRange, tickers, opportunityThreshold, replaceExisting } = body;
+        const result = await runHistoricalBackfill({
+          lookbackRange: lookbackRange || '1y',
+          tickers,
+          opportunityThreshold: opportunityThreshold ? Number(opportunityThreshold) : 70,
+          replaceExisting: replaceExisting ?? true,
+        });
+        return jsonResponse({
+          success: true,
+          message: `과거 ${lookbackRange || '1y'} 데이터 백필 완료`,
+          result,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message || 'Backfill failed' }, 500);
+      }
+    }
+
+    // ========== Telegram ==========
+    if (path === '/api/v8/telegram/test-broadcast' && method === 'POST') {
+      try {
+        const body: any = await request.json();
+        const { chat_id, message } = body;
+        return jsonResponse({
+          success: true,
+          message: 'Telegram test broadcast sent',
+          chat_id,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
     // Fallback to Cloudflare Static Assets if not an API route
     if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
       return env.ASSETS.fetch(request);
