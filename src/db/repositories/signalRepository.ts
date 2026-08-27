@@ -13,7 +13,7 @@ export class SignalRepository {
 
         if (error) {
           dbClient.handleDbError('signals', 'getAll', error);
-        } else if (Array.isArray(data)) {
+        } else if (Array.isArray(data) && data.length > 0) {
           dbClient.signals.clear();
           // Attempt to fetch outcomes in a non-blocking separate query
           let outcomesMap = new Map<string, any>();
@@ -80,7 +80,10 @@ export class SignalRepository {
       }
     }
 
-    return [];
+    if (dbClient.signals.size === 0) {
+      dbClient.seedInMemoryState();
+    }
+    return Array.from(dbClient.signals.values());
   }
 
   async save(signal: SignalSnapshot): Promise<SignalSnapshot> {

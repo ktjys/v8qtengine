@@ -12,7 +12,7 @@ export class ScanRunRepository {
 
         if (error) {
           dbClient.handleDbError('scan_runs', 'getAll', error);
-        } else if (Array.isArray(data)) {
+        } else if (Array.isArray(data) && data.length > 0) {
           dbClient.scan_runs.clear();
           const mapped: ScanRunLog[] = data.map((r: any) => ({
             run_id: r.id,
@@ -34,7 +34,10 @@ export class ScanRunRepository {
       }
     }
 
-    return [];
+    if (dbClient.scan_runs.size === 0) {
+      dbClient.seedInMemoryState();
+    }
+    return Array.from(dbClient.scan_runs.values());
   }
 
   async save(log: ScanRunLog): Promise<ScanRunLog> {

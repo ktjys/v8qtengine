@@ -65,36 +65,37 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [newMemo, setNewMemo] = useState('');
 
   // Filtering
-  const filtered = evaluations.filter((item) => {
+  const filtered = (evaluations || []).filter((item) => {
+    if (!item) return false;
     // Search
     const matchSearch =
-      item.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.classification.strategy_type.toLowerCase().includes(searchTerm.toLowerCase());
+      (item.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.classification?.strategy_type || '').toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchSearch) return false;
 
     // Asset Type
-    if (filterAssetType !== 'ALL' && item.classification.asset_type !== filterAssetType) {
+    if (filterAssetType !== 'ALL' && item.classification?.asset_type !== filterAssetType) {
       return false;
     }
 
     // Strategy
-    if (filterStrategy !== 'ALL' && item.classification.strategy_type !== filterStrategy) {
+    if (filterStrategy !== 'ALL' && item.classification?.strategy_type !== filterStrategy) {
       return false;
     }
 
     // Risk Level
-    if (filterRisk !== 'ALL' && item.risk.risk_level !== filterRisk) {
+    if (filterRisk !== 'ALL' && item.risk?.risk_level !== filterRisk) {
       return false;
     }
 
     // Decision
-    if (filterDecision !== 'ALL' && item.decision.decision !== filterDecision) {
+    if (filterDecision !== 'ALL' && item.decision?.decision !== filterDecision) {
       return false;
     }
 
     // Signals Only
-    if (signalsOnly && !item.decision.actionable) {
+    if (signalsOnly && !item.decision?.actionable) {
       return false;
     }
 
@@ -105,13 +106,13 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const sorted = [...filtered].sort((a, b) => {
     let diff = 0;
     if (sortField === 'opp') {
-      diff = a.opportunity.opportunity_score - b.opportunity.opportunity_score;
+      diff = (a.opportunity?.opportunity_score ?? 0) - (b.opportunity?.opportunity_score ?? 0);
     } else if (sortField === 'risk') {
-      diff = a.risk.risk_score - b.risk.risk_score;
+      diff = (a.risk?.risk_score ?? 0) - (b.risk?.risk_score ?? 0);
     } else if (sortField === 'ticker') {
-      diff = a.ticker.localeCompare(b.ticker);
+      diff = (a.ticker || '').localeCompare(b.ticker || '');
     } else if (sortField === 'change') {
-      diff = a.change1d - b.change1d;
+      diff = (a.change1d ?? 0) - (b.change1d ?? 0);
     }
     return sortOrder === 'desc' ? -diff : diff;
   });

@@ -13,7 +13,7 @@ export class WatchlistRepository {
 
         if (error) {
           dbClient.handleDbError('watchlist', 'getAll', error);
-        } else if (Array.isArray(data)) {
+        } else if (Array.isArray(data) && data.length > 0) {
           dbClient.watchlist.clear();
           const list: WatchlistItem[] = data.map((row: any) => {
             const assetName = dbClient.assets.get(row.ticker)?.name;
@@ -35,7 +35,10 @@ export class WatchlistRepository {
       }
     }
 
-    return [];
+    if (dbClient.watchlist.size === 0) {
+      dbClient.seedInMemoryState();
+    }
+    return Array.from(dbClient.watchlist.values());
   }
 
   async getActive(): Promise<WatchlistItem[]> {

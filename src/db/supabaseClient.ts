@@ -10,6 +10,7 @@ import {
   INITIAL_HISTORICAL_SIGNALS,
   INITIAL_SCAN_RUNS,
   INITIAL_WATCHLIST_RAW,
+  runPipelineOnSeedData,
 } from '../data/seed/initialData';
 
 export interface DatabaseState {
@@ -54,7 +55,38 @@ class UniversalDatabaseClient {
   };
 
   constructor() {
+    this.seedInMemoryState();
     this.initSupabase();
+  }
+
+  public seedInMemoryState() {
+    try {
+      const seed = runPipelineOnSeedData();
+      for (const ev of seed.evaluations) {
+        const clean = ev.ticker.toUpperCase().trim();
+        this.state.evaluations.set(clean, ev);
+        this.state.classifications.set(clean, ev.classification);
+        this.state.assets.set(clean, {
+          ticker: clean,
+          name: ev.name || clean,
+          asset_type: ev.classification.asset_type,
+          exchange: 'US',
+          currency: 'USD',
+          is_active: true,
+        });
+      }
+      for (const w of seed.watchlist) {
+        this.state.watchlist.set(w.ticker.toUpperCase().trim(), w);
+      }
+      for (const s of INITIAL_HISTORICAL_SIGNALS) {
+        this.state.signals.set(s.id, s);
+      }
+      for (const r of INITIAL_SCAN_RUNS) {
+        this.state.scan_runs.set(r.run_id, r);
+      }
+    } catch (e) {
+      console.warn('[SupabaseClient] Error initializing in-memory seed state:', e);
+    }
   }
 
   public isTableAvailable(tableName: string): boolean {

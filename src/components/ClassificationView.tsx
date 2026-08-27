@@ -36,20 +36,21 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
   const [filterSource, setFilterSource] = useState<'ALL' | 'auto' | 'manual'>('ALL');
   const [filterType, setFilterType] = useState<string>('ALL');
 
-  const manualCount = evaluations.filter(
-    (e) => e.classification.classification_source === 'manual'
+  const manualCount = (evaluations || []).filter(
+    (e) => e?.classification?.classification_source === 'manual'
   ).length;
-  const autoCount = evaluations.length - manualCount;
+  const autoCount = (evaluations || []).length - manualCount;
 
-  const filtered = evaluations.filter((e) => {
-    const c = e.classification;
+  const filtered = (evaluations || []).filter((e) => {
+    if (!e) return false;
+    const c = e.classification || ({} as any);
     if (filterSource !== 'ALL' && c.classification_source !== filterSource) return false;
     if (filterType !== 'ALL' && c.asset_type !== filterType) return false;
     if (
       searchTerm &&
-      !e.ticker.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !e.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !c.strategy_type.toLowerCase().includes(searchTerm.toLowerCase())
+      !(e.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !(e.name || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !(c.strategy_type || '').toLowerCase().includes(searchTerm.toLowerCase())
     ) {
       return false;
     }

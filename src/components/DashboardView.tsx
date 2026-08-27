@@ -47,19 +47,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showAllSignals, setShowAllSignals] = useState(false);
 
   // Categorize Today's Watch
-  const opportunities = evaluations
-    .filter((e) => e.decision.decision === 'STRONG_OPPORTUNITY' || e.decision.decision === 'OPPORTUNITY')
-    .sort((a, b) => b.opportunity.opportunity_score - a.opportunity.opportunity_score);
+  const opportunities = (evaluations || [])
+    .filter((e) => e?.decision?.decision === 'STRONG_OPPORTUNITY' || e?.decision?.decision === 'OPPORTUNITY')
+    .sort((a, b) => (b.opportunity?.opportunity_score ?? 0) - (a.opportunity?.opportunity_score ?? 0));
 
-  const watchListItems = evaluations
-    .filter((e) => e.decision.decision === 'WATCH')
-    .sort((a, b) => b.opportunity.opportunity_score - a.opportunity.opportunity_score);
+  const watchListItems = (evaluations || [])
+    .filter((e) => e?.decision?.decision === 'WATCH')
+    .sort((a, b) => (b.opportunity?.opportunity_score ?? 0) - (a.opportunity?.opportunity_score ?? 0));
 
-  const highRiskItems = evaluations
-    .filter((e) => e.risk.risk_level === 'HIGH')
-    .sort((a, b) => b.risk.risk_score - a.risk.risk_score);
+  const highRiskItems = (evaluations || [])
+    .filter((e) => e?.risk?.risk_level === 'HIGH')
+    .sort((a, b) => (b.risk?.risk_score ?? 0) - (a.risk?.risk_score ?? 0));
 
-  const actionableSignalsToday = evaluations.filter((e) => e.decision.actionable);
+  const actionableSignalsToday = (evaluations || []).filter((e) => e?.decision?.actionable);
 
   const displayedWatchItems = showAllWatch ? watchListItems : watchListItems.slice(0, 10);
   const displayedSignals = showAllSignals ? recentSignals : recentSignals.slice(0, 10);

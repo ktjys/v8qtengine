@@ -8,8 +8,12 @@ export async function onRequestPost(context: any) {
       body = await request.json();
     } catch {}
 
-    const botToken = env?.TELEGRAM_BOT_TOKEN || body.botToken;
-    const chatId = env?.TELEGRAM_CHAT_ID || body.chatId;
+    let botToken = (env?.TELEGRAM_BOT_TOKEN || body.botToken || '').trim().replace(/^['"]|['"]$/g, '');
+    let chatId = (env?.TELEGRAM_CHAT_ID || body.chatId || '').trim().replace(/^['"]|['"]$/g, '');
+
+    if (botToken.toLowerCase().startsWith('bot')) {
+      botToken = botToken.substring(3);
+    }
 
     const previewMode = !botToken || !chatId;
 
@@ -51,16 +55,29 @@ export async function onRequestPost(context: any) {
       }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    const desc = data.description || '';
+
+    let friendlyMessage = res.ok
+      ? '텔레그램 봇으로 실제 테스트 메시지가 발송되었습니다!'
+      : `텔레그램 발송 실패: ${desc || '인증 오류'}`;
+
+    if (!res.ok) {
+      if (desc.includes('chat not found')) {
+        friendlyMessage = `대화방을 찾을 수 없습니다 (${desc}). 텔레그램에서 봇과 1:1 대화방을 열고 '/start' 버튼을 누른 후 다시 시도해주세요.`;
+      } else if (desc.includes('bot was blocked') || desc.includes('Forbidden')) {
+        friendlyMessage = `봇이 차단되었거나 시작되지 않았습니다 (${desc}). 텔레그램 봇 대화방에서 '시작(Start)' 버튼을 눌러주세요.`;
+      } else if (desc.includes('Unauthorized') || desc.includes('invalid token')) {
+        friendlyMessage = `봇 토큰(Bot Token)이 올바르지 않습니다 (${desc}). BotFather에서 발급받은 토큰을 다시 확인해주세요.`;
+      }
+    }
 
     return new Response(
       JSON.stringify({
         success: res.ok,
         previewOnly: false,
         telegramResponse: data,
-        message: res.ok
-          ? '텔레그램 봇으로 실제 테스트 메시지가 발송되었습니다!'
-          : `텔레그램 발송 실패: ${data.description || '인증 오류'}`,
+        message: friendlyMessage,
       }),
       {
         headers: {

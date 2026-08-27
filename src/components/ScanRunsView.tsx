@@ -50,36 +50,44 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({ runs, onTriggerScan 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {runs.map((run) => (
-                <tr key={run.run_id} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-200">{run.run_id}</td>
-                  <td className="py-3 px-3 text-slate-400">
-                    {new Date(run.started_at).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3">
-                    {run.status === 'SUCCESS' ? (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        SUCCESS
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        PARTIAL_SUCCESS
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 text-center text-slate-300">{run.watchlist_count}개</td>
-                  <td className="py-3 px-3 text-center text-cyan-400 font-bold">{run.evaluated_count}개</td>
-                  <td className="py-3 px-3 text-center text-amber-400 font-bold">{run.signal_count}건</td>
-                  <td className="py-3 px-3 text-center">
-                    <span className={run.failure_count > 0 ? 'text-rose-400 font-bold' : 'text-slate-500'}>
-                      {run.failure_count}건
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-[11px] font-sans text-slate-400">
-                    {run.error_summary || '전체 파이프라인 무결성 평가 완료'}
+              {(runs || []).length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-500 font-sans">
+                    기록된 스캔 실행 이력이 없습니다. 상단의 '신규 스캔 실행' 버튼을 클릭해보세요.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                (runs || []).map((run) => (
+                  <tr key={run.run_id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-4 font-bold text-slate-200">{run.run_id}</td>
+                    <td className="py-3 px-3 text-slate-400">
+                      {new Date(run.started_at).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-3">
+                      {run.status === 'SUCCESS' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          SUCCESS
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          PARTIAL_SUCCESS
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-center text-slate-300">{run.watchlist_count}개</td>
+                    <td className="py-3 px-3 text-center text-cyan-400 font-bold">{run.evaluated_count}개</td>
+                    <td className="py-3 px-3 text-center text-amber-400 font-bold">{run.signal_count}건</td>
+                    <td className="py-3 px-3 text-center">
+                      <span className={(run.failure_count || 0) > 0 ? 'text-rose-400 font-bold' : 'text-slate-500'}>
+                        {run.failure_count || 0}건
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-[11px] font-sans text-slate-400">
+                      {run.error_summary || '전체 파이프라인 무결성 평가 완료'}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

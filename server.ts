@@ -10,6 +10,7 @@ import { backtestRouter } from './src/api/backtestRoutes';
 import { runRouter } from './src/api/runRoutes';
 import { systemRouter } from './src/api/systemRoutes';
 import { telegramRouter } from './src/api/telegramRoutes';
+import { executeCronScan } from './src/engine/cronScanEngine';
 import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
 import { createSignalSnapshot, formatTelegramNotification } from './src/engine/signalEngine';
@@ -68,50 +69,57 @@ async function startServer() {
   app.use('/api/v8/system', systemRouter);
   app.use('/api/v8/telegram', telegramRouter);
 
-  // Auto-scan / Cron route for local and production parity
-  app.all('/api/v8/cron-scan', async (req, res) => {
-    try {
-      const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
-      const kstHour = nowKST.getUTCHours();
-      const kstMinute = nowKST.getUTCMinutes();
-      const kstTimeStr = `${String(kstHour).padStart(2, '0')}:${String(kstMinute).padStart(2, '0')} KST`;
+  // Auto-scan / Cron routes for local and production parity (supports all aliases and methods)
+  const cronHandler = async (req: express.Request, res: express.Response) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-cron-token, x-telegram-token, x-telegram-chat-id');
 
-      let slotName = '수동/실시간 스캔';
-      if (kstHour >= 6 && kstHour <= 8) {
-        slotName = '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)';
-      } else if (kstHour >= 21 && kstHour <= 23) {
-        slotName = '🌃 [2회차] 프리마켓 갭 분석 & 당일 관심종목 압축';
-      } else if (kstHour >= 1 && kstHour <= 3) {
-        slotName = '🌙 [3회차] 장중 급변 & 모멘텀 브레이크아웃 감시';
-      }
-
-      const scanResult = await getInitialOrLatestEvaluations();
-      const evaluations = scanResult.evaluations || [];
-      const actionableSignals = evaluations.filter((e) => e.decision.actionable);
-
-      res.json({
-        success: true,
-        slot: slotName,
-        kst_time: kstTimeStr,
-        evaluated_count: evaluations.length,
-        actionable_signals_count: actionableSignals.length,
-        actionable_signals: actionableSignals.map((s) => ({
-          ticker: s.ticker,
-          name: s.name,
-          decision: s.decision.decision,
-          opportunity_score: s.opportunity.opportunity_score,
-          risk_level: s.risk.risk_level,
-          price: s.price,
-        })),
-        telegram_status: {
-          configured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
-          message: process.env.TELEGRAM_BOT_TOKEN ? '발송 준비 완료' : '환경변수 미설정 (프리뷰 모드)',
-        },
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
     }
-  });
+
+    try {
+      const q = req.query || {};
+      const b = req.body || {};
+      const headers = req.headers || {};
+
+      const botToken = (
+        (q.bot_token as string) ||
+        (q.token as string) ||
+        b.botToken ||
+        (headers['x-telegram-token'] as string) ||
+        process.env.TELEGRAM_BOT_TOKEN
+      )?.trim();
+
+      const chatId = (
+        (q.chat_id as string) ||
+        b.chatId ||
+        (headers['x-telegram-chat-id'] as string) ||
+        process.env.TELEGRAM_CHAT_ID
+      )?.trim();
+
+      const sourceUrl = `${req.protocol}://${req.get('host')}`;
+
+      const result = await executeCronScan({
+        botToken,
+        chatId,
+        triggeredBy: (headers['user-agent'] as string) || 'CronWebhook',
+        sourceUrl,
+      });
+
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (err: any) {
+      console.error('[server] Cron scan endpoint error:', err);
+      res.status(500).json({
+        success: false,
+        error: err.message || 'Internal error executing cron scan',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  };
+
+  app.all(['/api/v8/cron-scan', '/api/cron-scan', '/api/v8/cron', '/api/cron', '/cron-scan'], cronHandler);
 
   // Schedule information endpoint
   app.get('/api/v8/schedule/info', (req, res) => {

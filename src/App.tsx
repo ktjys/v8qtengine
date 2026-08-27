@@ -16,14 +16,19 @@ import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
+import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runPipelineOnSeedData } from './data/seed/initialData';
+import { calculateBacktestMetrics } from './engine/backtestEngine';
+
+const initialSeed = runPipelineOnSeedData();
+const initialSummary = calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs'>('dashboard');
-  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>([]);
-  const [signals, setSignals] = useState<SignalSnapshot[]>([]);
-  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
-  const [runs, setRuns] = useState<ScanRunLog[]>([]);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(initialSeed.evaluations);
+  const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
+  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(initialSummary);
+  const [runs, setRuns] = useState<ScanRunLog[]>(INITIAL_SCAN_RUNS);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialSeed.watchlist);
 
   // Modals
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -112,15 +117,28 @@ export default function App() {
         safeFetchJson('/api/v8/runs'),
       ]);
 
-      const wlEvals = currentWl?.success && Array.isArray(currentWl.evaluations) ? currentWl.evaluations : [];
-      setEvaluations(wlEvals.length > 0 ? wlEvals : (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) ? loadedEvals.evaluations : []));
-      setSignals(latestSignals?.success && Array.isArray(latestSignals.signals) ? latestSignals.signals : []);
-      setRuns(currentRuns?.success && Array.isArray(currentRuns.runs) ? currentRuns.runs : []);
+      if (currentWl?.success && Array.isArray(currentWl.watchlist) && currentWl.watchlist.length > 0) {
+        setWatchlist(currentWl.watchlist);
+      }
+
+      const wlEvals = currentWl?.success && Array.isArray(currentWl.evaluations) && currentWl.evaluations.length > 0
+        ? currentWl.evaluations
+        : (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) && loadedEvals.evaluations.length > 0 ? loadedEvals.evaluations : null);
+
+      if (wlEvals && wlEvals.length > 0) {
+        setEvaluations(wlEvals);
+      }
+
+      if (latestSignals?.success && Array.isArray(latestSignals.signals) && latestSignals.signals.length > 0) {
+        setSignals(latestSignals.signals);
+      }
+
+      if (currentRuns?.success && Array.isArray(currentRuns.runs) && currentRuns.runs.length > 0) {
+        setRuns(currentRuns.runs);
+      }
 
       if (btData?.success && (btData.data?.summary || btData.summary)) {
-        setBacktestSummary(btData.data?.summary || btData.summary || null);
-      } else {
-        setBacktestSummary(null);
+        setBacktestSummary(btData.data?.summary || btData.summary);
       }
     } catch (err) {
       console.error('Failed to load initial data', err);

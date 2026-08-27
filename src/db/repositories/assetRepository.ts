@@ -54,7 +54,7 @@ export class AssetRepository {
 
         if (error) {
           console.warn('[AssetRepository] Supabase error:', error);
-        } else if (Array.isArray(data)) {
+        } else if (Array.isArray(data) && data.length > 0) {
           console.log(`[AssetRepository] ✅ Loaded ${data.length} assets from Supabase`);
           dbClient.assets.clear();
           // Sync all to in-memory
@@ -70,7 +70,10 @@ export class AssetRepository {
       }
     }
 
-    return [];
+    if (dbClient.assets.size === 0) {
+      dbClient.seedInMemoryState();
+    }
+    return Array.from(dbClient.assets.values());
   }
 
   async upsert(asset: any) {

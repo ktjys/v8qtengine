@@ -23,8 +23,6 @@ interface AutoScanScheduleModalProps {
   onShowToast: (msg: string) => void;
 }
 
-const TELEGRAM_STORAGE_KEY = 'quant_telegram_config';
-
 export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   isOpen,
   onClose,
@@ -76,46 +74,21 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
   const fetchTelegramStatus = async () => {
     try {
-      let savedCfg: { botToken?: string; chatId?: string } | null = null;
-      try {
-        const raw = localStorage.getItem(TELEGRAM_STORAGE_KEY);
-        if (raw) savedCfg = JSON.parse(raw);
-      } catch {}
-
-      if (savedCfg) {
-        if (savedCfg.botToken && !inputBotToken) setInputBotToken(savedCfg.botToken);
-        if (savedCfg.chatId && !inputChatId) setInputChatId(savedCfg.chatId);
-      }
-
       const res = await fetch('/api/v8/telegram/status');
       const data = await res.json();
-
-      // If UI has saved config, synthesize status
-      if (savedCfg?.botToken && savedCfg?.chatId) {
-        setTelegramStatus({
-          ...data,
-          configured: true,
-          botTokenConfigured: true,
-          chatIdConfigured: true,
-          targetChatIdMasked: `${savedCfg.chatId.slice(0, 3)}****`,
-          source: 'UI_DIRECT_CONFIG',
-        });
-      } else {
-        setTelegramStatus(data);
-      }
+      setTelegramStatus(data);
     } catch {}
   };
 
   useEffect(() => {
     if (isOpen) {
+      // Clean up any legacy localStorage entries for maximum security
       try {
-        const raw = localStorage.getItem(TELEGRAM_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed.botToken) setInputBotToken(parsed.botToken);
-          if (parsed.chatId) setInputChatId(parsed.chatId);
-        }
+        localStorage.removeItem('tg_cron_config');
+        localStorage.removeItem('tg_bot_token');
+        localStorage.removeItem('tg_chat_id');
       } catch {}
+
       fetchTelegramStatus();
       setScanResult(null);
     }
@@ -133,30 +106,27 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
     setIsSavingTelegram(true);
     try {
-      try {
-        localStorage.setItem(
-          TELEGRAM_STORAGE_KEY,
-          JSON.stringify({ botToken: cleanToken, chatId: cleanChatId })
-        );
-      } catch {}
-
-      try {
-        await fetch('/api/v8/telegram/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ botToken: cleanToken, chatId: cleanChatId }),
-        });
-      } catch {}
-
-      setTelegramStatus({
-        configured: true,
-        botTokenConfigured: true,
-        chatIdConfigured: true,
-        targetChatIdMasked: `${cleanChatId.slice(0, 3)}****`,
-        source: 'UI_DIRECT_CONFIG',
+      const res = await fetch('/api/v8/telegram/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botToken: cleanToken, chatId: cleanChatId }),
       });
 
-      onShowToast('텔레그램 봇 연동 정보가 브라우저 및 시스템에 저장되었습니다!');
+      if (res.ok) {
+        setTelegramStatus({
+          configured: true,
+          botTokenConfigured: true,
+          chatIdConfigured: true,
+          targetChatIdMasked: `${cleanChatId.slice(0, 3)}****`,
+          source: 'SERVER_PERSISTED',
+        });
+        setInputBotToken('');
+        setInputChatId('');
+        onShowToast('텔레그램 봇 연동 정보가 서버 보안 메모리에 안전하게 등록되었습니다!');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        onShowToast(`서버 등록 실패: ${data.error || '오류 발생'}`);
+      }
     } catch (err: any) {
       onShowToast(`저장 오류: ${err.message}`);
     } finally {
@@ -342,6 +312,66 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     }
   };
 
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<any>(null);
+  const [copiedCurl, setCopiedCurl] = useState(false);
+
+  const handleTestWebhook = async () => {
+    setIsTestingWebhook(true);
+    setWebhookTestResult(null);
+    const start = Date.now();
+
+    try {
+      const cleanToken = inputBotToken.trim();
+      const cleanChat = inputChatId.trim();
+
+      const res = await fetch('/api/v8/cron-scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(cleanToken ? { 'x-telegram-token': cleanToken } : {}),
+          ...(cleanChat ? { 'x-telegram-chat-id': cleanChat } : {}),
+        },
+        body: JSON.stringify({
+          botToken: cleanToken || undefined,
+          chatId: cleanChat || undefined,
+        }),
+      });
+
+      const latency = Date.now() - start;
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { raw: text };
+      }
+
+      setWebhookTestResult({
+        httpStatus: res.status,
+        ok: res.ok,
+        latency,
+        data,
+      });
+
+      if (res.ok && data.success) {
+        onShowToast(`웹훅 테스트 성공 (HTTP 200, ${latency}ms)`);
+      } else {
+        onShowToast(`웹훅 응답 코드: HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      setWebhookTestResult({
+        httpStatus: 0,
+        ok: false,
+        latency: Date.now() - start,
+        error: err.message,
+      });
+      onShowToast(`웹훅 호출 오류: ${err.message}`);
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
+
   const cronEndpointUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/v8/cron-scan` : '/api/v8/cron-scan';
 
   const handleCopyEndpoint = () => {
@@ -349,6 +379,15 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     setCopiedUrl(true);
     onShowToast('스캔 엔드포인트 URL이 클립보드에 복사되었습니다.');
     setTimeout(() => setCopiedUrl(false), 2000);
+  };
+
+  const curlExample = `curl -X POST "${cronEndpointUrl}"`;
+
+  const handleCopyCurl = () => {
+    navigator.clipboard.writeText(curlExample);
+    setCopiedCurl(true);
+    onShowToast('cURL 명령어가 클립보드에 복사되었습니다.');
+    setTimeout(() => setCopiedCurl(false), 2000);
   };
 
   if (!isOpen) return null;
@@ -631,9 +670,12 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
             >
               <div className="flex items-center justify-between">
                 <h4 className="text-xs sm:text-sm font-bold text-slate-200">
-                  💬 텔레그램 연동 정보 직접 입력 / 수정
+                  💬 텔레그램 연동 정보 서버 등록 / 수정
                 </h4>
-                <span className="text-[10px] text-slate-400">브라우저 로컬스토리지 & 서버 동기화</span>
+                <span className="text-[10px] text-cyan-400 font-mono flex items-center space-x-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400 inline" />
+                  <span>서버 보안 격리 (브라우저 저장 X)</span>
+                </span>
               </div>
 
               <div className="space-y-2.5 text-xs">
@@ -693,30 +735,153 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           </div>
         )}
 
-        {/* Tab 3: Cloudflare Cron Setup Guide */}
+        {/* Tab 3: Cloudflare Cron & Webhook Setup Guide */}
         {activeTab === 'cron_setup' && (
           <div className="space-y-4">
-            <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-bold text-slate-200">자동 스캔 웹훅 엔드포인트 URL</h4>
-                <button
-                  onClick={handleCopyEndpoint}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center space-x-1 transition-all"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>{copiedUrl ? '복사됨!' : 'URL 복사'}</span>
-                </button>
+            {/* 1. Webhook URL & Ping Test */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-200 flex items-center space-x-1.5">
+                    <Radio className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>자동 스캔 웹훅 엔드포인트 URL</span>
+                  </h4>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                    GET 또는 POST 요청을 모두 지원하며, 호출 시 퀀트 스캔 후 텔레그램 알림을 자동 전송합니다.
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    onClick={handleCopyEndpoint}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-mono flex items-center space-x-1 transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedUrl ? '복사됨!' : 'URL 복사'}</span>
+                  </button>
+                  <button
+                    onClick={handleTestWebhook}
+                    disabled={isTestingWebhook}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/30 flex items-center space-x-1.5 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isTestingWebhook ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>핑 전송 중...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>웹훅 호출 테스트</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300 break-all">
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300 break-all select-all">
                 {cronEndpointUrl}
               </div>
 
+              {/* Webhook Test Diagnostic Panel */}
+              {webhookTestResult && (
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs space-y-2 animate-fadeIn font-mono">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center space-x-2">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          webhookTestResult.ok
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        }`}
+                      >
+                        HTTP {webhookTestResult.httpStatus || 500}
+                      </span>
+                      <span className="text-slate-300 font-bold">
+                        {webhookTestResult.ok ? '✅ 엔드포인트 정상 작동' : '❌ 호출 실패'}
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      응답 속도: {webhookTestResult.latency}ms
+                    </span>
+                  </div>
+
+                  {webhookTestResult.data && (
+                    <div className="bg-slate-950 p-2.5 rounded-lg text-[11px] text-slate-300 space-y-1.5 border border-slate-800/80">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">스캔 슬롯:</span>
+                        <span className="text-cyan-400 font-bold">{webhookTestResult.data.slot || '수동 스캔'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">분석 종목 수:</span>
+                        <span>{webhookTestResult.data.evaluated_count ?? 0}개</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">포착 시그널:</span>
+                        <span className="text-amber-400 font-bold">{webhookTestResult.data.actionable_signals_count ?? 0}건</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-800 pt-1">
+                        <span className="text-slate-400">텔레그램 전송:</span>
+                        <span className={webhookTestResult.data.telegram_status?.sent ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
+                          {webhookTestResult.data.telegram_status?.message || '결과 없음'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. cURL & Alternative Methods */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-200">
+                  💻 터미널 / cURL 호출 명령어
+                </h4>
+                <button
+                  onClick={handleCopyCurl}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-mono flex items-center space-x-1 transition-all"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copiedCurl ? '복사됨!' : 'cURL 복사'}</span>
+                </button>
+              </div>
+              <pre className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+                {curlExample}
+              </pre>
+              <p className="text-[10px] text-slate-400">
+                💡 텔레그램 토큰을 쿼리스트링으로 직접 전달할 수도 있습니다: <br />
+                <code className="text-cyan-400 text-[9px] break-all">{`${cronEndpointUrl}?bot_token=YOUR_BOT_TOKEN&chat_id=YOUR_CHAT_ID`}</code>
+              </p>
+            </div>
+
+            {/* 3. Free External Cron Trigger Guide */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>무료 외부 크론(cron-job.org / GitHub Actions) 24시간 자동화 가이드</span>
+              </div>
               <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-2 leading-relaxed">
-                <div className="font-semibold text-slate-200">🛠️ 무료 외부 크론 트리거(예: cron-job.org) 연동 3단계:</div>
                 <ol className="list-decimal list-inside space-y-1.5 pl-1 text-[11px]">
-                  <li><a href="https://cron-job.org" target="_blank" rel="noreferrer" className="text-cyan-400 underline inline-flex items-center">cron-job.org <ExternalLink className="w-3 h-3 ml-0.5" /></a> (무료)에 가입합니다.</li>
-                  <li><b>Create Cronjob</b>을 누르고 위 URL을 붙여넣습니다.</li>
-                  <li>실행 주기를 <b>한국 시간 06:30, 22:00, 02:00</b>로 설정하면, 내가 웹을 켜두지 않아도 24시간 자동으로 스캔하고 텔레그램으로 알림을 쏴줍니다!</li>
+                  <li>
+                    <a
+                      href="https://cron-job.org"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-cyan-400 underline inline-flex items-center"
+                    >
+                      cron-job.org <ExternalLink className="w-3 h-3 ml-0.5" />
+                    </a>{' '}
+                    (무료 크론 서비스)에 접속하여 계정을 생성합니다.
+                  </li>
+                  <li>
+                    <b>[Create Cronjob]</b>을 클릭하고 위의 <b>웹훅 URL</b>을 URL 입력창에 붙여넣습니다.
+                  </li>
+                  <li>
+                    요청 방식(Request Method)을 <b>POST</b> 또는 <b>GET</b>으로 선택합니다.
+                  </li>
+                  <li>
+                    스케줄 실행 시간을 <b>한국 시간 06:30, 22:00, 02:00</b> (UTC 기준 21:30, 13:00, 17:00)로 등록하면, 브라우저를 켜두지 않아도 365일 24시간 정해진 시간에 퀀트 스캔을 수행하고 텔레그램으로 알림을 자동 발송합니다.
+                  </li>
                 </ol>
               </div>
             </div>
