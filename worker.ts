@@ -203,10 +203,66 @@ export default {
         return jsonResponse({ success: true, message: `${ticker} updated` });
       }
 
-      // GET
       if (dbNotConnected) return dbErrorResponse;
-      const list = await watchlistRepository.getAll();
-      return jsonResponse({ success: true, count: list.length, watchlist: list });
+      const [list, evaluations] = await Promise.all([
+        watchlistRepository.getAll(),
+        evaluationRepository.getAll(),
+      ]);
+      
+      const evalMap = new Map(evaluations.map(ev => [ev.ticker, ev]));
+      
+      const merged = list.map(item => {
+        const ev = evalMap.get(item.ticker);
+        if (ev) return ev;
+        
+        return {
+          ticker: item.ticker,
+          name: item.name || item.ticker,
+          price: 0,
+          change1d: 0,
+          evaluated_at: item.created_at || new Date().toISOString(),
+          classification: {
+            ticker: item.ticker,
+            asset_type: 'equity' as const,
+            strategy_type: 'CORE_MOMENTUM' as const,
+            confidence: 0,
+            classification_source: 'watchlist_only' as const,
+            reason: '워치리스트만 등록됨, 평가 전',
+            classified_at: item.created_at || new Date().toISOString(),
+            updated_at: item.created_at || new Date().toISOString(),
+          },
+          opportunity: {
+            opportunity_score: 0,
+            technical_score: 0,
+            momentum_score: 0,
+            fundamental_score: 0,
+            valuation_score: 0,
+            components: {
+              weights: { technical: 0.35, momentum: 0.35, fundamental: 0.15, valuation: 0.15 },
+              breakdown: { technical: 0, momentum: 0, fundamental: 0, valuation: 0 },
+            },
+            summary_reason: '평가 미완료',
+          },
+          risk: {
+            risk_score: 0,
+            risk_level: 'MEDIUM' as const,
+            reasons: [],
+            deductions: [],
+          },
+          decision: {
+            decision: 'WATCH' as const,
+            confidence: 0,
+            actionable: false,
+            strategy_type: 'CORE_MOMENTUM' as const,
+            reasons: [],
+            summary: '평가 미완료',
+          },
+          signal_generated: false,
+          data_quality: { isFresh: false, isComplete: false, qualityScore: 0, warnings: ['평가 미실행'] },
+        };
+      });
+      
+      return jsonResponse({ success: true, count: merged.length, evaluations: merged });
     }
 
     // Signals

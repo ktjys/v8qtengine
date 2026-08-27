@@ -112,9 +112,8 @@ export default function App() {
         safeFetchJson('/api/v8/runs'),
       ]);
 
-      // Immediate UI update in a single paint batch
-      setWatchlist(currentWl?.success && Array.isArray(currentWl.watchlist) ? currentWl.watchlist : []);
-      setEvaluations(loadedEvals?.success && Array.isArray(loadedEvals.evaluations) ? loadedEvals.evaluations : []);
+      const wlEvals = currentWl?.success && Array.isArray(currentWl.evaluations) ? currentWl.evaluations : [];
+      setEvaluations(wlEvals.length > 0 ? wlEvals : (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) ? loadedEvals.evaluations : []));
       setSignals(latestSignals?.success && Array.isArray(latestSignals.signals) ? latestSignals.signals : []);
       setRuns(currentRuns?.success && Array.isArray(currentRuns.runs) ? currentRuns.runs : []);
 
