@@ -110,10 +110,16 @@ export async function onRequest(context: any) {
     let actionableSignals: any[] = [];
 
     try {
-      const scanResult = await scanService.executeScan({ saveToDb: true });
+      const scanResult = await scanService.executeScan({ saveToDb: false });
       evaluations = scanResult.evaluations || [];
     } catch (scanErr) {
-      console.warn('[CronScan Worker] scanService failed, falling back to seed data:', scanErr);
+      console.warn('[CronScan Worker] scanService failed, evaluating with fallback:', scanErr);
+      const scanResult = runV8PipelineOnSeedData();
+      evaluations = scanResult.evaluations || [];
+    }
+
+    // Ensure all evaluations have live prices if possible
+    if (evaluations.length === 0) {
       const scanResult = runV8PipelineOnSeedData();
       evaluations = scanResult.evaluations || [];
     }

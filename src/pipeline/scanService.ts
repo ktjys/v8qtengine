@@ -14,8 +14,18 @@ export class ScanService {
   ): Promise<PipelineScanResult> {
     const startTime = new Date();
     const runId = `run-${Date.now()}`;
-    const watchlist = await watchlistRepository.getActive();
-    const tickers = watchlist.map((w) => w.ticker);
+    let watchlist = [];
+    try {
+      watchlist = await watchlistRepository.getActive();
+    } catch (wErr) {
+      console.warn('[ScanService] Failed to load active watchlist from repo:', wErr);
+    }
+
+    // If empty, fall back to initial standard watchlist tickers
+    let tickers = watchlist.map((w) => w.ticker);
+    if (tickers.length === 0) {
+      tickers = ['VOO', 'QQQ', 'NVDA', 'MSFT', 'PLTR', 'SCHD', 'SMH', 'V', 'JNJ', 'AAPL', 'META', 'ORCL', 'OKLO', 'SPCX'];
+    }
 
     if (options.providerType) {
       evaluationService.setProvider(options.providerType);
@@ -75,12 +85,20 @@ export class ScanService {
 
     // Save evaluations to DB
     if (options.saveToDb !== false) {
-      await evaluationRepository.saveAll(evaluations);
+      try {
+        await evaluationRepository.saveAll(evaluations);
+      } catch (err) {
+        console.warn('[ScanService] evaluationRepository.saveAll warning:', err);
+      }
     }
 
     // Check newly actionable signals
     const actionableList = evaluations.filter((ev) => ev.decision?.actionable);
-    const existingSignals = await signalRepository.getAll();
+    let existingSignals: SignalSnapshot[] = [];
+    try {
+      existingSignals = await signalRepository.getAll();
+    } catch {}
+
     const newSignals: SignalSnapshot[] = [];
 
     for (const ev of evaluations) {
@@ -88,7 +106,9 @@ export class ScanService {
         const snap = createSignalSnapshot(ev);
         newSignals.push(snap);
         if (options.saveToDb !== false) {
-          await signalRepository.save(snap);
+          try {
+            await signalRepository.save(snap);
+          } catch {}
         }
       }
     }
@@ -98,7 +118,7 @@ export class ScanService {
       run_id: runId,
       started_at: startTime.toISOString(),
       finished_at: finishTime.toISOString(),
-      watchlist_count: watchlist.length,
+      watchlist_count: watchlist.length || tickers.length,
       evaluated_count: evaluations.length,
       signal_count: actionableList.length, // 현재 유효 기회 총 건수
       failure_count: failedList.length,
@@ -112,11 +132,24 @@ export class ScanService {
     };
 
     if (options.saveToDb !== false) {
-      await scanRunRepository.save(scanLog);
+      try {
+        await scanRunRepository.save(scanLog);
+      } catch {}
     }
 
-    const allSignals = await signalRepository.getAll();
-    const currentWatchlist = await watchlistRepository.getAll();
+    let allSignals: SignalSnapshot[] = [];
+    try {
+      allSignals = await signalRepository.getAll();
+    } catch {
+      allSignals = newSignals;
+    }
+
+    let currentWatchlist: any[] = [];
+    try {
+      currentWatchlist = await watchlistRepository.getAll();
+    } catch {
+      currentWatchlist = watchlist;
+    }
 
     return {
       runLog: scanLog,

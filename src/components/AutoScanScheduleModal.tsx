@@ -155,10 +155,23 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
     try {
       let finalData: any = null;
+      const cleanToken = inputBotToken.trim();
+      const cleanChat = inputChatId.trim();
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (cleanToken) headers['x-telegram-token'] = cleanToken;
+      if (cleanChat) headers['x-telegram-chat-id'] = cleanChat;
 
       // 1. Try POST /api/v8/cron-scan
       try {
-        const res = await fetch('/api/v8/cron-scan', { method: 'POST' });
+        const res = await fetch('/api/v8/cron-scan', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            botToken: cleanToken || undefined,
+            chatId: cleanChat || undefined,
+          }),
+        });
         if (res.ok) {
           finalData = await res.json();
         }

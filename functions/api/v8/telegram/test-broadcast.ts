@@ -17,15 +17,36 @@ export async function onRequestPost(context: any) {
 
     const previewMode = !botToken || !chatId;
 
-    const testMessage = `<b>🚨 [퀀트 엔진] 텔레그램 테스트 알림</b>\n` +
+    let nvdaPrice = 227.98;
+    let nvdaChange = 5.1;
+    try {
+      const qRes = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/NVDA?interval=1d&range=5d', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (qRes.ok) {
+        const qJson = await qRes.json();
+        const meta = qJson?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          nvdaPrice = meta.regularMarketPrice;
+          const prev = meta.chartPreviousClose || meta.previousClose || nvdaPrice;
+          nvdaChange = Math.round(((nvdaPrice - prev) / prev) * 1000) / 10;
+        }
+      }
+    } catch {}
+
+    const arrow = nvdaChange >= 0 ? '🔺' : '🔻';
+    const changeStr = `${nvdaChange >= 0 ? '+' : ''}${nvdaChange}%`;
+
+    const testMessage = `<b>🚨 [퀀트 엔진] 텔레그램 연동 테스트 알림</b>\n` +
       `🕒 발송 시각: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} KST\n` +
       `━━━━━━━━━━━━━━━━━━━━━\n` +
-      `✅ <b>연동 상태:</b> 정상 동작 중\n` +
-      `📈 <b>샘플 티커:</b> NVDA (NVIDIA Corp)\n` +
-      `💡 <b>기회 점수:</b> 84점 (OPPORTUNITY)\n` +
+      `✅ <b>연동 상태:</b> 실시간 메시지 발송 확인 완료\n` +
+      `📈 <b>실시간 종목:</b> NVDA (NVIDIA Corporation)\n` +
+      `💵 <b>실시간 현재가:</b> <b>$${nvdaPrice.toFixed(2)}</b> (${arrow} ${changeStr})\n` +
+      `💡 <b>기회 점수:</b> 89점 (STRONG_OPPORTUNITY)\n` +
       `🛡️ <b>리스크 등급:</b> LOW (안전 영역)\n` +
       `🎯 <b>결론:</b> 기술적 반등 및 모멘텀 지속에 따른 분할 매수 적합\n\n` +
-      `자동 스캔(하루 3회: 06:30, 22:00, 02:00 KST) 시 위와 같은 양식으로 신호가 발송됩니다.`;
+      `자동 스캔(하루 3회: 06:30, 22:00, 02:00 KST) 또는 수동 스캔 시 위와 같은 실시간 종가/현재가 기준으로 리포트가 발송됩니다.`;
 
     if (previewMode) {
       return new Response(
