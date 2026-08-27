@@ -14,7 +14,31 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { BackfillResult, runHistoricalBackfill } from '../engine/backfillEngine';
+
+interface BackfillResult {
+  success: boolean;
+  totalTickers: number;
+  totalBarsIngested: number;
+  totalSignalsGenerated: number;
+  completedSignals: number;
+  winRate5d: number;
+  winRate10d: number;
+  winRate20d: number;
+  avgReturn20d: number;
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  detailsByTicker: Record<
+    string,
+    {
+      barsCount: number;
+      signalsCount: number;
+      winRate20d: number;
+      avgReturn20d: number;
+    }
+  >;
+}
 
 interface BackfillModalProps {
   isOpen: boolean;
@@ -54,48 +78,35 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
     }, 1600);
 
     try {
-      let finalResult: BackfillResult | null = null;
-
-      // 1. Try server endpoint
-      try {
-        const res = await fetch('/api/v8/backtest/backfill', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lookbackRange,
-            opportunityThreshold: threshold,
-            replaceExisting,
-          }),
-        });
-
-        if (res.ok) {
-          const text = await res.text();
-          if (text && text.trim().startsWith('{')) {
-            const data = JSON.parse(text);
-            if (data.success && data.result) {
-              finalResult = data.result;
-            }
-          }
-        }
-      } catch (netErr) {
-        console.warn('Backend backfill request failed, using local engine fallback:', netErr);
-      }
-
-      // 2. Direct fallback to internal engine if network/server is unavailable
-      if (!finalResult) {
-        finalResult = await runHistoricalBackfill({
+      const res = await fetch('/api/v8/backtest/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           lookbackRange,
           opportunityThreshold: threshold,
           replaceExisting,
-        });
-      }
+        }),
+      });
 
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
 
-      if (!finalResult || !finalResult.success) {
-        throw new Error('백필 실행 중 유효한 결과를 생성하지 못했습니다.');
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        throw new Error(`서버 오류 (${res.status}): ${errorText || '백필 요청에 실패했습니다.'}`);
       }
+
+      const text = await res.text();
+      if (!text || !text.trim().startsWith('{')) {
+        throw new Error('서버로부터 유효하지 않은 응답을 받았습니다.');
+      }
+
+      const data = JSON.parse(text);
+      if (!data.success || !data.result) {
+        throw new Error(data.message || '백필 실행 중 유효한 결과를 생성하지 못했습니다.');
+      }
+
+      const finalResult: BackfillResult = data.result;
 
       setResult(finalResult);
       onShowToast(`과거 ${lookbackRange} 백필 완료: ${finalResult.totalSignalsGenerated}개 시그널 생성`);
