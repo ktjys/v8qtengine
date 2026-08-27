@@ -1,3 +1,4 @@
+import { scanService } from '../../../src/pipeline/scanService';
 import { runV8PipelineOnSeedData } from '../../../src/data/seed/initialData';
 
 function sanitizeToken(token?: string | null): string | null {
@@ -104,10 +105,20 @@ export async function onRequest(context: any) {
       slotName = '🌙 [3회차] 장중 급변 & 모멘텀 브레이크아웃 감시';
     }
 
-    // 3. Execute Quant Pipeline Evaluation
-    const scanResult = runV8PipelineOnSeedData();
-    const evaluations = scanResult.evaluations || [];
-    const actionableSignals = evaluations.filter((e) => e.decision?.actionable);
+    // 3. Execute Quant Pipeline Evaluation with Live Market Data
+    let evaluations: any[] = [];
+    let actionableSignals: any[] = [];
+
+    try {
+      const scanResult = await scanService.executeScan({ saveToDb: true });
+      evaluations = scanResult.evaluations || [];
+    } catch (scanErr) {
+      console.warn('[CronScan Worker] scanService failed, falling back to seed data:', scanErr);
+      const scanResult = runV8PipelineOnSeedData();
+      evaluations = scanResult.evaluations || [];
+    }
+
+    actionableSignals = evaluations.filter((e) => e.decision?.actionable);
 
     // 4. Send Telegram Notification if configured
     const botToken =

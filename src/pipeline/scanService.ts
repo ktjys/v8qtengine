@@ -79,6 +79,7 @@ export class ScanService {
     }
 
     // Check newly actionable signals
+    const actionableList = evaluations.filter((ev) => ev.decision?.actionable);
     const existingSignals = await signalRepository.getAll();
     const newSignals: SignalSnapshot[] = [];
 
@@ -99,7 +100,7 @@ export class ScanService {
       finished_at: finishTime.toISOString(),
       watchlist_count: watchlist.length,
       evaluated_count: evaluations.length,
-      signal_count: newSignals.length,
+      signal_count: actionableList.length, // 현재 유효 기회 총 건수
       failure_count: failedList.length,
       failed_tickers: failedList,
       items,

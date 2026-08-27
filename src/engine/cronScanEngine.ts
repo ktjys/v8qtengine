@@ -1,6 +1,8 @@
 import { runV8PipelineOnSeedData } from '../data/seed/initialData';
 import { scanRunRepository } from '../db/repositories/scanRunRepository';
 import { signalRepository } from '../db/repositories/signalRepository';
+import { watchlistRepository } from '../db/repositories/watchlistRepository';
+import { scanService } from '../pipeline/scanService';
 import { telegramNotifier } from '../notification/telegramNotifier';
 import { createSignalSnapshot } from './signalEngine';
 import { FullTickerEvaluation, ScanRunLog } from '../types/v8';
@@ -61,10 +63,23 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
   }
 
   try {
-    // 2. Execute Quant Pipeline
-    const pipelineData = runV8PipelineOnSeedData();
-    const evaluations: FullTickerEvaluation[] = pipelineData.evaluations || [];
-    const actionable = evaluations.filter((e) => e.decision?.actionable);
+    // 2. Execute Quant Pipeline across all active watchlist items
+    let evaluations: FullTickerEvaluation[] = [];
+    let actionable: FullTickerEvaluation[] = [];
+    let watchlistTotalCount = 0;
+
+    try {
+      const scanResult = await scanService.executeScan({ saveToDb: true });
+      evaluations = scanResult.evaluations || [];
+      watchlistTotalCount = scanResult.watchlist?.length || evaluations.length;
+    } catch (scanErr) {
+      console.warn('[CronScan] ScanService failed, falling back to seed data:', scanErr);
+      const pipelineData = runV8PipelineOnSeedData();
+      evaluations = pipelineData.evaluations || [];
+      watchlistTotalCount = pipelineData.watchlist?.length || evaluations.length;
+    }
+
+    actionable = evaluations.filter((e) => e.decision?.actionable);
 
     // 3. Save new actionable snapshots into signalRepository
     for (const item of actionable) {
@@ -82,7 +97,7 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       run_id: runId,
       started_at: new Date(startTime).toISOString(),
       finished_at: new Date().toISOString(),
-      watchlist_count: evaluations.length,
+      watchlist_count: watchlistTotalCount,
       evaluated_count: evaluations.length,
       signal_count: actionable.length,
       failure_count: 0,

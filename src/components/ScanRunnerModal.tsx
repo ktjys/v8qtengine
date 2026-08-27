@@ -201,8 +201,13 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                   <div className="text-xs sm:text-sm font-bold text-cyan-400">{completedLog.evaluated_count} / {completedLog.watchlist_count}</div>
                 </div>
                 <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">발생 시그널</div>
-                  <div className="text-xs sm:text-sm font-bold text-amber-400">{newSignals.length}건</div>
+                  <div className="text-[10px] text-slate-400">포착 시그널</div>
+                  <div className="text-xs sm:text-sm font-bold text-amber-400">
+                    {completedLog.signal_count}건
+                    {newSignals.length > 0 && newSignals.length !== completedLog.signal_count && (
+                      <span className="text-[10px] text-emerald-400 font-normal ml-1">(신규 {newSignals.length})</span>
+                    )}
+                  </div>
                 </div>
                 <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
                   <div className="text-[10px] text-slate-400">실패/격리</div>
