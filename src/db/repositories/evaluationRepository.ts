@@ -6,68 +6,75 @@ export class EvaluationRepository {
   async saveAll(evaluations: FullTickerEvaluation[]): Promise<void> {
     if (!evaluations || evaluations.length === 0) return;
 
-    // 1. Update in-memory state
     for (const ev of evaluations) {
       const clean = ev.ticker.toUpperCase().trim();
       dbClient.evaluations.set(clean, ev);
     }
 
-    if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
-      try {
-        // 2. Batch upsert assets
-        const assetRows = evaluations.map((ev) => {
-          const clean = ev.ticker.toUpperCase().trim();
-          return {
-            ticker: clean,
-            name: ev.name || clean,
-            asset_type: ev.classification?.asset_type || 'equity',
-            exchange: 'US',
-            currency: 'USD',
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-        });
+    if (!dbClient.isTableAvailable('evaluations') || !dbClient.supabase) {
+      return;
+    }
 
-        await dbClient.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
+    try {
+      const assetRows = evaluations.map((ev) => {
+        const clean = ev.ticker.toUpperCase().trim();
+        return {
+          ticker: clean,
+          name: ev.name || clean,
+          asset_type: ev.classification?.asset_type || 'equity',
+          exchange: 'US',
+          currency: 'USD',
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      });
 
-        const evalPayloads = evaluations.map((ev) => {
-          const clean = ev.ticker.toUpperCase().trim();
-          return {
-            ticker: clean,
-            evaluation_date: ev.evaluated_at || new Date().toISOString(),
-            strategy_type: ev.classification?.strategy_type || 'CORE_MOMENTUM',
-            technical_score: ev.opportunity?.sub_scores?.technical_score ?? 70,
-            momentum_score: ev.opportunity?.sub_scores?.momentum_score ?? 70,
-            fundamental_score: ev.opportunity?.sub_scores?.fundamental_score ?? 70,
-            valuation_score: ev.opportunity?.sub_scores?.valuation_score ?? 70,
-            opportunity_score: ev.opportunity?.opportunity_score ?? 70,
-            risk_score: ev.risk?.risk_score ?? 50,
-            risk_level: ev.risk?.risk_level ?? 'MEDIUM',
-            decision: ev.decision?.decision ?? 'HOLD',
-            confidence: ev.decision?.confidence ?? 0.8,
-            reason_json: {
-              name: ev.name,
-              price: ev.price,
-              change1d: ev.change1d,
-              classification: ev.classification,
-              opportunity: ev.opportunity,
-              risk: ev.risk,
-              decision: ev.decision,
-              data_quality: ev.data_quality,
-            },
-          };
-        });
+      await dbClient.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
 
-        const { error } = await dbClient.supabase
-          .from('evaluations')
-          .upsert(evalPayloads, { onConflict: 'ticker' });
-        if (error) {
-          dbClient.handleDbError('evaluations', 'saveAll', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError('evaluations', 'saveAll', err);
+      const tickers = evaluations.map((ev) => ev.ticker.toUpperCase().trim());
+
+      await dbClient.supabase
+        .from('evaluations')
+        .delete()
+        .in('ticker', tickers);
+
+      const evalPayloads = evaluations.map((ev) => {
+        const clean = ev.ticker.toUpperCase().trim();
+        return {
+          ticker: clean,
+          evaluation_date: ev.evaluated_at || new Date().toISOString(),
+          strategy_type: ev.classification?.strategy_type || 'CORE_MOMENTUM',
+          technical_score: ev.opportunity?.sub_scores?.technical_score ?? 70,
+          momentum_score: ev.opportunity?.sub_scores?.momentum_score ?? 70,
+          fundamental_score: ev.opportunity?.sub_scores?.fundamental_score ?? 70,
+          valuation_score: ev.opportunity?.sub_scores?.valuation_score ?? 70,
+          opportunity_score: ev.opportunity?.opportunity_score ?? 70,
+          risk_score: ev.risk?.risk_score ?? 50,
+          risk_level: ev.risk?.risk_level ?? 'MEDIUM',
+          decision: ev.decision?.decision ?? 'HOLD',
+          confidence: ev.decision?.confidence ?? 0.8,
+          reason_json: {
+            name: ev.name,
+            price: ev.price,
+            change1d: ev.change1d,
+            classification: ev.classification,
+            opportunity: ev.opportunity,
+            risk: ev.risk,
+            decision: ev.decision,
+            data_quality: ev.data_quality,
+          },
+        };
+      });
+
+      const { error } = await dbClient.supabase
+        .from('evaluations')
+        .insert(evalPayloads);
+      if (error) {
+        dbClient.handleDbError('evaluations', 'saveAll', error);
       }
+    } catch (err) {
+      dbClient.handleDbError('evaluations', 'saveAll', err);
     }
   }
 
