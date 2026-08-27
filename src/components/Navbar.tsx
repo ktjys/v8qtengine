@@ -3,7 +3,6 @@ import {
   Activity,
   Bell,
   Clock,
-  Database,
   Layers,
   ListFilter,
   RefreshCw,
@@ -15,7 +14,6 @@ interface NavbarProps {
   activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs';
   setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs') => void;
   onOpenScanModal: () => void;
-  onOpenDbModal: () => void;
   onOpenScheduleModal: () => void;
   totalCount: number;
   signalsCount: number;
@@ -25,7 +23,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   onOpenScanModal,
-  onOpenDbModal,
   onOpenScheduleModal,
   totalCount,
   signalsCount,
@@ -132,16 +129,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
               <span className="hidden sm:inline">자동 알림</span>
-            </button>
-
-            <button
-              id="header-db-settings-btn"
-              onClick={onOpenDbModal}
-              className="flex items-center space-x-1 p-2 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-medium border border-slate-700 transition-all active:scale-95"
-              title="데이터베이스 설정 및 마이그레이션"
-            >
-              <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
-              <span className="hidden sm:inline">DB 설정</span>
             </button>
 
             <button

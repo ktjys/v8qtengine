@@ -27,7 +27,6 @@ import { ClassificationView } from './components/ClassificationView';
 import { ScanRunsView } from './components/ScanRunsView';
 import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
-import { DatabaseSettingsModal } from './components/DatabaseSettingsModal';
 import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 
@@ -43,7 +42,6 @@ export default function App() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [selectedModalTab, setSelectedModalTab] = useState<'overview' | 'chart'>('overview');
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
-  const [isDbModalOpen, setIsDbModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -377,7 +375,6 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenScanModal={() => setIsScanModalOpen(true)}
-        onOpenDbModal={() => setIsDbModalOpen(true)}
         onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         totalCount={evaluations.length}
         signalsCount={signals.length}
@@ -454,16 +451,6 @@ export default function App() {
         <ScanRunnerModal
           onClose={() => setIsScanModalOpen(false)}
           onScanCompleted={handleScanCompleted}
-        />
-      )}
-
-      {/* Database Settings Modal */}
-      {isDbModalOpen && (
-        <DatabaseSettingsModal
-          isOpen={isDbModalOpen}
-          onClose={() => setIsDbModalOpen(false)}
-          onRefreshAllData={loadAllData}
-          onShowToast={showToast}
         />
       )}
 

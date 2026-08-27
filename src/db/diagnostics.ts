@@ -57,16 +57,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
   const isConnected = Boolean(dbClient.supabase && dbClient.isSupabaseConnected);
   const client = dbClient.supabase;
 
-  let maskedUrl: string | null = null;
-  if (dbClient.getConfig().url) {
-    const rawUrl = dbClient.getConfig().url;
-    try {
-      const u = new URL(rawUrl);
-      maskedUrl = `${u.protocol}//${u.host}`;
-    } catch {
-      maskedUrl = rawUrl.substring(0, 15) + '...';
-    }
-  }
+  let maskedUrl: string | null = dbClient.getMaskedHost();
 
   const tableResults: Record<string, DiagnosticTableResult> = {};
   let totalRecords = 0;

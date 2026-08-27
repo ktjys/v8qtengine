@@ -51,38 +51,10 @@ systemRouter.get('/db/status', async (req, res) => {
   }
 });
 
-// POST /api/v8/system/db/config (Update and connect to Supabase)
-systemRouter.post('/db/config', async (req, res) => {
-  try {
-    const { url, key } = req.body;
-    if (!url || !key) {
-      return res.status(400).json({ error: 'Supabase URL과 Key를 모두 전달해야 합니다.' });
-    }
-
-    const result = await dbClient.configureSupabase(url, key);
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-
-    res.json({
-      success: true,
-      message: 'Supabase 데이터베이스가 성공적으로 연결되었습니다.',
-      status: dbClient.getStatus(),
-      tables: result.tables,
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// POST /api/v8/system/db/disconnect (Reset connection to default production DB)
-systemRouter.post('/db/disconnect', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Supabase 기본 데이터베이스 연결이 유지됩니다.',
-    status: dbClient.getStatus(),
-  });
-});
+// NOTE: There is no POST /db/config or /db/disconnect route here. DB credentials
+// are fixed at process startup from server-side env vars only (SUPABASE_URL /
+// SUPABASE_KEY) — no HTTP request, from a browser or otherwise, can set,
+// change, or reset them at runtime.
 
 // POST /api/v8/system/db/clear (Clear all records from DB and memory)
 systemRouter.post('/db/clear', async (req, res) => {

@@ -34,7 +34,7 @@ async function ensureDbConnected(env: any): Promise<boolean> {
   const envUrl = env?.SUPABASE_URL || '';
   const envKey = env?.SUPABASE_KEY || '';
   if (envUrl && envKey) {
-    const result = await dbClient.configureSupabase(envUrl, envKey);
+    const result = await dbClient.connectFromTrustedEnv(envUrl, envKey);
     return result.success;
   }
   return false;
@@ -62,7 +62,7 @@ export default {
     const dbNotConnected = !dbClient.isSupabaseConnected;
     const dbErrorResponse = jsonResponse({
       success: false,
-      error: 'Supabase DB가 연결되지 않았습니다. Cloudflare 환경변수 SUPABASE_URL과 SUPABASE_KEY를 설정하거나, DB Settings에서 연결하세요.',
+      error: 'Supabase DB가 연결되지 않았습니다. Cloudflare 환경변수 SUPABASE_URL과 SUPABASE_KEY를 설정하세요.',
       connected: false,
     }, 503);
 
@@ -291,37 +291,9 @@ export default {
       }
     }
 
-    // POST /api/v8/system/db/config — UI에서 Supabase 연결 정보 수신
-    if (path === '/api/v8/system/db/config' && method === 'POST') {
-      try {
-        const body: any = await request.json();
-        const { url, key } = body;
-        if (!url || !key) {
-          return jsonResponse({ success: false, error: 'Supabase URL과 Key를 모두 전달해야 합니다.' }, 400);
-        }
-        const result = await dbClient.configureSupabase(url, key);
-        if (!result.success) {
-          return jsonResponse({ success: false, error: result.error }, 400);
-        }
-        return jsonResponse({
-          success: true,
-          message: 'Supabase 데이터베이스가 성공적으로 연결되었습니다.',
-          status: dbClient.getStatus(),
-          tables: result.tables,
-        });
-      } catch (err: any) {
-        return jsonResponse({ success: false, error: err.message }, 500);
-      }
-    }
-
-    // POST /api/v8/system/db/disconnect
-    if (path === '/api/v8/system/db/disconnect' && method === 'POST') {
-      return jsonResponse({
-        success: true,
-        message: 'Supabase 기본 데이터베이스 연결이 유지됩니다.',
-        status: dbClient.getStatus(),
-      });
-    }
+    // NOTE: There is no POST /api/v8/system/db/config route. DB credentials are
+    // fixed at process/Worker startup from trusted env bindings only — no HTTP
+    // request (from a browser or otherwise) can set or change them.
 
     // GET /api/v8/system/db/schema-sql
     if (path === '/api/v8/system/db/schema-sql') {

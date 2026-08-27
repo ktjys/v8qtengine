@@ -38,7 +38,7 @@ class UniversalDatabaseClient {
   public supabase: SupabaseClient | null = null;
   public isSupabaseConnected = false;
   public missingTables = new Set<string>();
-  public configSource: 'UI_CONFIGURED' | 'ENV_FALLBACK' | 'UNCONFIGURED' = 'UNCONFIGURED';
+  public configSource: 'ENV' | 'UNCONFIGURED' = 'UNCONFIGURED';
   private currentUrl = '';
   private currentKey = '';
   private state: DatabaseState = {
@@ -87,33 +87,28 @@ class UniversalDatabaseClient {
   }
 
   private initSupabase() {
-    // 1. Check Environment Variables
+    // Server-side only. Credentials come exclusively from process.env at process
+    // startup (set via .env / platform runtime vars). There is intentionally no
+    // `import.meta.env` / VITE_-prefixed fallback here: Vite inlines VITE_* values
+    // into the client bundle at build time, which would ship real DB credentials
+    // to every visitor's browser. This module must never be imported from
+    // browser-executed code (React components) for that same reason.
     let envUrl = '';
     let envKey = '';
     try {
-      if (typeof process !== 'undefined' && process.env) {
-        envUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-        envKey =
-          process.env.SUPABASE_KEY ||
-          process.env.SUPABASE_SERVICE_ROLE_KEY ||
-          process.env.SUPABASE_ANON_KEY ||
-          process.env.VITE_SUPABASE_ANON_KEY ||
-          '';
+      if (typeof window === 'undefined' && typeof process !== 'undefined' && process.env) {
+        envUrl = process.env.SUPABASE_URL || '';
+        envKey = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
       }
     } catch {}
-
-    if (!envUrl && typeof import.meta !== 'undefined' && (import.meta as any).env) {
-      envUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-      envKey = envKey || (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
-    }
 
     if (envUrl && envKey) {
       this.currentUrl = envUrl;
       this.currentKey = envKey;
-      this.configSource = 'ENV_FALLBACK';
+      this.configSource = 'ENV';
     } else {
       this.configSource = 'UNCONFIGURED';
-      console.warn('[SupabaseClient] ⚠️ No DB credentials found. Set SUPABASE_URL and SUPABASE_KEY via env vars or use the DB Settings modal.');
+      console.warn('[SupabaseClient] ⚠️ No DB credentials found. Set SUPABASE_URL and SUPABASE_KEY via server-side env vars (.env / platform runtime vars). Falling back to in-memory storage.');
       return;
     }
 
@@ -137,52 +132,36 @@ class UniversalDatabaseClient {
     }
   }
 
-  public async configureSupabase(
+  // Server-internal only: connects using credentials pulled from a trusted
+  // runtime env binding (e.g. Cloudflare Worker `env.SUPABASE_URL/KEY`, which —
+  // unlike Node's process.env — is only available per-request inside the Worker
+  // and is never reachable from client code). This must NEVER be wired to an
+  // HTTP route or otherwise be callable with a value supplied by a request body,
+  // query string, or header — that would let any caller (including a browser)
+  // point the server at an arbitrary DB. There is no equivalent for changing
+  // credentials at runtime; they are fixed for the lifetime of the process.
+  public async connectFromTrustedEnv(
     url: string,
     key: string
-  ): Promise<{ success: boolean; error?: string; tables?: Record<string, TableStatusInfo> }> {
-    if (this.isSupabaseConnected) {
-      const tables = await this.checkTableStatus();
-      return { success: true, tables };
-    }
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.isSupabaseConnected) return { success: true };
 
     const cleanUrl = url.trim();
     const cleanKey = key.trim();
-
     if (!cleanUrl || !cleanKey) {
-      return { success: false, error: 'Supabase URL과 API Key를 모두 입력해야 합니다.' };
+      return { success: false, error: 'Missing SUPABASE_URL/SUPABASE_KEY env bindings.' };
     }
 
     try {
-      const client = createClient(cleanUrl, cleanKey, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
+      this.supabase = createClient(cleanUrl, cleanKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
       });
-
-      // Test connection by checking assets table
-      const { error } = await client.from('assets').select('ticker', { count: 'exact', head: true });
-
-      if (error && error.code !== '42P01' && !error.message.includes('relation "assets" does not exist')) {
-        if (error.message.includes('JWT') || error.message.includes('Invalid API key') || error.message.includes('fetch failed')) {
-          return { success: false, error: `Supabase 연결 실패: ${error.message}` };
-        }
-      }
-
-      this.supabase = client;
       this.isSupabaseConnected = true;
       this.currentUrl = cleanUrl;
       this.currentKey = cleanKey;
-      this.configSource = 'UI_CONFIGURED';
-      if (typeof process !== 'undefined' && process.env) {
-        process.env.SUPABASE_URL = cleanUrl;
-        process.env.SUPABASE_KEY = cleanKey;
-      }
+      this.configSource = 'ENV';
       this.missingTables.clear();
-
-      const tables = await this.checkTableStatus();
-      return { success: true, tables };
+      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Supabase 클라이언트 생성 중 오류가 발생했습니다.' };
     }
@@ -420,16 +399,26 @@ class UniversalDatabaseClient {
     return this.state.scan_runs;
   }
 
+  // Intentionally does NOT return the URL or any form of the key (masked or
+  // otherwise). No caller — including the browser — needs the real connection
+  // details; "connected: boolean" is sufficient for any UI to show DB health.
+  // Server-side diagnostics helper only: returns the DB host with no path,
+  // query, or credentials — safe to log or show in an internal ops panel.
+  // Never returns the key in any form.
+  getMaskedHost(): string | null {
+    if (!this.currentUrl) return null;
+    try {
+      const u = new URL(this.currentUrl);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return null;
+    }
+  }
+
   getConfig() {
     return {
       connected: this.isSupabaseConnected && this.supabase !== null,
-      url: this.currentUrl,
-      maskedKey: this.currentKey
-        ? this.currentKey.slice(0, 8) + '...' + this.currentKey.slice(-4)
-        : '',
-      hasKey: !!this.currentKey,
       configSource: this.configSource,
-      isUiOverridden: this.configSource === 'UI_CONFIGURED',
     };
   }
 
@@ -437,9 +426,7 @@ class UniversalDatabaseClient {
     return {
       connected: this.isSupabaseConnected && this.supabase !== null,
       type: 'supabase' as const,
-      url: this.currentUrl,
       configSource: this.configSource,
-      isUiOverridden: this.configSource === 'UI_CONFIGURED',
       evaluationsCount: this.state.evaluations.size,
       signalsCount: this.state.signals.size,
       scanRunsCount: this.state.scan_runs.size,
