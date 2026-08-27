@@ -122,20 +122,12 @@ export default {
     if (path === '/api/v8/evaluations') {
       if (dbNotConnected) return dbErrorResponse;
       try {
-        const [existingEvaluations, allAssets] = await Promise.all([
-          evaluationRepository.getAll(),
-          assetRepository.getAll(),
-        ]);
-        const assetTickerSet = new Set(allAssets.map((a) => a.ticker.toUpperCase()));
-
-        const finalEvaluations = assetTickerSet.size > 0
-          ? existingEvaluations.filter((e) => assetTickerSet.has(e.ticker.toUpperCase()))
-          : existingEvaluations;
+        const existingEvaluations = await evaluationRepository.getAll();
 
         return jsonResponse({
           success: true,
-          count: finalEvaluations.length,
-          evaluations: finalEvaluations,
+          count: existingEvaluations.length,
+          evaluations: existingEvaluations,
           provider: evaluationService.getProviderName(),
         });
       } catch (err: any) {
