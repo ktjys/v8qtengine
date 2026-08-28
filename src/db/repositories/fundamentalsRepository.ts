@@ -165,25 +165,7 @@ export class FundamentalsRepository {
         if (error) {
           dbClient.handleDbError('fundamentals', 'getAsOf', error);
         } else if (data) {
-          const rec: FundamentalsRecord = {
-            ticker: data.ticker,
-            as_of_date: data.as_of_date,
-            revenue: data.revenue,
-            revenue_growth: data.revenue_growth,
-            eps: data.eps,
-            eps_growth: data.eps_growth,
-            operating_margin: data.operating_margin,
-            free_cash_flow: data.free_cash_flow,
-            fcf_margin: data.fcf_margin,
-            market_cap: Number(data.market_cap),
-            trailing_pe: data.trailing_pe,
-            forward_pe: data.forward_pe,
-            ps_ratio: data.ps_ratio,
-            peg_ratio: data.peg_ratio,
-            source: data.source || 'supabase',
-            fetched_at: data.fetched_at,
-          };
-          return rec;
+          return toRecord(data);
         }
       } catch (err) {
         dbClient.handleDbError('fundamentals', 'getAsOf', err);
@@ -200,6 +182,60 @@ export class FundamentalsRepository {
     matching.sort((a, b) => b.as_of_date.localeCompare(a.as_of_date));
     return matching[0];
   }
+
+  /** PIT 히스토리 전체 조회 (모든 as_of_date <= evaluationDate) */
+  async getHistoryAsOf(ticker: string, evaluationDate?: string): Promise<FundamentalsRecord[]> {
+    const clean = ticker.toUpperCase().trim();
+    const asOfDate = evaluationDate ? evaluationDate.split('T')[0] : undefined;
+
+    if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
+      try {
+        let q = dbClient.supabase
+          .from('fundamentals')
+          .select('*')
+          .eq('ticker', clean);
+        if (asOfDate) q = q.lte('as_of_date', asOfDate);
+        const { data, error } = await q.order('as_of_date', { ascending: true });
+        if (error) {
+          dbClient.handleDbError('fundamentals', 'getHistoryAsOf', error);
+        } else if (data && data.length > 0) {
+          return data.map(toRecord);
+        }
+      } catch (err) {
+        dbClient.handleDbError('fundamentals', 'getHistoryAsOf', err);
+      }
+    }
+
+    const result: FundamentalsRecord[] = [];
+    for (const [k, v] of dbClient.fundamentals.entries()) {
+      if (k.startsWith(`${clean}_`) && (!asOfDate || v.as_of_date <= asOfDate)) {
+        result.push(v);
+      }
+    }
+    result.sort((a, b) => a.as_of_date.localeCompare(b.as_of_date));
+    return result;
+  }
+}
+
+function toRecord(data: any): FundamentalsRecord {
+  return {
+    ticker: data.ticker,
+    as_of_date: data.as_of_date,
+    revenue: data.revenue,
+    revenue_growth: data.revenue_growth,
+    eps: data.eps,
+    eps_growth: data.eps_growth,
+    operating_margin: data.operating_margin,
+    free_cash_flow: data.free_cash_flow,
+    fcf_margin: data.fcf_margin,
+    market_cap: Number(data.market_cap),
+    trailing_pe: data.trailing_pe,
+    forward_pe: data.forward_pe,
+    ps_ratio: data.ps_ratio,
+    peg_ratio: data.peg_ratio,
+    source: data.source || 'supabase',
+    fetched_at: data.fetched_at,
+  };
 }
 
 export const fundamentalsRepository = new FundamentalsRepository();

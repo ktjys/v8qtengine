@@ -7,6 +7,11 @@ import { historicalDataProvider } from '../backtest/historicalDataProvider';
 import { buildEvaluationInput } from '../backtest/quantStrategy';
 import { evaluateV8 } from './evaluateV8';
 import { SignalSnapshot, ScanRunLog } from '../types/v8';
+import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
+import { assetRepository } from '../db/repositories/assetRepository';
+import { dbClient } from '../db/supabaseClient';
+import { extractFundamentalIndicators } from '../data/indicators/fundamentalIndicators';
+import { RawYahooMetadata } from './classificationEngine';
 
 export interface BackfillOptions {
   lookbackRange?: '6m' | '1y' | '2y';
@@ -80,29 +85,36 @@ export async function runHistoricalBackfill(
       const bars = await historicalDataProvider.getHistoricalBarsForTicker(ticker, range);
       if (bars.length < 50) continue;
 
-      // Persist daily bars into market_data_daily table (honest source)
       const tickerIsSeed = historicalDataProvider.getHadSeedFallback();
       await marketDataRepository.saveBars(ticker, bars, tickerIsSeed ? 'seed' : undefined);
       totalBarsIngested += bars.length;
 
+      const dbAsset = await assetRepository.findByTicker(ticker);
+      const manualOverride = dbClient.classifications.get(ticker);
+      const isEtfHint = dbAsset?.asset_type === 'etf' || manualOverride?.asset_type === 'etf';
+
       let lastSignalIndex = -999;
       const tickerSignals: SignalSnapshot[] = [];
 
-      // Replay point-in-time from index 50 to bars.length - 1
       for (let i = 50; i < bars.length; i++) {
         const barDate = bars[i].date;
         if (barDate < minDate) minDate = barDate;
         if (barDate > maxDate) maxDate = barDate;
 
-        // Strict Point-in-Time slices (no lookahead bias)
         const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
-        // Benchmark PIT also date-based (not index-based), consistent with strategyReplay
         const pitBenchmark =
           benchmarkBars.length > 0
             ? benchmarkBars.filter((b) => b.date <= barDate)
             : undefined;
 
-        // Space signals by at least 3 trading days
+        const dbFund = await fundamentalsRepository.getAsOf(ticker, barDate);
+        const classificationOverride: RawYahooMetadata = {
+          quoteType: isEtfHint ? 'ETF' : 'EQUITY',
+          sector: dbAsset?.sector,
+          industry: dbAsset?.industry,
+          marketCap: dbFund?.market_cap,
+        };
+
         if (i - lastSignalIndex >= 3) {
           const evaluation = evaluateV8(
             buildEvaluationInput(
@@ -113,7 +125,11 @@ export async function runHistoricalBackfill(
               {
                 source: tickerIsSeed ? 'seed' : 'backtest',
                 isFallback: tickerIsSeed,
-              }
+              },
+              undefined,
+              manualOverride ? { raw: classificationOverride, existing: manualOverride } : undefined,
+              dbFund,
+              isEtfHint
             )
           );
 

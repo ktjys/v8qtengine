@@ -4,6 +4,11 @@ import { buildEvaluationInput } from './quantStrategy';
 import { evaluateV8 } from '../engine/evaluateV8';
 import { calculateReplayPerformance } from './performanceCalculator';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
+import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
+import { assetRepository } from '../db/repositories/assetRepository';
+import { dbClient } from '../db/supabaseClient';
+import { extractFundamentalIndicators } from '../data/indicators/fundamentalIndicators';
+import { RawYahooMetadata } from '../engine/classificationEngine';
 
 export async function runHistoricalReplay(
   config: BacktestRequestConfig
@@ -22,10 +27,12 @@ export async function runHistoricalReplay(
     const bars = await historicalDataProvider.getHistoricalBarsForTicker(ticker, '2y');
     if (bars.length < 60) continue;
 
-    // 2.3 Seed 폴백 데이터로는 절대 성과를 만들지 않는다 (24시간 정직한 출처)
-    // 플래그 + 실제 bar 출처를 모두 검사해 DB를 거쳐 온 seed여도 확실히 차단한다.
     const isSeedData =
       historicalDataProvider.getHadSeedFallback() || bars.some((b) => b.source === 'seed');
+
+    const dbAsset = await assetRepository.findByTicker(ticker);
+    const manualOverride = dbClient.classifications.get(ticker);
+    const isEtfHint = dbAsset?.asset_type === 'etf' || manualOverride?.asset_type === 'etf';
 
     let lastSignalIndex = -999;
 
@@ -35,15 +42,36 @@ export async function runHistoricalReplay(
       if (config.startDate && barDate < config.startDate) continue;
       if (config.endDate && barDate > config.endDate) break;
 
-      // 1. Strict Point-in-Time Slice
       const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
-      // Benchmark PIT도 index가 아닌 날짜 기반으로 엄격 적용: 평가일 이전 봉만 사용
-      // (ticker와 SPY의 length/시작일이 달라도 미래 날짜의 benchmark를 참조하지 않는다)
       const pitBenchmark = benchmarkBars.length > 0
         ? benchmarkBars.filter((b) => b.date <= barDate)
         : undefined;
 
-      // 2. 공통 평가 엔진 evaluateV8() 직접 사용 (라이브와 동일 경로)
+      const dbFund = await fundamentalsRepository.getAsOf(ticker, barDate);
+      const fundInd = dbFund
+        ? extractFundamentalIndicators({
+            ticker,
+            asOfDate: dbFund.as_of_date,
+            marketCap: dbFund.market_cap,
+            revenueGrowthYoy: dbFund.revenue_growth,
+            earningsGrowthYoy: dbFund.eps_growth,
+            operatingMargin: dbFund.operating_margin,
+            freeCashFlowMargin: dbFund.fcf_margin,
+            trailingPe: dbFund.trailing_pe,
+            forwardPe: dbFund.forward_pe,
+            psRatio: dbFund.ps_ratio,
+            pegRatio: dbFund.peg_ratio,
+            quoteType: isEtfHint ? 'ETF' : 'EQUITY',
+          }, isEtfHint)
+        : undefined;
+
+      const classificationOverride: RawYahooMetadata = {
+        quoteType: isEtfHint ? 'ETF' : 'EQUITY',
+        sector: dbAsset?.sector,
+        industry: dbAsset?.industry,
+        marketCap: dbFund?.market_cap,
+      };
+
       if (i - lastSignalIndex >= 3) {
         const evaluation = evaluateV8(
           buildEvaluationInput(
@@ -54,7 +82,11 @@ export async function runHistoricalReplay(
             {
               source: isSeedData ? 'seed' : 'backtest',
               isFallback: isSeedData,
-            }
+            },
+            undefined,
+            manualOverride ? { raw: classificationOverride, existing: manualOverride } : undefined,
+            dbFund,
+            isEtfHint
           )
         );
         const isSignal = evaluation.isSignal;
