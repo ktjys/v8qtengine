@@ -3,10 +3,8 @@ import { historicalDataProvider } from '../backtest/historicalDataProvider';
 import { calculateTechnicalIndicators } from '../data/indicators/technicalIndicators';
 import { calculateMomentumIndicators } from '../data/indicators/momentumIndicators';
 import { extractFundamentalIndicators } from '../data/indicators/fundamentalIndicators';
-import { classifyAsset } from '../engine/classificationEngine';
-import { calculateOpportunity, RawMarketIndicators } from '../engine/opportunityEngine';
-import { calculateRisk, RawRiskInputs } from '../engine/riskEngine';
-import { makeDecision } from '../engine/decisionEngine';
+import { buildEvaluationInput, ClassificationInputs } from '../backtest/quantStrategy';
+import { evaluateV8 } from '../engine/evaluateV8';
 import { dbClient } from '../db/supabaseClient';
 import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
 import { assetRepository } from '../db/repositories/assetRepository';
@@ -77,33 +75,13 @@ export class DailyScoreHistoryService {
       throw new Error(`[DailyScoreHistoryService] Insufficient market data for ticker ${cleanTicker}`);
     }
 
-    // 2. Fetch fundamentals / metadata from DB if available
-    const dbFund = await fundamentalsRepository.getLatest(cleanTicker);
+    // 2. Fetch static metadata from DB if available (classification hints / manual override)
     const dbAsset = await assetRepository.findByTicker(cleanTicker);
     const manualOverride = dbClient.classifications.get(cleanTicker);
 
     const isEtfHint = dbAsset?.asset_type === 'etf' || manualOverride?.asset_type === 'etf';
-    const fundInd = extractFundamentalIndicators(
-      dbFund
-        ? {
-            ticker: cleanTicker,
-            asOfDate: dbFund.as_of_date,
-            marketCap: dbFund.market_cap,
-            revenueGrowthYoy: dbFund.revenue_growth,
-            earningsGrowthYoy: dbFund.eps_growth,
-            operatingMargin: dbFund.operating_margin,
-            freeCashFlowMargin: dbFund.fcf_margin,
-            trailingPe: dbFund.trailing_pe,
-            forwardPe: dbFund.forward_pe,
-            psRatio: dbFund.ps_ratio,
-            pegRatio: dbFund.peg_ratio,
-            quoteType: isEtfHint ? 'ETF' : 'EQUITY',
-          }
-        : undefined,
-      isEtfHint
-    );
 
-    // 3. Determine start index based on range
+    // 3. Determine start date based on range
     const now = new Date();
     let filterStartDate = '1970-01-01';
     if (range === '1m') {
@@ -132,67 +110,73 @@ export class DailyScoreHistoryService {
 
     for (let i = startIndex; i < bars.length; i++) {
       const pitBars = bars.slice(0, i + 1);
-      const pitBenchmark = benchmarkBars.length > 0 ? benchmarkBars.slice(0, Math.min(i + 1, benchmarkBars.length)) : undefined;
       const currentBar = bars[i];
       const prevBar = i > 0 ? bars[i - 1] : currentBar;
 
-      const tech = calculateTechnicalIndicators(pitBars);
+      const barDate = currentBar.date;
+      // Date-based PIT benchmark slicing (future bars excluded, consistent with strategyReplay)
+      const pitBenchmark =
+        benchmarkBars.length > 0 ? benchmarkBars.filter((b) => b.date <= barDate) : undefined;
+
+      // Momentum-derived beta for classification (PIT over the same bar window)
       const mom = calculateMomentumIndicators(pitBars, pitBenchmark);
 
-      // Classification
-      const classification = classifyAsset(
-        cleanTicker,
-        {
+      // Point-in-Time fundamentals: as_of_date <= evaluation date (no look-ahead)
+      const dbFund = await fundamentalsRepository.getAsOf(cleanTicker, barDate);
+      const fundInd = dbFund
+        ? extractFundamentalIndicators(
+            {
+              ticker: cleanTicker,
+              asOfDate: dbFund.as_of_date,
+              marketCap: dbFund.market_cap,
+              revenueGrowthYoy: dbFund.revenue_growth,
+              earningsGrowthYoy: dbFund.eps_growth,
+              operatingMargin: dbFund.operating_margin,
+              freeCashFlowMargin: dbFund.fcf_margin,
+              trailingPe: dbFund.trailing_pe,
+              forwardPe: dbFund.forward_pe,
+              psRatio: dbFund.ps_ratio,
+              pegRatio: dbFund.peg_ratio,
+              quoteType: isEtfHint ? 'ETF' : 'EQUITY',
+            },
+            isEtfHint
+          )
+        : undefined;
+
+      const classificationInputs: ClassificationInputs = {
+        raw: {
           quoteType: isEtfHint ? 'ETF' : 'EQUITY',
           beta: mom.beta || 1.0,
           marketCap: dbFund?.market_cap || 50_000_000_000,
           sector: dbAsset?.sector,
           industry: dbAsset?.industry,
         },
-        manualOverride
+        existing: manualOverride,
+      };
+
+      // Common engine: build PIT input (tech/momentum/fundamental/classification) -> evaluateV8
+      const evaluation = evaluateV8(
+        buildEvaluationInput(
+          cleanTicker,
+          pitBars,
+          pitBenchmark,
+          undefined,
+          undefined,
+          undefined,
+          classificationInputs,
+          fundInd
+        )
       );
 
-      // Raw Market Indicators
-      const rawIndicators: RawMarketIndicators = {
-        price: tech.price,
-        ma20: tech.ma20,
-        ma50: tech.ma50,
-        ma200: tech.ma200,
-        rsi14: tech.rsi14,
-        drawdownFromHigh: tech.drawdownFromHigh,
-        macdHistogramPositive: tech.macdHistogramPositive,
-        return1M: mom.return1M,
-        return3M: mom.return3M,
-        return6M: mom.return6M,
-        relativeStrengthVsSpy: mom.relativeStrengthVsSpy,
-        revenueGrowthYoy: fundInd.revenueGrowthYoy,
-        earningsGrowthYoy: fundInd.earningsGrowthYoy,
-        operatingMargin: fundInd.operatingMargin,
-        freeCashFlowMargin: fundInd.freeCashFlowMargin,
-        marketCapBillions: fundInd.marketCapBillions,
-        trailingPe: fundInd.trailingPe,
-        forwardPe: fundInd.forwardPe,
-        psRatio: fundInd.psRatio,
-        pegRatio: fundInd.pegRatio,
-      };
-
-      // Raw Risk Inputs
-      const rawRiskInputs: RawRiskInputs = {
-        beta: mom.beta,
-        volatility20dAnnualized: mom.volatility20dAnnualized,
-        maxDrawdown52w: tech.drawdownFromHigh,
-        rsi14: tech.rsi14,
-        priceBelowMa200: tech.priceBelowMa200,
-        missingDataPoints: pitBars.length < 200 ? 1 : 0,
-      };
-
-      // Engines
-      const opportunity = calculateOpportunity(classification, rawIndicators);
-      const risk = calculateRisk(classification, rawRiskInputs);
-      const decision = makeDecision(classification, opportunity, risk);
+      const opportunity = evaluation.opportunity;
+      const risk = evaluation.risk;
+      const decision = evaluation.decision;
+      const classification = evaluation.classification;
 
       const changePct = prevBar.close > 0 ? ((currentBar.close - prevBar.close) / prevBar.close) * 100 : 0;
-      const isSignal = decision.actionable && opportunity.opportunity_score >= 70;
+      const isSignal = evaluation.isSignal;
+
+      const tech = calculateTechnicalIndicators(pitBars);
 
       allHistory.push({
         date: currentBar.date,

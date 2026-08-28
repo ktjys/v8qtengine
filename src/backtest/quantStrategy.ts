@@ -1,12 +1,13 @@
 import { OHLCVBar } from '../data/providers/types';
 import { calculateTechnicalIndicators } from '../data/indicators/technicalIndicators';
 import { calculateMomentumIndicators } from '../data/indicators/momentumIndicators';
-import { classifyAsset } from '../engine/classificationEngine';
+import { CalculatedFundamentalIndicators } from '../data/indicators/fundamentalIndicators';
+import { classifyAsset, RawYahooMetadata } from '../engine/classificationEngine';
 import { RawMarketIndicators } from '../engine/opportunityEngine';
 import { RawRiskInputs } from '../engine/riskEngine';
 import { MarketSnapshot, EvaluationInput, evaluateV8 } from '../engine/evaluateV8';
 import { DataProvenance } from '../engine/dataQualityGate';
-import { DataQualityReport, DecisionType, RiskLevel, StrategyType } from '../types/v8';
+import { AssetClassification, DataQualityReport, DecisionType, RiskLevel, StrategyType } from '../types/v8';
 
 export interface StrategyEvaluationResult {
   isSignal: boolean;
@@ -17,6 +18,15 @@ export interface StrategyEvaluationResult {
   decision: DecisionType;
   confidence: number;
   reason: string;
+}
+
+/**
+ * 분류 입력 오버라이드. Daily Score History 등 풍부한 메타데이터(섹터/수동 오버라이드)를
+ * 공통 `evaluateV8` 경로로 전달할 때 사용한다. 미지정 시 기본값(beta + 고정 marketCap) 사용.
+ */
+export interface ClassificationInputs {
+  raw?: RawYahooMetadata;
+  existing?: AssetClassification;
 }
 
 /**
@@ -37,7 +47,9 @@ export function buildEvaluationInput(
   benchmarkSlice?: OHLCVBar[],
   signalThreshold?: number,
   provenance?: DataProvenance,
-  dataQuality?: DataQualityReport | null
+  dataQuality?: DataQualityReport | null,
+  classification?: ClassificationInputs,
+  fundamentals?: CalculatedFundamentalIndicators
 ): EvaluationInput {
   const tech = calculateTechnicalIndicators(barsSlice);
   const mom = calculateMomentumIndicators(barsSlice, benchmarkSlice);
@@ -46,13 +58,13 @@ export function buildEvaluationInput(
   const lastBar = barsSlice[barsSlice.length - 1];
   const evaluationAt = lastBar?.date ? new Date(lastBar.date) : new Date();
 
-  // 1. Classification (Point-in-Time 고정 입력)
-  const classification = classifyAsset(ticker, {
-    beta: mom.beta,
-    marketCap: 50_000_000_000,
-  });
+  // 1. Classification (Point-in-Time 고정 입력). 오버라이드가 있으면 그것을 사용하고,
+  //    없으면 beta + 고정 marketCap 기본값으로 분류한다.
+  const classificationResult = classification?.raw
+    ? classifyAsset(ticker, classification.raw, classification.existing)
+    : classifyAsset(ticker, { beta: mom.beta, marketCap: 50_000_000_000 });
 
-  // 2. Market snapshot
+  // 2. Market snapshot — fundamental/valuation 입력은 Point-in-Time 오버라이드가 있으면 사용
   const indicators: RawMarketIndicators = {
     price: tech.price,
     ma20: tech.ma20,
@@ -65,7 +77,15 @@ export function buildEvaluationInput(
     return3M: mom.return3M,
     return6M: mom.return6M,
     relativeStrengthVsSpy: mom.relativeStrengthVsSpy,
-    marketCapBillions: 50,
+    marketCapBillions: fundamentals?.marketCapBillions ?? 50,
+    revenueGrowthYoy: fundamentals?.revenueGrowthYoy,
+    earningsGrowthYoy: fundamentals?.earningsGrowthYoy,
+    operatingMargin: fundamentals?.operatingMargin,
+    freeCashFlowMargin: fundamentals?.freeCashFlowMargin,
+    trailingPe: fundamentals?.trailingPe,
+    forwardPe: fundamentals?.forwardPe,
+    psRatio: fundamentals?.psRatio,
+    pegRatio: fundamentals?.pegRatio,
   };
 
   const riskInputs: RawRiskInputs = {
@@ -88,7 +108,7 @@ export function buildEvaluationInput(
     ticker,
     evaluationAt,
     market,
-    classification,
+    classification: classificationResult,
     signalThreshold,
     provenance: provenance || { source: 'backtest', isFallback: false },
     dataQuality,

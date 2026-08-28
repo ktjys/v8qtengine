@@ -142,6 +142,64 @@ export class FundamentalsRepository {
     matching.sort((a, b) => b.as_of_date.localeCompare(a.as_of_date));
     return matching[0];
   }
+
+  /**
+   * Point-in-Time 조회: 평가 기준일(evaluationDate) 이전의 가장 최신 fundamentals 를 반환한다.
+   * 과거 스코어 히스토리/백테스트에서 미래 재무 데이터 참조(look-ahead bias)를 방지한다.
+   */
+  async getAsOf(ticker: string, evaluationDate: string): Promise<FundamentalsRecord | null> {
+    const clean = ticker.toUpperCase().trim();
+    const asOfDate = evaluationDate.split('T')[0];
+
+    if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
+      try {
+        const { data, error } = await dbClient.supabase
+          .from('fundamentals')
+          .select('*')
+          .eq('ticker', clean)
+          .lte('as_of_date', asOfDate)
+          .order('as_of_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          dbClient.handleDbError('fundamentals', 'getAsOf', error);
+        } else if (data) {
+          const rec: FundamentalsRecord = {
+            ticker: data.ticker,
+            as_of_date: data.as_of_date,
+            revenue: data.revenue,
+            revenue_growth: data.revenue_growth,
+            eps: data.eps,
+            eps_growth: data.eps_growth,
+            operating_margin: data.operating_margin,
+            free_cash_flow: data.free_cash_flow,
+            fcf_margin: data.fcf_margin,
+            market_cap: Number(data.market_cap),
+            trailing_pe: data.trailing_pe,
+            forward_pe: data.forward_pe,
+            ps_ratio: data.ps_ratio,
+            peg_ratio: data.peg_ratio,
+            source: data.source || 'supabase',
+            fetched_at: data.fetched_at,
+          };
+          return rec;
+        }
+      } catch (err) {
+        dbClient.handleDbError('fundamentals', 'getAsOf', err);
+      }
+    }
+
+    const matching: FundamentalsRecord[] = [];
+    for (const [k, v] of dbClient.fundamentals.entries()) {
+      if (k.startsWith(`${clean}_`) && v.as_of_date <= asOfDate) {
+        matching.push(v);
+      }
+    }
+    if (matching.length === 0) return null;
+    matching.sort((a, b) => b.as_of_date.localeCompare(a.as_of_date));
+    return matching[0];
+  }
 }
 
 export const fundamentalsRepository = new FundamentalsRepository();
