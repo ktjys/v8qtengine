@@ -15,20 +15,25 @@ export class HistoricalDataProvider {
       return dbBars;
     }
 
-    // 2. Fetch from Yahoo
+    // 2. Fetch from Yahoo (단, Yahoo 내부에서 seed 폴백된 경우 DB에 저장하지 않는다)
     try {
+      if (this.yahooProvider.resetFallbackFlag) {
+        this.yahooProvider.resetFallbackFlag();
+      }
       const bars = await this.yahooProvider.getHistorical(clean, range, '1d');
+      const usedFallback = !!this.yahooProvider.getHadFallback?.();
       if (bars.length >= 50) {
-        await marketDataRepository.saveBars(clean, bars);
+        if (!usedFallback) {
+          await marketDataRepository.saveBars(clean, bars);
+        }
         return bars;
       }
     } catch (err) {
       console.warn(`[HistoricalDataProvider] Yahoo fetch failed for ${clean}, using seed fallback:`, (err as Error).message);
     }
 
-    // 3. Fallback to Seed
+    // 3. Fallback to Seed (결정적 재현을 위해 DB에 영속화하지 않는다)
     const seedBars = await this.seedProvider.getHistorical(clean, range, '1d');
-    await marketDataRepository.saveBars(clean, seedBars, 'seed');
     return seedBars;
   }
 

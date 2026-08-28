@@ -13,6 +13,17 @@ export class YahooFinanceProvider implements MarketDataProvider {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private CACHE_TTL_MS = 30 * 1000; // 30 seconds cache for live quotes
   private HISTORY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for historical bars
+  /** 마지막 조회에서 실제 폴백(seed)으로 대체되었는지 여부 */
+  private lastUsedFallback = false;
+
+  /** true이면 최근 조회 중 하나라도 seed 폴백을 사용했음을 의미한다. */
+  getHadFallback(): boolean {
+    return this.lastUsedFallback;
+  }
+
+  resetFallbackFlag(): void {
+    this.lastUsedFallback = false;
+  }
 
   private getCached<T>(key: string, customTtl?: number): T | null {
     const entry = this.cache.get(key);
@@ -117,6 +128,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     }
 
     console.warn(`[YahooFinanceProvider] getQuote failed for ${clean}, falling back to Seed data`);
+    this.lastUsedFallback = true;
     return this.fallbackProvider.getQuote(clean);
   }
 
@@ -224,6 +236,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     }
 
     console.warn(`[YahooFinanceProvider] getHistorical failed for ${clean}, falling back to Seed data`);
+    this.lastUsedFallback = true;
     return this.fallbackProvider.getHistorical(clean, range, interval);
   }
 

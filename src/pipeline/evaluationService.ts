@@ -1,9 +1,7 @@
 import { AssetClassification, FullTickerEvaluation } from '../types/v8';
 import { MarketDataService, ProcessedAssetData } from '../data/marketDataService';
 import { classifyAsset } from '../engine/classificationEngine';
-import { calculateOpportunity } from '../engine/opportunityEngine';
-import { calculateRisk } from '../engine/riskEngine';
-import { makeDecision } from '../engine/decisionEngine';
+import { evaluateV8, MarketSnapshot } from '../engine/evaluateV8';
 
 export class EvaluationService {
   private marketDataService: MarketDataService;
@@ -41,14 +39,25 @@ export class EvaluationService {
       existingClassification
     );
 
-    // 2. Opportunity Engine
-    const opportunity = calculateOpportunity(classification, processed.indicators);
+    // 2~4. 단일 순수 평가 함수 evaluateV8() 사용 (라이브/백테스트 공용)
+    const market: MarketSnapshot = {
+      price: processed.price,
+      change1d: processed.change1d,
+      indicators: processed.indicators,
+      riskInputs: processed.riskInputs,
+    };
 
-    // 3. Risk Engine
-    const risk = calculateRisk(classification, processed.riskInputs);
-
-    // 4. Decision Engine
-    const decision = makeDecision(classification, opportunity, risk);
+    const evaluation = evaluateV8({
+      ticker: processed.ticker,
+      evaluationAt: new Date(),
+      market,
+      classification,
+      dataQuality: processed.dataQuality,
+      provenance: {
+        source: processed.normalized.source,
+        isFallback: processed.isFallback,
+      },
+    });
 
     return {
       ticker: processed.ticker,
@@ -56,11 +65,11 @@ export class EvaluationService {
       price: processed.price,
       change1d: processed.change1d,
       evaluated_at: new Date().toISOString(),
-      classification,
-      opportunity,
-      risk,
-      decision,
-      signal_generated: decision.actionable,
+      classification: evaluation.classification,
+      opportunity: evaluation.opportunity,
+      risk: evaluation.risk,
+      decision: evaluation.decision,
+      signal_generated: evaluation.decision.actionable,
       data_quality: processed.dataQuality,
       raw_metadata: processed.rawMetadata,
     };

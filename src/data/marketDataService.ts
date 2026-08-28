@@ -26,6 +26,8 @@ export interface ProcessedAssetData {
   riskInputs: RawRiskInputs;
   dataQuality: DataQualityReport;
   normalized: NormalizedMarketData;
+  /** 실제 데이터 수집 실패로 seed 폴백이 사용되었는지 여부 (신호 게이트 입력). */
+  isFallback: boolean;
 }
 
 export class MarketDataService {
@@ -89,6 +91,11 @@ export class MarketDataService {
   async processTicker(ticker: string, isEtfHint = false): Promise<ProcessedAssetData> {
     const cleanTicker = ticker.toUpperCase().trim();
     const benchmarkBars = await this.getBenchmarkBars();
+
+    // Yahoo 폴백 플래그 초기화: 이 종목 처리 중 실제 폴백 여부를 정직하게 추적
+    if (this.provider.name === 'yahoo' && this.provider.getHadFallback) {
+      this.provider.resetFallbackFlag && this.provider.resetFallbackFlag();
+    }
 
     // 1. Always fetch live real-time quote first
     const liveQuote = await this.provider.getQuote(cleanTicker);
@@ -223,6 +230,14 @@ export class MarketDataService {
     };
 
     const isEtf = normalized.fundamentals.quoteType === 'ETF' || isEtfHint;
+    const isFallback =
+      this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
+
+    // 폴백 발생 시 실제 출처를 정직하게 기록 (오표기 방지)
+    if (isFallback) {
+      normalized.source = 'seed';
+    }
+
     const dataQuality = evaluateDataQuality(normalized, isEtf);
 
     return {
@@ -235,6 +250,7 @@ export class MarketDataService {
       riskInputs,
       dataQuality,
       normalized,
+      isFallback,
     };
   }
 
@@ -296,6 +312,7 @@ export class MarketDataService {
                 has_fundamentals: false,
               },
               normalized: norm,
+              isFallback: true,
             } as ProcessedAssetData;
           }
         })
