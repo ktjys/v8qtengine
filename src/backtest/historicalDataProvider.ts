@@ -6,9 +6,23 @@ import { YahooFinanceProvider } from '../data/providers/yahooFinanceProvider';
 export class HistoricalDataProvider {
   private yahooProvider = new YahooFinanceProvider();
   private seedProvider = new SeedDataProvider();
+  /** 마지막 getHistoricalBarsForTicker 호출에서 Seed 폴백을 사용했는지 여부 */
+  private lastUsedSeed = false;
+
+  /** true이면 직전 히스토리컬 조회가 Seed(합성) 폴백이었음을 의미한다. */
+  getHadSeedFallback(): boolean {
+    return this.lastUsedSeed;
+  }
+
+  resetSeedFallback(): void {
+    this.lastUsedSeed = false;
+  }
 
   async getHistoricalBarsForTicker(ticker: string, range = '2y'): Promise<OHLCVBar[]> {
     const clean = ticker.toUpperCase().trim();
+    // 현재 조회의 폴백 상태를 초기화
+    this.lastUsedSeed = false;
+
     // 1. Try DB first
     const dbBars = await marketDataRepository.getBars(clean, 600);
     if (dbBars && dbBars.length >= 200) {
@@ -33,6 +47,7 @@ export class HistoricalDataProvider {
     }
 
     // 3. Fallback to Seed (결정적 재현을 위해 DB에 영속화하지 않는다)
+    this.lastUsedSeed = true;
     const seedBars = await this.seedProvider.getHistorical(clean, range, '1d');
     return seedBars;
   }
@@ -59,7 +74,7 @@ export class HistoricalDataProvider {
     return5d: number | null;
     return10d: number | null;
     return20d: number | null;
-    maxDrawdown: number;
+    maxAdverseExcursion: number;
   } {
     const entryBar = bars[currentIndex];
     const entryPrice = entryBar.close;
@@ -72,7 +87,7 @@ export class HistoricalDataProvider {
     const return10d = bar10 ? ((bar10.close - entryPrice) / entryPrice) * 100 : null;
     const return20d = bar20 ? ((bar20.close - entryPrice) / entryPrice) * 100 : null;
 
-    // Calculate maximum drawdown during next 20 bars
+    // Max Adverse Excursion: entry 이후 최저가 기준 낙폭 (Portfolio MDD 아님)
     let lowestPrice = entryPrice;
     const forwardWindow = Math.min(bars.length - 1, currentIndex + 20);
     for (let i = currentIndex + 1; i <= forwardWindow; i++) {
@@ -80,14 +95,14 @@ export class HistoricalDataProvider {
         lowestPrice = bars[i].low;
       }
     }
-    const maxDrawdown = entryPrice > 0 ? ((lowestPrice - entryPrice) / entryPrice) * 100 : 0;
+    const maxAdverseExcursion = entryPrice > 0 ? ((lowestPrice - entryPrice) / entryPrice) * 100 : 0;
 
     return {
       entryPrice,
       return5d: return5d !== null ? Math.round(return5d * 100) / 100 : null,
       return10d: return10d !== null ? Math.round(return10d * 100) / 100 : null,
       return20d: return20d !== null ? Math.round(return20d * 100) / 100 : null,
-      maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+      maxAdverseExcursion: Math.round(maxAdverseExcursion * 100) / 100,
     };
   }
 }

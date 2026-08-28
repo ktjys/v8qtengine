@@ -21,7 +21,8 @@ export interface SimulatedTradeSignal {
   return10d?: number;
   exitPrice20d?: number;
   return20d?: number;
-  maxDrawdownTrade?: number;
+  /** 최대 불리한 일탈(Max Adverse Excursion): 진입 후 최저가 기준 낙폭 (Portfolio MDD 아님) */
+  maxAdverseExcursionTrade?: number;
   isWin20d?: boolean;
 }
 

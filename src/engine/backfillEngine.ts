@@ -127,7 +127,7 @@ export async function runHistoricalBackfill(
               fundamental_score: 75,
               valuation_score: 70,
               rsi: 52,
-              drawdown: Math.abs(outcomes.maxDrawdown),
+              drawdown: Math.abs(outcomes.maxAdverseExcursion),
               return_5d: outcomes.return5d,
               return_10d: outcomes.return10d,
               return_20d: outcomes.return20d,

@@ -45,10 +45,17 @@ export function calculateReplayPerformance(
   const avg20d = completed.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / nCompleted;
 
   const sorted20d = completed.map((s) => s.return20d ?? 0).sort((a, b) => a - b);
-  const median20d = sorted20d.length > 0 ? sorted20d[Math.floor(sorted20d.length / 2)] : 0;
+  // 중앙값: 짝수 개면 중앙 두 값의 평균 (표준 정의)
+  const mid = Math.floor(sorted20d.length / 2);
+  const median20d =
+    sorted20d.length > 0
+      ? sorted20d.length % 2 === 0
+        ? (sorted20d[mid - 1] + sorted20d[mid]) / 2
+        : sorted20d[mid]
+      : 0;
 
-  // Max Drawdown
-  const drawdowns = completed.map((s) => s.maxDrawdownTrade ?? 0);
+  // Max Adverse Excursion (단일 트레이드 최대 불리한 일탈). Portfolio MDD 아님.
+  const drawdowns = completed.map((s) => s.maxAdverseExcursionTrade ?? 0);
   const minDd = drawdowns.length > 0 ? Math.min(...drawdowns) : 0;
   const max_drawdown = Math.abs(minDd);
 

@@ -4,8 +4,9 @@ import { calculateMomentumIndicators } from '../data/indicators/momentumIndicato
 import { classifyAsset } from '../engine/classificationEngine';
 import { RawMarketIndicators } from '../engine/opportunityEngine';
 import { RawRiskInputs } from '../engine/riskEngine';
-import { evaluateV8, MarketSnapshot } from '../engine/evaluateV8';
-import { DecisionType, RiskLevel, StrategyType } from '../types/v8';
+import { MarketSnapshot, EvaluationInput, evaluateV8 } from '../engine/evaluateV8';
+import { DataProvenance } from '../engine/dataQualityGate';
+import { DataQualityReport, DecisionType, RiskLevel, StrategyType } from '../types/v8';
 
 export interface StrategyEvaluationResult {
   isSignal: boolean;
@@ -19,34 +20,24 @@ export interface StrategyEvaluationResult {
 }
 
 /**
- * 백테스트 공용 평가 코어.
+ * 백테스트 공용 입력 빌더.
  *
- * 주어진 Point-in-Time 봉 슬라이스에 대해 기술/모멘텀 지표를 계산하고,
- * 자산 분류를 수행한 뒤 순수 함수 `evaluateV8()`에 입력을 구성해 넘긴다.
+ * 주어진 Point-in-Time 봉 슬라이스를 기술/모멘텀 지표로 계산하고, 자산 분류를
+ * 수행한 뒤 순수 함수 `evaluateV8()`의 `EvaluationInput`을 구성한다.
  *
- * - 라이브(evaluationService)와 동일한 `evaluateV8()`을 사용하므로
- *   동일 입력에 대해 동일 출력이 보장된다 (결정성).
- * - 외부 I/O(DB/Yahoo/Seed)를 하지 않는다.
+ * - 평가 시점(`evaluationAt`)은 반드시 PIT 슬라이스의 마지막 봉 날짜로 고정한다.
+ *   (분자/분모 시점을 추론 시점으로 일치시켜 미래 참조를 방지)
+ * - `provenance.isFallback`이 true(Seed 폴백)면 `evaluateV8`의 데이터 품질
+ *   게이트가 해당 평가를 신호 후보에서 제외한다 → Seed로 성과를 만들지 않음.
+ * - 외부 I/O(DB/Yahoo/Seed)를 하지 않는 순수 빌더다.
  */
-export function evaluateStrategy(
+export function buildEvaluationInput(
   ticker: string,
   barsSlice: OHLCVBar[],
   benchmarkSlice?: OHLCVBar[],
-  opportunityThreshold = 70
-): StrategyEvaluationResult {
-  if (barsSlice.length < 50) {
-    return {
-      isSignal: false,
-      opportunityScore: 0,
-      riskScore: 50,
-      riskLevel: 'MEDIUM',
-      strategyType: 'general_equity',
-      decision: 'AVOID',
-      confidence: 0,
-      reason: 'Insufficient bars',
-    };
-  }
-
+  provenance?: DataProvenance,
+  dataQuality?: DataQualityReport | null
+): EvaluationInput {
   const tech = calculateTechnicalIndicators(barsSlice);
   const mom = calculateMomentumIndicators(barsSlice, benchmarkSlice);
 
@@ -54,13 +45,13 @@ export function evaluateStrategy(
   const lastBar = barsSlice[barsSlice.length - 1];
   const evaluationAt = lastBar?.date ? new Date(lastBar.date) : new Date();
 
-  // 1. Classification
+  // 1. Classification (Point-in-Time 고정 입력)
   const classification = classifyAsset(ticker, {
     beta: mom.beta,
     marketCap: 50_000_000_000,
   });
 
-  // 2. Market snapshot (Point-in-Time 고정 입력)
+  // 2. Market snapshot
   const indicators: RawMarketIndicators = {
     price: tech.price,
     ma20: tech.ma20,
@@ -87,20 +78,53 @@ export function evaluateStrategy(
 
   const market: MarketSnapshot = {
     price: tech.price,
-    change1d: tech.price > 0 ? 0 : 0,
+    change1d: 0,
     indicators,
     riskInputs,
   };
 
-  // 3. 단일 순수 평가 함수 사용
-  const evaluation = evaluateV8({
+  return {
     ticker,
-    evaluationAt: new Date(0), // 백테스트는 시점 무관(순수 계산). 필요 시 slice 마지막 날짜 주입.
+    evaluationAt,
     market,
     classification,
-  });
+    provenance: provenance || { source: 'backtest', isFallback: false },
+    dataQuality,
+  };
+}
 
-  const isSignal = evaluation.decision.actionable && evaluation.opportunity.opportunity_score >= opportunityThreshold;
+/**
+ * 백테스트 호환 래퍼. `buildEvaluationInput()`으로 입력을 구성하고
+ * 단일 순수 함수 `evaluateV8()`을 호출한다 (backfillEngine/v8Strategy 호환용).
+ */
+export function evaluateStrategy(
+  ticker: string,
+  barsSlice: OHLCVBar[],
+  benchmarkSlice?: OHLCVBar[],
+  opportunityThreshold = 70,
+  provenance?: DataProvenance,
+  dataQuality?: DataQualityReport | null
+): StrategyEvaluationResult {
+  if (barsSlice.length < 50) {
+    return {
+      isSignal: false,
+      opportunityScore: 0,
+      riskScore: 50,
+      riskLevel: 'MEDIUM',
+      strategyType: 'general_equity',
+      decision: 'AVOID',
+      confidence: 0,
+      reason: 'Insufficient bars',
+    };
+  }
+
+  const evaluation = evaluateV8(
+    buildEvaluationInput(ticker, barsSlice, benchmarkSlice, provenance, dataQuality)
+  );
+
+  const isSignal =
+    evaluation.decision.actionable &&
+    evaluation.opportunity.opportunity_score >= opportunityThreshold;
 
   return {
     isSignal,

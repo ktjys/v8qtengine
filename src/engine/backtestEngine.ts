@@ -52,13 +52,19 @@ export function calculateBacktestMetrics(
   const win20d = completed.filter((s) => (s.return_20d ?? 0) > 0).length;
   const avg20d = completed.reduce((sum, s) => sum + (s.return_20d ?? 0), 0) / nCompleted;
 
-  // Median 20D
+  // Median 20D (짝수 개면 중앙 두 값의 평균 - 표준 정의)
   const sorted20d = completed.map((s) => s.return_20d ?? 0).sort((a, b) => a - b);
-  const median20d = sorted20d.length > 0 ? sorted20d[Math.floor(sorted20d.length / 2)] : 0;
+  const mid = Math.floor(sorted20d.length / 2);
+  const median20d =
+    sorted20d.length > 0
+      ? sorted20d.length % 2 === 0
+        ? (sorted20d[mid - 1] + sorted20d[mid]) / 2
+        : sorted20d[mid]
+      : 0;
 
-  // Max Drawdown among signals
-  const minReturn = sorted20d.length > 0 ? Math.min(...sorted20d) : 0;
-  const max_drawdown = minReturn < 0 ? Math.abs(minReturn) : 0;
+  // Max trade loss: 20D 거래 중 최악의 손실 절댓값 (Portfolio MDD 아님)
+  const maxTradeLoss = sorted20d.length > 0 ? Math.abs(Math.min(...sorted20d)) : 0;
+  const max_drawdown = maxTradeLoss;
 
   // Profit Factor = Gross Profits / Gross Losses
   const profits = completed
