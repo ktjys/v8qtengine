@@ -10,8 +10,9 @@ export function shouldGenerateSignal(
   evaluation: FullTickerEvaluation,
   existingRecentSignals: SignalSnapshot[] = []
 ): boolean {
-  // 1. Must be actionable decision
-  if (!evaluation.decision?.actionable) {
+  // Must be a generated signal: signal_generated == evaluateV8().isSignal
+  // (decision.actionable + opportunity>=threshold + data-quality gate)
+  if (!evaluation.signal_generated) {
     return false;
   }
 

@@ -92,8 +92,8 @@ export class ScanService {
       }
     }
 
-    // Check newly actionable signals
-    const actionableList = evaluations.filter((ev) => ev.decision?.actionable);
+    // Check newly generated signals (signal_generated == evaluateV8().isSignal)
+    const actionableList = evaluations.filter((ev) => ev.signal_generated);
     let existingSignals: SignalSnapshot[] = [];
     try {
       existingSignals = await signalRepository.getAll();

@@ -4,8 +4,9 @@ import { signalRepository } from '../db/repositories/signalRepository';
 import { scanRunRepository } from '../db/repositories/scanRunRepository';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { historicalDataProvider } from '../backtest/historicalDataProvider';
-import { evaluateStrategy } from '../backtest/quantStrategy';
-import { SignalSnapshot, RiskLevel, StrategyType, ScanRunLog } from '../types/v8';
+import { buildEvaluationInput } from '../backtest/quantStrategy';
+import { evaluateV8 } from './evaluateV8';
+import { SignalSnapshot, ScanRunLog } from '../types/v8';
 
 export interface BackfillOptions {
   lookbackRange?: '6m' | '1y' | '2y';
@@ -61,7 +62,9 @@ export async function runHistoricalBackfill(
   // 2. Fetch and ingest benchmark bars (SPY)
   const benchmarkBars = await historicalDataProvider.getHistoricalBarsForTicker('SPY', range);
   if (benchmarkBars.length > 0) {
-    await marketDataRepository.saveBars('SPY', benchmarkBars);
+    // 정직한 출처: seed 폴백이면 'seed'로 저장 (yahoo로 오표기 방지)
+    const benchIsSeed = historicalDataProvider.getHadSeedFallback();
+    await marketDataRepository.saveBars('SPY', benchmarkBars, benchIsSeed ? 'seed' : undefined);
   }
 
   let totalBarsIngested = benchmarkBars.length;
@@ -77,8 +80,9 @@ export async function runHistoricalBackfill(
       const bars = await historicalDataProvider.getHistoricalBarsForTicker(ticker, range);
       if (bars.length < 50) continue;
 
-      // Persist daily bars into market_data_daily table
-      await marketDataRepository.saveBars(ticker, bars);
+      // Persist daily bars into market_data_daily table (honest source)
+      const tickerIsSeed = historicalDataProvider.getHadSeedFallback();
+      await marketDataRepository.saveBars(ticker, bars, tickerIsSeed ? 'seed' : undefined);
       totalBarsIngested += bars.length;
 
       let lastSignalIndex = -999;
@@ -92,19 +96,28 @@ export async function runHistoricalBackfill(
 
         // Strict Point-in-Time slices (no lookahead bias)
         const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
+        // Benchmark PIT also date-based (not index-based), consistent with strategyReplay
         const pitBenchmark =
           benchmarkBars.length > 0
-            ? historicalDataProvider.getPointInTimeSlice(
-                benchmarkBars,
-                Math.min(i, benchmarkBars.length - 1)
-              )
+            ? benchmarkBars.filter((b) => b.date <= barDate)
             : undefined;
 
         // Space signals by at least 3 trading days
         if (i - lastSignalIndex >= 3) {
-          const evalRes = evaluateStrategy(ticker, pitBars, pitBenchmark, threshold);
+          const evaluation = evaluateV8(
+            buildEvaluationInput(
+              ticker,
+              pitBars,
+              pitBenchmark,
+              threshold,
+              {
+                source: tickerIsSeed ? 'seed' : 'backtest',
+                isFallback: tickerIsSeed,
+              }
+            )
+          );
 
-          if (evalRes.isSignal) {
+          if (evaluation.isSignal) {
             const outcomes = historicalDataProvider.getForwardOutcomes(bars, i);
 
             const signalId = `sig-${ticker}-${barDate}`;
@@ -114,19 +127,19 @@ export async function runHistoricalBackfill(
               ticker,
               name: ticker,
               signal_price: outcomes.entryPrice,
-              strategy_type: evalRes.strategyType as StrategyType,
-              asset_type: 'equity',
-              opportunity_score: evalRes.opportunityScore,
-              risk_level: evalRes.riskLevel as RiskLevel,
-              risk_score: evalRes.riskLevel === 'LOW' ? 25 : evalRes.riskLevel === 'MEDIUM' ? 50 : 75,
-              decision: evalRes.opportunityScore >= 80 ? 'STRONG_OPPORTUNITY' : 'OPPORTUNITY',
-              signal_confidence: 0.88,
-              classification_confidence: 1.0,
-              technical_score: evalRes.opportunityScore,
-              momentum_score: evalRes.opportunityScore,
-              fundamental_score: 75,
-              valuation_score: 70,
-              rsi: 52,
+              strategy_type: evaluation.classification.strategy_type,
+              asset_type: evaluation.classification.asset_type,
+              opportunity_score: evaluation.opportunity.opportunity_score,
+              risk_level: evaluation.risk.risk_level,
+              risk_score: evaluation.risk.risk_score,
+              decision: evaluation.decision.decision,
+              signal_confidence: evaluation.decision.confidence,
+              classification_confidence: evaluation.classification.confidence,
+              technical_score: evaluation.opportunity.sub_scores.technical_score,
+              momentum_score: evaluation.opportunity.sub_scores.momentum_score,
+              fundamental_score: evaluation.opportunity.sub_scores.fundamental_score,
+              valuation_score: evaluation.opportunity.sub_scores.valuation_score,
+              rsi: evaluation.opportunity.technical_details.rsi14,
               drawdown: Math.abs(outcomes.maxAdverseExcursion),
               return_5d: outcomes.return5d,
               return_10d: outcomes.return10d,
@@ -135,9 +148,9 @@ export async function runHistoricalBackfill(
               status: outcomes.return20d !== null ? '20D_REACHED' : 'ACTIVE',
               is_closed: outcomes.return20d !== null,
               components: {
-                weights: { technical: 0.35, momentum: 0.35, fundamental: 0.15, valuation: 0.15 },
-                risk_reasons: [],
-                decision_reason: `과거 롤링 백테스트 시그널 (${evalRes.strategyType}, 기회점수 ${evalRes.opportunityScore}점)`,
+                weights: evaluation.opportunity.weights_used,
+                risk_reasons: evaluation.risk.risk_reasons,
+                decision_reason: evaluation.decision.reason,
               },
             };
 

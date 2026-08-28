@@ -79,7 +79,7 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       watchlistTotalCount = pipelineData.watchlist?.length || evaluations.length;
     }
 
-    actionable = evaluations.filter((e) => e.decision?.actionable);
+    actionable = evaluations.filter((e) => e.signal_generated);
 
     // 3. Save new actionable snapshots into signalRepository
     for (const item of actionable) {

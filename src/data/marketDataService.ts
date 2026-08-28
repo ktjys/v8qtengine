@@ -78,7 +78,10 @@ export class MarketDataService {
     if (isStale) {
       const bars = await this.provider.getBenchmark('1y');
       if (bars.length > 0) {
-        await marketDataRepository.saveBars('SPY', bars, this.provider.name);
+        // Provider may have internally fallen back to seed (e.g. Yahoo -> seed);
+        // persist the honest source so SPY provenance is not mislabeled as real data.
+        const usedFallback = this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
+        await marketDataRepository.saveBars('SPY', bars, usedFallback ? 'seed' : this.provider.name);
         dbBars = bars;
       }
     }
@@ -108,7 +111,10 @@ export class MarketDataService {
     if (isStale) {
       const fetchedBars = await this.provider.getHistorical(cleanTicker, '1y');
       if (fetchedBars && fetchedBars.length > 0) {
-        await marketDataRepository.saveBars(cleanTicker, fetchedBars, this.provider.name);
+        // Provider may have internally fallen back to seed (e.g. Yahoo -> seed);
+        // persist the honest source so provenance is not mislabeled as real data.
+        const usedFallback = this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
+        await marketDataRepository.saveBars(cleanTicker, fetchedBars, usedFallback ? 'seed' : this.provider.name);
         dbBars = fetchedBars;
       }
     }
@@ -159,9 +165,11 @@ export class MarketDataService {
         quoteType: dbAsset?.asset_type === 'etf' ? 'ETF' : 'EQUITY',
       };
     } else {
+      // Yahoo provides no real fundamentals (seed baseline); record honest source.
+      const usedFallback = this.provider.name === 'yahoo';
       fundData = await this.provider.getFundamentals(cleanTicker);
       if (fundData) {
-        await fundamentalsRepository.save(fundData, this.provider.name);
+        await fundamentalsRepository.save(fundData, usedFallback ? 'seed' : this.provider.name);
       }
     }
 

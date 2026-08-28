@@ -69,7 +69,7 @@ export class EvaluationService {
       opportunity: evaluation.opportunity,
       risk: evaluation.risk,
       decision: evaluation.decision,
-      signal_generated: evaluation.decision.actionable,
+      signal_generated: evaluation.isSignal,
       data_quality: processed.dataQuality,
       raw_metadata: processed.rawMetadata,
     };

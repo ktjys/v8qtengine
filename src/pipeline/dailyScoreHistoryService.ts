@@ -144,7 +144,7 @@ export class DailyScoreHistoryService {
         cleanTicker,
         {
           quoteType: isEtfHint ? 'ETF' : 'EQUITY',
-          beta: mom.beta || dbFund?.market_cap ? 1.0 : 1.0,
+          beta: mom.beta || 1.0,
           marketCap: dbFund?.market_cap || 50_000_000_000,
           sector: dbAsset?.sector,
           industry: dbAsset?.industry,
