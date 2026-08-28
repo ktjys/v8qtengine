@@ -11,17 +11,23 @@ export function shouldGenerateSignal(
   existingRecentSignals: SignalSnapshot[] = []
 ): boolean {
   // 1. Must be actionable decision
-  if (!evaluation.decision.actionable) {
+  if (!evaluation.decision?.actionable) {
     return false;
   }
 
-  // 2. Prevent duplicate signal for same ticker within last 3 days
-  const now = new Date(evaluation.evaluated_at).getTime();
+  const evalDate = evaluation.evaluated_at ? evaluation.evaluated_at.split('T')[0] : new Date().toISOString().split('T')[0];
+  const now = evaluation.evaluated_at ? new Date(evaluation.evaluated_at).getTime() : Date.now();
+
+  // 2. Prevent duplicate signal for same ticker on the same trading day OR within recent cooldown
   const duplicate = existingRecentSignals.find((s) => {
     if (s.ticker !== evaluation.ticker) return false;
+    // Exact same date match
+    if (s.signal_date === evalDate) return true;
+    
+    // Within 24-hour trading session window
     const sigTime = new Date(s.signal_date).getTime();
-    const diffDays = (now - sigTime) / (1000 * 60 * 60 * 24);
-    return diffDays < 3;
+    const diffDays = Math.abs(now - sigTime) / (1000 * 60 * 60 * 24);
+    return diffDays < 1;
   });
 
   if (duplicate) {
@@ -39,10 +45,11 @@ export function createSignalSnapshot(
   const risk = evaluation.risk;
   const decision = evaluation.decision;
   const classification = evaluation.classification;
+  const dateStr = evaluation.evaluated_at ? evaluation.evaluated_at.split('T')[0] : new Date().toISOString().split('T')[0];
 
   return {
-    id: idOverride || `sig-${Date.now()}-${evaluation.ticker}`,
-    signal_date: evaluation.evaluated_at.split('T')[0],
+    id: idOverride || `sig-${dateStr}-${evaluation.ticker}`,
+    signal_date: dateStr,
     ticker: evaluation.ticker,
     name: evaluation.name,
     signal_price: evaluation.price,

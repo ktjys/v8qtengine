@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { DailyScorePoint, SymbolScoreHistoryResult, SymbolScoreHistorySummary } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { dailyScoreHistoryService } from '../pipeline/dailyScoreHistoryService';
 
 interface SymbolDailyScoreChartProps {
   ticker: string;
@@ -67,17 +68,39 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v8/evaluations/history/${ticker}?range=${selectedRange}`);
-      const json = await res.json();
-      if (json.success && json.data) {
-        setData(json.data);
-        if (json.data.history?.length > 0) {
-          setPinnedPoint(json.data.history[json.data.history.length - 1]);
+      let historyData: SymbolScoreHistoryResult | null = null;
+
+      // 1. Try API endpoint first
+      try {
+        const res = await fetch(`/api/v8/evaluations/history/${ticker}?range=${selectedRange}`);
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const json = await res.json();
+            if (json.success && json.data) {
+              historyData = json.data;
+            }
+          }
+        }
+      } catch (apiErr) {
+        console.warn('[SymbolDailyScoreChart] API fetch notice, switching to client calculator:', apiErr);
+      }
+
+      // 2. Client-side generator fallback if API was unavailable (e.g. edge worker static route)
+      if (!historyData) {
+        historyData = await dailyScoreHistoryService.getDailyScoreHistory(ticker, selectedRange);
+      }
+
+      if (historyData) {
+        setData(historyData);
+        if (historyData.history?.length > 0) {
+          setPinnedPoint(historyData.history[historyData.history.length - 1]);
         }
       } else {
-        setError(json.error || '일별 점수 데이터를 불러올 수 없습니다.');
+        setError('일별 점수 및 기술적 지표 데이터를 불러올 수 없습니다.');
       }
     } catch (err: any) {
+      console.error('[SymbolDailyScoreChart] Critical chart history error:', err);
       setError(err.message || '네트워크 오류가 발생했습니다.');
     } finally {
       setLoading(false);

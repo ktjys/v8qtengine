@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Activity,
   AlertOctagon,
@@ -71,7 +71,17 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   const [editConfidence, setEditConfidence] = useState<number>(evaluation.classification.confidence);
   const [editReason, setEditReason] = useState<string>(evaluation.classification.reason);
 
-  const tickerSignals = historicalSignals.filter((s) => s.ticker === evaluation.ticker);
+  const tickerSignals = useMemo(() => {
+    const raw = (historicalSignals || []).filter((s) => s.ticker === evaluation.ticker);
+    const map = new Map<string, SignalSnapshot>();
+    for (const sig of raw) {
+      const dateKey = sig.signal_date;
+      if (!map.has(dateKey)) {
+        map.set(dateKey, sig);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
+  }, [historicalSignals, evaluation.ticker]);
   const telegramMessage = formatTelegramNotification({
     id: `temp-${evaluation.ticker}`,
     signal_date: evaluation.evaluated_at.split('T')[0],

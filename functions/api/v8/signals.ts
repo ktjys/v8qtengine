@@ -8,36 +8,48 @@ export async function onRequest(context: any) {
     let savedSignals = await signalRepository.getAll();
     const evals = await evaluationRepository.getAll();
 
+    const todayStr = new Date().toISOString().split('T')[0];
     const liveSignals = evals
       .filter((e) => e.decision?.actionable)
       .map((ev) => ({
-        id: `sig-${ev.ticker}-${Date.now()}`,
-        signal_date: new Date().toISOString().split('T')[0],
+        id: `sig-${ev.ticker}-${todayStr}`,
+        signal_date: todayStr,
         ticker: ev.ticker,
         name: ev.name,
         signal_price: ev.price,
-        strategy_type: ev.classification.strategy_type,
-        asset_type: ev.classification.asset_type,
-        opportunity_score: ev.opportunity.opportunity_score,
-        risk_score: ev.risk.risk_score,
-        risk_level: ev.risk.risk_level,
-        decision: ev.decision.decision,
-        signal_confidence: ev.decision.confidence,
-        classification_confidence: ev.classification.confidence,
-        primary_reason: ev.decision.reason,
+        strategy_type: ev.classification?.strategy_type || 'CORE_MOMENTUM',
+        asset_type: ev.classification?.asset_type || 'equity',
+        opportunity_score: ev.opportunity?.opportunity_score ?? 70,
+        risk_score: ev.risk?.risk_score ?? 50,
+        risk_level: ev.risk?.risk_level || 'MEDIUM',
+        decision: ev.decision?.decision || 'OPPORTUNITY',
+        signal_confidence: ev.decision?.confidence ?? 0.8,
+        classification_confidence: ev.classification?.confidence ?? 1.0,
+        primary_reason: ev.decision?.reason || '',
         created_at: new Date().toISOString(),
         status: 'ACTIVE' as const,
       }));
 
     const signalMap = new Map<string, any>();
-    savedSignals.forEach((s) => signalMap.set(`${s.ticker}-${s.signal_date}`, s));
     INITIAL_HISTORICAL_SIGNALS.forEach((s) => {
-      const key = `${s.ticker}-${s.signal_date}`;
-      if (!signalMap.has(key)) signalMap.set(key, s);
+      const key = `${s.ticker}_${s.signal_date}`;
+      signalMap.set(key, s);
     });
-    liveSignals.forEach((s) => signalMap.set(`${s.ticker}-${s.signal_date}`, s));
+    savedSignals.forEach((s) => {
+      const key = `${s.ticker}_${s.signal_date}`;
+      signalMap.set(key, s);
+    });
+    liveSignals.forEach((s) => {
+      const key = `${s.ticker}_${s.signal_date}`;
+      // If already exists with outcomes, keep the saved one
+      if (!signalMap.has(key)) {
+        signalMap.set(key, s);
+      }
+    });
 
-    const combined = Array.from(signalMap.values());
+    const combined = Array.from(signalMap.values()).sort((a, b) =>
+      b.signal_date.localeCompare(a.signal_date)
+    );
 
     return new Response(
       JSON.stringify({

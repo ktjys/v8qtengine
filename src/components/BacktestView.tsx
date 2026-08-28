@@ -32,7 +32,17 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
   const [selectedStrategy, setSelectedStrategy] = useState<string>('ALL');
   const [selectedRisk, setSelectedRisk] = useState<string>('ALL');
 
-  const safeSignals = Array.isArray(allSignals) ? allSignals : [];
+  const safeSignals = useMemo(() => {
+    if (!Array.isArray(allSignals)) return [];
+    const map = new Map<string, SignalSnapshot>();
+    for (const s of allSignals) {
+      const key = `${s.ticker}_${s.signal_date}`;
+      if (!map.has(key)) {
+        map.set(key, s);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
+  }, [allSignals]);
 
   const computedSummary = useMemo(() => {
     if (safeSignals.length > 0) {

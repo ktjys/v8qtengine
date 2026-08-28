@@ -71,9 +71,17 @@ export class SignalRepository {
             };
           });
 
-          // Sync with cache
-          mapped.forEach((s) => dbClient.signals.set(s.id, s));
-          return mapped;
+          // Sync with cache, deduplicating by ticker and signal_date
+          const dedupMap = new Map<string, SignalSnapshot>();
+          for (const s of mapped) {
+            const key = `${s.ticker}_${s.signal_date}`;
+            if (!dedupMap.has(key)) {
+              dedupMap.set(key, s);
+            }
+          }
+          const uniqueMapped = Array.from(dedupMap.values());
+          uniqueMapped.forEach((s) => dbClient.signals.set(s.id, s));
+          return uniqueMapped;
         }
       } catch (err) {
         dbClient.handleDbError('signals', 'getAll', err);
@@ -83,10 +91,28 @@ export class SignalRepository {
     if (dbClient.signals.size === 0) {
       dbClient.seedInMemoryState();
     }
-    return Array.from(dbClient.signals.values());
+
+    // Deduplicate in-memory cache
+    const memDedup = new Map<string, SignalSnapshot>();
+    for (const s of dbClient.signals.values()) {
+      const key = `${s.ticker}_${s.signal_date}`;
+      if (!memDedup.has(key)) {
+        memDedup.set(key, s);
+      }
+    }
+    return Array.from(memDedup.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
   }
 
   async save(signal: SignalSnapshot): Promise<SignalSnapshot> {
+    // Check if a signal for the same ticker and signal_date already exists in memory or DB
+    const existingInMem = Array.from(dbClient.signals.values()).find(
+      (s) => s.ticker === signal.ticker && s.signal_date === signal.signal_date
+    );
+
+    if (existingInMem) {
+      signal.id = existingInMem.id;
+    }
+
     if (dbClient.isTableAvailable('signals') && dbClient.supabase) {
       try {
         // Ensure parent asset exists in assets table
@@ -101,8 +127,20 @@ export class SignalRepository {
           updated_at: new Date().toISOString(),
         });
 
+        // Check if row already exists in Supabase
+        const { data: existingRows } = await dbClient.supabase
+          .from('signals')
+          .select('id')
+          .eq('ticker', signal.ticker)
+          .eq('signal_date', signal.signal_date)
+          .limit(1);
+
+        const existingRowId = existingRows && existingRows.length > 0 ? existingRows[0].id : null;
+        if (existingRowId) {
+          signal.id = existingRowId;
+        }
+
         const payload: Record<string, any> = {
-          id: signal.id.startsWith('sig-') ? undefined : signal.id,
           ticker: signal.ticker,
           signal_date: signal.signal_date,
           strategy_type: signal.strategy_type,
@@ -129,42 +167,54 @@ export class SignalRepository {
           },
         };
 
-        const { data, error } = await dbClient.supabase
-          .from('signals')
-          .insert(payload)
-          .select('id')
-          .maybeSingle();
+        if (existingRowId) {
+          // Update existing row
+          await dbClient.supabase
+            .from('signals')
+            .update(payload)
+            .eq('id', existingRowId);
+        } else {
+          // Insert new row
+          const insertPayload = {
+            ...payload,
+            id: signal.id.startsWith('sig-') ? undefined : signal.id,
+          };
+          const { data: inserted, error } = await dbClient.supabase
+            .from('signals')
+            .insert(insertPayload)
+            .select('id')
+            .maybeSingle();
 
-        if (error) {
-          // If error is caused by missing optional columns (e.g. confidence or status), try minimal insert
-          const msg = error.message || '';
-          if (msg.includes('confidence') || msg.includes('status')) {
-            const minPayload = {
-              ticker: signal.ticker,
-              signal_date: signal.signal_date,
-              strategy_type: signal.strategy_type,
-              opportunity_score: signal.opportunity_score,
-              risk_score: signal.risk_score,
-              risk_level: signal.risk_level,
-              decision: signal.decision,
-              entry_price: signal.signal_price,
-              technical_score: signal.technical_score,
-              momentum_score: signal.momentum_score,
-              reason_json: payload.reason_json,
-            };
-            const { data: minData } = await dbClient.supabase
-              .from('signals')
-              .insert(minPayload)
-              .select('id')
-              .maybeSingle();
-            if (minData?.id) {
-              signal.id = minData.id;
+          if (error) {
+            const msg = error.message || '';
+            if (msg.includes('confidence') || msg.includes('status')) {
+              const minPayload = {
+                ticker: signal.ticker,
+                signal_date: signal.signal_date,
+                strategy_type: signal.strategy_type,
+                opportunity_score: signal.opportunity_score,
+                risk_score: signal.risk_score,
+                risk_level: signal.risk_level,
+                decision: signal.decision,
+                entry_price: signal.signal_price,
+                technical_score: signal.technical_score,
+                momentum_score: signal.momentum_score,
+                reason_json: payload.reason_json,
+              };
+              const { data: minData } = await dbClient.supabase
+                .from('signals')
+                .insert(minPayload)
+                .select('id')
+                .maybeSingle();
+              if (minData?.id) {
+                signal.id = minData.id;
+              }
+            } else {
+              dbClient.handleDbError('signals', 'save', error);
             }
-          } else {
-            dbClient.handleDbError('signals', 'save', error);
+          } else if (inserted?.id) {
+            signal.id = inserted.id;
           }
-        } else if (data?.id) {
-          signal.id = data.id;
         }
       } catch (err) {
         dbClient.handleDbError('signals', 'save', err);

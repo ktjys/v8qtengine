@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -61,8 +61,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const actionableSignalsToday = (evaluations || []).filter((e) => e?.decision?.actionable);
 
+  const uniqueRecentSignals = useMemo(() => {
+    const map = new Map<string, SignalSnapshot>();
+    for (const sig of (recentSignals || [])) {
+      const key = `${sig.ticker}_${sig.signal_date}`;
+      if (!map.has(key)) {
+        map.set(key, sig);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
+  }, [recentSignals]);
+
   const displayedWatchItems = showAllWatch ? watchListItems : watchListItems.slice(0, 10);
-  const displayedSignals = showAllSignals ? recentSignals : recentSignals.slice(0, 10);
+  const displayedSignals = showAllSignals ? uniqueRecentSignals : uniqueRecentSignals.slice(0, 10);
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-fadeIn">

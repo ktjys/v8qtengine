@@ -130,7 +130,15 @@ export default function App() {
       }
 
       if (latestSignals?.success && Array.isArray(latestSignals.signals) && latestSignals.signals.length > 0) {
-        setSignals(latestSignals.signals);
+        const sigMap = new Map<string, SignalSnapshot>();
+        for (const s of latestSignals.signals) {
+          const key = `${s.ticker}_${s.signal_date}`;
+          if (!sigMap.has(key)) {
+            sigMap.set(key, s);
+          }
+        }
+        const dedupedSignals = Array.from(sigMap.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
+        setSignals(dedupedSignals);
       }
 
       if (currentRuns?.success && Array.isArray(currentRuns.runs) && currentRuns.runs.length > 0) {
