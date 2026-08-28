@@ -2,7 +2,6 @@ import { OHLCVBar } from '../data/providers/types';
 import { historicalDataProvider } from '../backtest/historicalDataProvider';
 import { calculateTechnicalIndicators } from '../data/indicators/technicalIndicators';
 import { calculateMomentumIndicators } from '../data/indicators/momentumIndicators';
-import { extractFundamentalIndicators } from '../data/indicators/fundamentalIndicators';
 import { buildEvaluationInput, ClassificationInputs } from '../backtest/quantStrategy';
 import { evaluateV8 } from '../engine/evaluateV8';
 import { dbClient } from '../db/supabaseClient';
@@ -123,25 +122,6 @@ export class DailyScoreHistoryService {
 
       // Point-in-Time fundamentals: as_of_date <= evaluation date (no look-ahead)
       const dbFund = await fundamentalsRepository.getAsOf(cleanTicker, barDate);
-      const fundInd = dbFund
-        ? extractFundamentalIndicators(
-            {
-              ticker: cleanTicker,
-              asOfDate: dbFund.as_of_date,
-              marketCap: dbFund.market_cap,
-              revenueGrowthYoy: dbFund.revenue_growth,
-              earningsGrowthYoy: dbFund.eps_growth,
-              operatingMargin: dbFund.operating_margin,
-              freeCashFlowMargin: dbFund.fcf_margin,
-              trailingPe: dbFund.trailing_pe,
-              forwardPe: dbFund.forward_pe,
-              psRatio: dbFund.ps_ratio,
-              pegRatio: dbFund.peg_ratio,
-              quoteType: isEtfHint ? 'ETF' : 'EQUITY',
-            },
-            isEtfHint
-          )
-        : undefined;
 
       const classificationInputs: ClassificationInputs = {
         raw: {
@@ -164,7 +144,8 @@ export class DailyScoreHistoryService {
           undefined,
           undefined,
           classificationInputs,
-          fundInd
+          dbFund,
+          isEtfHint
         )
       );
 
