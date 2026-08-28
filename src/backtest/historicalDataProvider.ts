@@ -47,7 +47,10 @@ export class HistoricalDataProvider {
       const bars = await this.yahooProvider.getHistorical(clean, range, '1d');
       const usedFallback = !!this.yahooProvider.getHadFallback?.();
       if (bars.length >= 50) {
-        if (!usedFallback) {
+        if (usedFallback) {
+          // Yahoo 내부에서 seed로 폴백됐다면, DB 저장을 건너뛰고 seed 사용을 정직하게 기록한다
+          this.lastUsedSeed = true;
+        } else {
           await marketDataRepository.saveBars(clean, bars);
         }
         return bars;
