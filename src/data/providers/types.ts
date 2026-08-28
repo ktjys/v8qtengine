@@ -6,6 +6,8 @@ export interface OHLCVBar {
   close: number;
   adjClose: number;
   volume: number;
+  /** 원본 데이터 출처 (yahoo | seed | supabase 등). 백테스트가 seed 여부를 정직하게 판별하기 위해 보존한다. */
+  source?: string;
 }
 
 export interface QuoteData {

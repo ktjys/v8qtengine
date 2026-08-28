@@ -114,9 +114,10 @@ export class MarketDataRepository {
             close: Number(r.close),
             adjClose: Number(r.adj_close),
             volume: Number(r.volume),
+            source: r.source ?? undefined,
           }));
 
-          // Sync to cache
+          // Sync to cache, preserving the DB record's original source
           for (const b of bars) {
             dbClient.market_data_daily.set(`${clean}_${b.date}`, {
               ticker: clean,
@@ -127,7 +128,7 @@ export class MarketDataRepository {
               close: b.close,
               adj_close: b.adjClose,
               volume: b.volume,
-              source: 'supabase',
+              source: b.source ?? 'supabase',
               fetched_at: new Date().toISOString(),
             });
           }
@@ -158,6 +159,7 @@ export class MarketDataRepository {
       close: r.close,
       adjClose: r.adj_close,
       volume: r.volume,
+      source: r.source ?? undefined,
     }));
   }
 }

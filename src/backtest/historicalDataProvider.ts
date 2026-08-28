@@ -26,6 +26,16 @@ export class HistoricalDataProvider {
     // 1. Try DB first
     const dbBars = await marketDataRepository.getBars(clean, 600);
     if (dbBars && dbBars.length >= 200) {
+      // Seed 데이터가 DB에 영속화되어 있으면 이후 조회에서도 seed로 인식한다
+      // (provenance 보존: getBars가 각 bar의 원본 source를 유지하므로 모두 seed인지 판별 가능)
+      const hasSeedBar = dbBars.some((b) => b.source === 'seed');
+      const allSeed = dbBars.every((b) => b.source === 'seed');
+      if (hasSeedBar) {
+        this.lastUsedSeed = true;
+        console.warn(
+          `[HistoricalDataProvider] ${clean} bars loaded from DB are seed-sourced (all=${allSeed}). Signals from seed data will be blocked.`
+        );
+      }
       return dbBars;
     }
 

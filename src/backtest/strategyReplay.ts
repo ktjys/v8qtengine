@@ -35,8 +35,10 @@ export async function runHistoricalReplay(
 
       // 1. Strict Point-in-Time Slice
       const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
+      // Benchmark PIT도 index가 아닌 날짜 기반으로 엄격 적용: 평가일 이전 봉만 사용
+      // (ticker와 SPY의 length/시작일이 달라도 미래 날짜의 benchmark를 참조하지 않는다)
       const pitBenchmark = benchmarkBars.length > 0
-        ? historicalDataProvider.getPointInTimeSlice(benchmarkBars, Math.min(i, benchmarkBars.length - 1))
+        ? benchmarkBars.filter((b) => b.date <= barDate)
         : undefined;
 
       // 2. 공통 평가 엔진 evaluateV8() 직접 사용 (라이브와 동일 경로)
@@ -82,8 +84,12 @@ export async function runHistoricalReplay(
   let cumulative = 0;
   let peak = 0;
 
-  // 실제 벤치마크 기준선: 첫 번째 벤치마크 봉 close 대비 각 신호 날짜의 close 수익률
-  const benchmarkStartPrice = benchmarkBars.length > 0 ? benchmarkBars[0].close : 0;
+  // 실제 벤치마크 기준선: 백테스트 기간(시작일)의 benchmark close를 기준으로 시작한다.
+  // 전체 2년 데이터의 첫 봉을 기준으로 삼으면 기간 밖 과거 수익률이 들어가므로 시작일로 리셋.
+  const backtestStart = config.startDate || (benchmarkBars.length > 0 ? benchmarkBars[0].date : '');
+  const baselineBar = benchmarkBars.find((b) => b.date >= backtestStart) ?? benchmarkBars[0];
+  const benchmarkStartPrice = baselineBar ? baselineBar.close : 0;
+  const benchmarkStartDate = baselineBar ? baselineBar.date : '';
 
   signals.forEach((sig) => {
     const ret = sig.return20d ?? sig.return10d ?? sig.return5d ?? 0;
@@ -91,8 +97,8 @@ export async function runHistoricalReplay(
     if (cumulative > peak) peak = cumulative;
     const dd = peak > 0 ? ((cumulative - peak) / (100 + peak)) * 100 : 0;
 
-    // Real benchmark: from backtest start to signal date's benchmark close
-    const benchBar = benchmarkBars.find((b) => b.date >= sig.entryDate);
+    // Real benchmark: backtest 시작일부터 신호 날짜까지의 benchmark close 수익률
+    const benchBar = benchmarkBars.find((b) => b.date >= sig.entryDate && b.date >= benchmarkStartDate);
     const benchClose = benchBar ? benchBar.close : benchmarkBars[benchmarkBars.length - 1]?.close ?? 0;
     const benchmarkReturn = benchmarkStartPrice > 0 ? ((benchClose - benchmarkStartPrice) / benchmarkStartPrice) * 100 : 0;
 
