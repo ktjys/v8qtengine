@@ -35,6 +35,7 @@ export function buildEvaluationInput(
   ticker: string,
   barsSlice: OHLCVBar[],
   benchmarkSlice?: OHLCVBar[],
+  signalThreshold?: number,
   provenance?: DataProvenance,
   dataQuality?: DataQualityReport | null
 ): EvaluationInput {
@@ -88,6 +89,7 @@ export function buildEvaluationInput(
     evaluationAt,
     market,
     classification,
+    signalThreshold,
     provenance: provenance || { source: 'backtest', isFallback: false },
     dataQuality,
   };
@@ -119,12 +121,10 @@ export function evaluateStrategy(
   }
 
   const evaluation = evaluateV8(
-    buildEvaluationInput(ticker, barsSlice, benchmarkSlice, provenance, dataQuality)
+    buildEvaluationInput(ticker, barsSlice, benchmarkSlice, opportunityThreshold, provenance, dataQuality)
   );
 
-  const isSignal =
-    evaluation.decision.actionable &&
-    evaluation.opportunity.opportunity_score >= opportunityThreshold;
+  const isSignal = evaluation.isSignal;
 
   return {
     isSignal,

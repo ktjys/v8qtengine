@@ -23,7 +23,9 @@ export async function runHistoricalReplay(
     if (bars.length < 60) continue;
 
     // 2.3 Seed 폴백 데이터로는 절대 성과를 만들지 않는다 (24시간 정직한 출처)
-    const isSeedData = historicalDataProvider.getHadSeedFallback();
+    // 플래그 + 실제 bar 출처를 모두 검사해 DB를 거쳐 온 seed여도 확실히 차단한다.
+    const isSeedData =
+      historicalDataProvider.getHadSeedFallback() || bars.some((b) => b.source === 'seed');
 
     let lastSignalIndex = -999;
 
@@ -44,12 +46,18 @@ export async function runHistoricalReplay(
       // 2. 공통 평가 엔진 evaluateV8() 직접 사용 (라이브와 동일 경로)
       if (i - lastSignalIndex >= 3) {
         const evaluation = evaluateV8(
-          buildEvaluationInput(ticker, pitBars, pitBenchmark, {
-            source: isSeedData ? 'seed' : 'backtest',
-            isFallback: isSeedData,
-          })
+          buildEvaluationInput(
+            ticker,
+            pitBars,
+            pitBenchmark,
+            threshold,
+            {
+              source: isSeedData ? 'seed' : 'backtest',
+              isFallback: isSeedData,
+            }
+          )
         );
-        const isSignal = evaluation.decision.actionable && evaluation.opportunity.opportunity_score >= threshold;
+        const isSignal = evaluation.isSignal;
 
         if (isSignal) {
           const outcomes = historicalDataProvider.getForwardOutcomes(bars, i);

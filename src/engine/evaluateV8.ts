@@ -51,6 +51,8 @@ export interface EvaluationInput {
   /** 데이터 출처 및 품질. 신호 생성 게이트에 사용된다. */
   dataQuality?: DataQualityReport | null;
   provenance?: DataProvenance;
+  /** 시그널 문턱 value (0~100). 미지정 시 기본값 70. */
+  signalThreshold?: number;
 }
 
 /**
@@ -99,10 +101,10 @@ export function evaluateV8(input: EvaluationInput): V8Evaluation {
     input.dataQuality
   );
 
-  // Signal 후보 = actionable && 기회 점수 >= 기본 신호 문턱(70) && 데이터 품질 게이트 통과
-  // (문턱값은 호출부에서 조정 가능하도록 기본값 사용)
+  // Signal 후보 = actionable && 기회 점수 >= 신호 문턱 && 데이터 품질 게이트 통과
+  const signalThreshold = input.signalThreshold ?? 70;
   const isSignal =
-    eligible && decision.actionable && opportunity.opportunity_score >= 70;
+    eligible && decision.actionable && opportunity.opportunity_score >= signalThreshold;
 
   return {
     ticker,
