@@ -61,7 +61,7 @@ export interface FundamentalComponents {
   earningsGrowthYoy: number | null; // %
   operatingMargin: number | null; // %
   freeCashFlowMargin: number | null; // %
-  marketCapBillions: number;
+  marketCapBillions: number | null;
   isEtf: boolean;
 }
 

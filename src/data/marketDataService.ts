@@ -242,8 +242,15 @@ export class MarketDataService {
     };
 
     const isEtf = normalized.fundamentals.quoteType === 'ETF' || isEtfHint;
-    const isFallback =
+
+    // 시장(OHLCV) 폴백 판정: provider 자체가 seed로 폴백했거나, DB에 저장된
+    // bars 중 seed 출처가 있으면(과거에 seed로 저장된 경우) 이 종목은 시장
+    // 데이터가 seed다. Backtest HistoricalDataProvider와 동일한 판정 기준을
+    // Live에도 적용한다(리뷰 P0-2).
+    const hasSeedBars = dbBars.length > 0 && dbBars.some((b) => b.source === 'seed');
+    const providerFellBack =
       this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
+    const isFallback = providerFellBack || hasSeedBars;
 
     // 폴백 발생 시 실제 출처를 정직하게 기록 (오표기 방지)
     if (isFallback) {
@@ -252,11 +259,11 @@ export class MarketDataService {
 
     // 독립 출처 추적: 시장(OHLCV)과 펀더멘털은 서로 다른 출처일 수 있다.
     const marketDataSource = isFallback ? 'seed' : this.provider.name;
-    const fundamentalDataSource = dbFund
-      ? 'database'
-      : this.provider.name === 'yahoo'
-        ? 'seed'
-        : this.provider.name;
+    // P0-1: DB에 저장된 source를 우선 보존한다. DB 레코드에 source='seed'로
+    // 저장됐다면 'database'가 아닌 'seed'로 기록해야 실제 출처가 정직하게 남는다.
+    const fundamentalDataSource =
+      dbFund?.source ||
+      (this.provider.name === 'yahoo' ? 'seed' : this.provider.name);
 
     const dataQuality = evaluateDataQuality(normalized, isEtf);
 

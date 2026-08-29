@@ -18,13 +18,13 @@ export async function runHistoricalReplay(
     ? config.tickers
     : watchlist.map((w) => w.ticker);
 
-  const benchmarkBars = await historicalDataProvider.getHistoricalBarsForTicker('SPY', '2y');
+  const benchmarkBars = await historicalDataProvider.getHistoricalBarsForTicker('SPY', '2y', config.endDate);
   const signals: SimulatedTradeSignal[] = [];
   const threshold = config.opportunityThreshold || 70;
 
   for (const ticker of targetTickers) {
     historicalDataProvider.resetSeedFallback();
-    const bars = await historicalDataProvider.getHistoricalBarsForTicker(ticker, '2y');
+    const bars = await historicalDataProvider.getHistoricalBarsForTicker(ticker, '2y', config.endDate);
     if (bars.length < 60) continue;
 
     const isSeedData =

@@ -26,6 +26,10 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+// Seed 시계열의 고정 기준 종료일. 명시적 endDate가 없으면 이 날짜를 기준으로
+// 252개 일봉을 생성한다. (며칠 후 재실행/백테스트 재현성 보장 — P1-1)
+const SEED_END_DATE = '2026-08-19';
+
 export class SeedDataProvider implements MarketDataProvider {
   readonly name = 'seed';
 
@@ -49,7 +53,7 @@ export class SeedDataProvider implements MarketDataProvider {
     };
   }
 
-  async getHistorical(ticker: string, range = '1y', interval = '1d'): Promise<OHLCVBar[]> {
+  async getHistorical(ticker: string, range = '1y', interval = '1d', endDate?: string): Promise<OHLCVBar[]> {
     const clean = ticker.toUpperCase();
     const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === clean);
     const basePrice = seed ? seed.price : 100;
@@ -59,12 +63,18 @@ export class SeedDataProvider implements MarketDataProvider {
     // yield an identical synthetic series (backtest reproducibility).
     const rng = mulberry32(hashString(`${clean}:${range}:${interval}`));
 
+    // 날짜 anchor를 고정한다. endDate(예: backtest의 요청 종료일)가 주어지면
+    // 이를 기준으로 삼고, 없으면 SEED_END_DATE 상수를 사용한다. new Date()를
+    // 쓰지 않으므로 며칠 후 재실행해도 동일한 날짜의 Seed 시계열이 재현된다.
+    const anchorMs = endDate
+      ? new Date(`${endDate}T00:00:00Z`).getTime()
+      : new Date(`${SEED_END_DATE}T00:00:00Z`).getTime();
+
     // Generate 252 synthetic daily bars with realistic drift and volatility
-    const now = new Date();
     let current = basePrice * 0.85;
 
     for (let i = 252; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const d = new Date(anchorMs - i * 24 * 60 * 60 * 1000);
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       if (isWeekend) continue;
 

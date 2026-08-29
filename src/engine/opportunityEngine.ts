@@ -25,7 +25,7 @@ export interface RawMarketIndicators {
   earningsGrowthYoy?: number; // 0.40 (40%)
   operatingMargin?: number; // 0.28 (28%)
   freeCashFlowMargin?: number; // 0.22 (22%)
-  marketCapBillions: number;
+  marketCapBillions: number | null;
   trailingPe?: number;
   forwardPe?: number;
   psRatio?: number;
@@ -251,7 +251,10 @@ export function calculateOpportunity(
     earningsGrowthYoy: indicators.earningsGrowthYoy ? Math.round(indicators.earningsGrowthYoy * 1000) / 10 : null,
     operatingMargin: indicators.operatingMargin ? Math.round(indicators.operatingMargin * 1000) / 10 : null,
     freeCashFlowMargin: indicators.freeCashFlowMargin ? Math.round(indicators.freeCashFlowMargin * 1000) / 10 : null,
-    marketCapBillions: Math.round(indicators.marketCapBillions * 10) / 10,
+    marketCapBillions:
+      indicators.marketCapBillions != null
+        ? Math.round(indicators.marketCapBillions * 10) / 10
+        : null,
     isEtf,
   };
 

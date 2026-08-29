@@ -97,7 +97,7 @@ export function buildEvaluationInput(
     return3M: mom.return3M,
     return6M: mom.return6M,
     relativeStrengthVsSpy: mom.relativeStrengthVsSpy,
-    marketCapBillions: fundInd?.marketCapBillions ?? 50,
+    marketCapBillions: fundInd?.marketCapBillions ?? null,
     revenueGrowthYoy: fundInd?.revenueGrowthYoy,
     earningsGrowthYoy: fundInd?.earningsGrowthYoy,
     operatingMargin: fundInd?.operatingMargin,

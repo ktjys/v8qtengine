@@ -18,7 +18,7 @@ export class HistoricalDataProvider {
     this.lastUsedSeed = false;
   }
 
-  async getHistoricalBarsForTicker(ticker: string, range = '2y'): Promise<OHLCVBar[]> {
+  async getHistoricalBarsForTicker(ticker: string, range = '2y', endDate?: string): Promise<OHLCVBar[]> {
     const clean = ticker.toUpperCase().trim();
     // 현재 조회의 폴백 상태를 초기화
     this.lastUsedSeed = false;
@@ -61,7 +61,7 @@ export class HistoricalDataProvider {
 
     // 3. Fallback to Seed (결정적 재현을 위해 DB에 영속화하지 않는다)
     this.lastUsedSeed = true;
-    const seedBars = await this.seedProvider.getHistorical(clean, range, '1d');
+    const seedBars = await this.seedProvider.getHistorical(clean, range, '1d', endDate);
     return seedBars;
   }
 
