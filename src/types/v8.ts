@@ -224,6 +224,9 @@ export interface SignalSnapshot {
   return_5d: number | null;
   return_10d: number | null;
   return_20d: number | null;
+  return_60d?: number | null;
+  return_120d?: number | null;
+  return_252d?: number | null;
   current_return: number | null;
   max_gain?: number;
   max_loss?: number;

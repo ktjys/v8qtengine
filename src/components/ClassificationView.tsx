@@ -123,7 +123,9 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-semibold">
-                <th className="py-3.5 px-4">종목코드 / 이름</th>
+                <th className="py-3.5 px-4">
+                  <span className="text-slate-500 font-mono mr-1.5 text-[11px]">No.</span>종목코드 / 이름
+                </th>
                 <th className="py-3.5 px-3">자산 대분류</th>
                 <th className="py-3.5 px-3">전략 유형 (Strategy)</th>
                 <th className="py-3.5 px-3 text-center">신뢰도 확신</th>
@@ -133,7 +135,7 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {filtered.map((item) => {
+              {filtered.map((item, idx) => {
                 const c = item.classification;
                 const isManual = c.classification_source === 'manual';
 
@@ -144,8 +146,15 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
                     className="hover:bg-slate-800/50 transition-colors cursor-pointer"
                   >
                     <td className="py-3 px-4 font-sans">
-                      <div className="font-bold text-slate-100 font-mono text-sm">{item.ticker}</div>
-                      <div className="text-[11px] text-slate-400 truncate max-w-[150px]">{item.name}</div>
+                      <div className="flex items-center space-x-2.5">
+                        <span className="text-[11px] font-mono font-bold text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-center min-w-[26px] shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-100 font-mono text-sm">{item.ticker}</div>
+                          <div className="text-[11px] text-slate-400 truncate max-w-[150px]">{item.name}</div>
+                        </div>
+                      </div>
                     </td>
 
                     <td className="py-3 px-3">

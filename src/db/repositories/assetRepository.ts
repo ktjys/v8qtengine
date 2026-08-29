@@ -16,8 +16,14 @@ export interface AssetRecord {
 }
 
 export class AssetRepository {
+  private syncedTickers = new Set<string>();
+
   async findByTicker(ticker: string): Promise<AssetRecord | null> {
     const clean = ticker.toUpperCase().trim();
+
+    if (dbClient.assets.has(clean)) {
+      return dbClient.assets.get(clean)!;
+    }
 
     // 1. Always try Supabase FIRST if connected
     if (dbClient.supabase && dbClient.isSupabaseConnected) {
@@ -32,6 +38,7 @@ export class AssetRepository {
           console.warn(`[AssetRepository] findByTicker error for ${clean}:`, error);
         } else if (data) {
           dbClient.assets.set(clean, data);
+          this.syncedTickers.add(clean);
           return data;
         }
       } catch (err) {
@@ -46,7 +53,6 @@ export class AssetRepository {
     // 1. Always try Supabase FIRST - this is the source of truth
     if (dbClient.supabase && dbClient.isSupabaseConnected) {
       try {
-        console.log('[AssetRepository] Querying Supabase assets table...');
         const { data, error } = await dbClient.supabase
           .from('assets')
           .select('*')
@@ -55,12 +61,13 @@ export class AssetRepository {
         if (error) {
           console.warn('[AssetRepository] Supabase error:', error);
         } else if (Array.isArray(data) && data.length > 0) {
-          console.log(`[AssetRepository] ✅ Loaded ${data.length} assets from Supabase`);
           dbClient.assets.clear();
           // Sync all to in-memory
           data.forEach((row: any) => {
             if (row.ticker) {
-              dbClient.assets.set(row.ticker.toUpperCase(), row);
+              const clean = row.ticker.toUpperCase();
+              dbClient.assets.set(clean, row);
+              this.syncedTickers.add(clean);
             }
           });
           return data;
@@ -93,7 +100,11 @@ export class AssetRepository {
 
     // 1. Always update in-memory first
     dbClient.assets.set(ticker, cleanAsset);
-    console.log(`[AssetRepository] Updated in-memory asset: ${ticker}`);
+
+    // If already synced and not forcing, avoid duplicate network calls
+    if (this.syncedTickers.has(ticker)) {
+      return;
+    }
 
     // 2. Try to upsert to Supabase if connected
     if (dbClient.supabase && dbClient.isSupabaseConnected) {
@@ -105,10 +116,49 @@ export class AssetRepository {
         if (error) {
           console.warn(`[AssetRepository] Could not upsert to Supabase for ${ticker}:`, error);
         } else {
-          console.log(`[AssetRepository] ✅ Upserted to Supabase: ${ticker}`);
+          this.syncedTickers.add(ticker);
         }
       } catch (err) {
         console.warn(`[AssetRepository] Exception upserting to Supabase for ${ticker}:`, err);
+      }
+    }
+  }
+
+  async upsertBatch(assets: any[]): Promise<void> {
+    if (!assets || assets.length === 0) return;
+    const cleanList: AssetRecord[] = [];
+    const now = new Date().toISOString();
+
+    for (const a of assets) {
+      const ticker = a.ticker?.toUpperCase?.() || a.ticker;
+      if (!ticker) continue;
+      const rec: AssetRecord = {
+        ticker,
+        name: a.name || ticker,
+        asset_type: a.asset_type || 'equity',
+        exchange: a.exchange || 'US',
+        currency: a.currency || 'USD',
+        is_active: a.is_active !== undefined ? a.is_active : true,
+        created_at: a.created_at || now,
+        updated_at: now,
+      };
+      dbClient.assets.set(ticker, rec);
+      if (!this.syncedTickers.has(ticker)) {
+        cleanList.push(rec);
+      }
+    }
+
+    if (cleanList.length > 0 && dbClient.supabase && dbClient.isSupabaseConnected) {
+      try {
+        const { error } = await dbClient.supabase
+          .from('assets')
+          .upsert(cleanList, { onConflict: 'ticker' });
+
+        if (!error) {
+          cleanList.forEach((a) => this.syncedTickers.add(a.ticker));
+        }
+      } catch (err) {
+        console.warn('[AssetRepository] Batch upsert error:', err);
       }
     }
   }

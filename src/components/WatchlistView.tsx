@@ -326,9 +326,10 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   }}
                   className="py-3.5 px-4 font-semibold cursor-pointer hover:text-slate-200"
                 >
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-slate-400 font-mono text-[11px]">No.</span>
                     <span>종목코드 / 이름</span>
-                    <ArrowDownUp className="w-3 h-3" />
+                    <ArrowDownUp className="w-3 h-3 text-slate-500" />
                   </div>
                 </th>
                 <th className="py-3.5 px-3 font-semibold">자산 정체성 / 전략</th>
@@ -374,7 +375,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {sorted.map((item) => {
+              {sorted.map((item, idx) => {
                 const sub = item.opportunity.sub_scores;
                 const isSignal = item.decision.actionable;
 
@@ -384,20 +385,27 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     onClick={() => onSelectTicker(item.ticker)}
                     className="hover:bg-slate-800/50 transition-colors cursor-pointer group"
                   >
-                    {/* Ticker & Name */}
+                    {/* Ticker & Name with Index Number */}
                     <td className="py-3 px-4 font-sans">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-100 text-sm font-mono group-hover:text-cyan-400 transition-colors">
-                          {item.ticker}
+                      <div className="flex items-center space-x-2.5">
+                        <span className="text-[11px] font-mono font-bold text-cyan-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800/90 min-w-[28px] text-center shrink-0">
+                          {idx + 1}
                         </span>
-                        {item.classification.classification_source === 'manual' && (
-                          <span className="px-1.5 py-0.2 text-[9px] rounded bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
-                            MANUAL
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-400 truncate max-w-[140px]">
-                        {item.name}
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-slate-100 text-sm font-mono group-hover:text-cyan-400 transition-colors">
+                              {item.ticker}
+                            </span>
+                            {item.classification.classification_source === 'manual' && (
+                              <span className="px-1.5 py-0.2 text-[9px] rounded bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                                MANUAL
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate max-w-[140px]">
+                            {item.name}
+                          </div>
+                        </div>
                       </div>
                     </td>
 

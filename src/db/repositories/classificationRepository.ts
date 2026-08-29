@@ -95,6 +95,42 @@ export class ClassificationRepository {
     return this.toClassification(matching[0]);
   }
 
+  /**
+   * PIT 히스토리 전체 조회 (모든 effective_date <= evaluationDate, 오름차순)
+   * 백테스트나 배치 시뮬레이션에서 매 bar마다 N+1 쿼리를 하지 않고 1회 조회 후 포인터로 소비하기 위함.
+   */
+  async getHistoryAsOf(ticker: string, evaluationDate?: string): Promise<AssetClassification[]> {
+    const clean = ticker.toUpperCase().trim();
+    const asOfDate = evaluationDate ? evaluationDate.split('T')[0] : undefined;
+
+    if (dbClient.isTableAvailable('classification_snapshot') && dbClient.supabase) {
+      try {
+        let q = dbClient.supabase
+          .from('classification_snapshot')
+          .select('*')
+          .eq('ticker', clean);
+        if (asOfDate) q = q.lte('effective_date', asOfDate);
+        const { data, error } = await q.order('effective_date', { ascending: true });
+        if (error) {
+          dbClient.handleDbError('classification_snapshot', 'getHistoryAsOf', error);
+        } else if (data) {
+          return data.map((d: any) => this.toClassification(d));
+        }
+      } catch (err) {
+        dbClient.handleDbError('classification_snapshot', 'getHistoryAsOf', err);
+      }
+    }
+
+    const matching: ClassificationSnapshot[] = [];
+    for (const [k, v] of dbClient.classificationSnapshots.entries()) {
+      if (k.startsWith(`${clean}_`) && (!asOfDate || v.effective_date <= asOfDate)) {
+        matching.push(v);
+      }
+    }
+    matching.sort((a, b) => a.effective_date.localeCompare(b.effective_date));
+    return matching.map((snap) => this.toClassification(snap));
+  }
+
   private toClassification(snap: any): AssetClassification {
     return {
       ticker: snap.ticker,

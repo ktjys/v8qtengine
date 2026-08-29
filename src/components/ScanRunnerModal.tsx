@@ -25,6 +25,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [completedLog, setCompletedLog] = useState<ScanRunLog | null>(null);
   const [newSignals, setNewSignals] = useState<SignalSnapshot[]>([]);
+  const [actionableSignals, setActionableSignals] = useState<any[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
 
   const steps = [
@@ -39,6 +40,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     setIsRunning(true);
     setCompletedLog(null);
     setNewSignals([]);
+    setActionableSignals([]);
     setScanError(null);
 
     // Step-by-step visual animation
@@ -73,6 +75,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
       if (data.success) {
         setCompletedLog(data.scan_log);
         setNewSignals(data.new_signals || []);
+        setActionableSignals(data.actionable_signals || data.new_signals || []);
         onScanCompleted(data);
       } else {
         throw new Error(data.error || '스캔 엔진 실행 중 오류가 발생했습니다.');
@@ -222,6 +225,68 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                   ⚠️ {completedLog.error_summary}
                 </div>
               )}
+
+              {/* Captured Signal Details List */}
+              <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                  <span className="flex items-center space-x-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>포착된 진입 시그널 목록 ({actionableSignals.length}건)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">기회점수 70+ & 리스크 제약 통과</span>
+                </div>
+
+                {actionableSignals.length > 0 ? (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {actionableSignals.map((sig, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-900/90 border border-slate-800 hover:border-amber-500/40 rounded-xl p-2 sm:p-2.5 flex items-center justify-between transition-all"
+                      >
+                        <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-center min-w-[20px] shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-amber-400 font-bold font-mono text-xs border border-slate-700">
+                            {sig.ticker}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-slate-200 truncate">
+                              {sig.name || sig.ticker}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              ${(sig.price ?? sig.signal_price ?? 0).toFixed(2)}
+                              {sig.change1d !== undefined && (
+                                <span className={`ml-1.5 font-bold ${sig.change1d >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {sig.change1d >= 0 ? '+' : ''}{sig.change1d.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <div className="text-right">
+                            <span className="text-[9px] text-slate-400 block font-mono">기회점수</span>
+                            <span className="text-xs font-bold text-emerald-400 font-mono">
+                              {sig.opportunity?.opportunity_score ?? sig.opportunity_score ?? '-'}점
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                            {sig.decision?.decision === 'STRONG_OPPORTUNITY' || sig.decision === 'STRONG_OPPORTUNITY'
+                              ? '강력 기회'
+                              : '진입 기회'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-slate-900/60 rounded-xl p-3 text-center border border-slate-800/80 text-[11px] text-slate-400">
+                    현재 진입 기준(기회 점수 70점 이상 및 리스크 필터 통과)을 만족한 신호가 없습니다. (시장 관망 권고)
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

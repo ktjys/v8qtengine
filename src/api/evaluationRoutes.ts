@@ -12,16 +12,16 @@ export const evaluationRouter = Router();
 // GET /api/v8/evaluations (Fast Direct DB Read)
 evaluationRouter.get('/', async (req, res) => {
   try {
-    const [evaluations, allAssets] = await Promise.all([
+    const [evaluations, watchlist] = await Promise.all([
       evaluationRepository.getAll(),
-      assetRepository.getAll(),
+      watchlistRepository.getAll(),
     ]);
 
-    const assetTickerSet = new Set(allAssets.map((a) => a.ticker.toUpperCase()));
+    const watchlistTickerSet = new Set(watchlist.map((w) => w.ticker.toUpperCase()));
     
-    // Filter evaluations to registered assets if assets exist, or return all evaluations
-    const finalEvaluations = assetTickerSet.size > 0
-      ? evaluations.filter((e) => assetTickerSet.has(e.ticker.toUpperCase()))
+    // Filter evaluations strictly to registered watchlist items if watchlist exists
+    const finalEvaluations = watchlistTickerSet.size > 0
+      ? evaluations.filter((e) => watchlistTickerSet.has(e.ticker.toUpperCase()))
       : evaluations;
 
     res.json({

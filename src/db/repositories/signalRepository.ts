@@ -64,6 +64,9 @@ export class SignalRepository {
               return_5d: outcome.return_5d !== undefined && outcome.return_5d !== null ? Number(outcome.return_5d) : null,
               return_10d: outcome.return_10d !== undefined && outcome.return_10d !== null ? Number(outcome.return_10d) : null,
               return_20d: outcome.return_20d !== undefined && outcome.return_20d !== null ? Number(outcome.return_20d) : null,
+              return_60d: outcome.return_60d !== undefined && outcome.return_60d !== null ? Number(outcome.return_60d) : (row.reason_json?.return_60d ?? null),
+              return_120d: outcome.return_120d !== undefined && outcome.return_120d !== null ? Number(outcome.return_120d) : (row.reason_json?.return_120d ?? null),
+              return_252d: outcome.return_252d !== undefined && outcome.return_252d !== null ? Number(outcome.return_252d) : (row.reason_json?.return_252d ?? null),
               current_return: outcome.return_20d !== undefined && outcome.return_20d !== null ? Number(outcome.return_20d) : (outcome.return_10d !== undefined && outcome.return_10d !== null ? Number(outcome.return_10d) : (outcome.return_5d !== undefined && outcome.return_5d !== null ? Number(outcome.return_5d) : null)),
               max_gain: outcome.max_gain !== undefined && outcome.max_gain !== null ? Number(outcome.max_gain) : undefined,
               max_loss: outcome.max_loss !== undefined && outcome.max_loss !== null ? Number(outcome.max_loss) : undefined,
@@ -161,6 +164,9 @@ export class SignalRepository {
             classification_confidence: signal.classification_confidence,
             rsi: signal.rsi,
             drawdown: signal.drawdown,
+            return_60d: signal.return_60d ?? null,
+            return_120d: signal.return_120d ?? null,
+            return_252d: signal.return_252d ?? null,
             weights: signal.components.weights,
             decision_reason: signal.components.decision_reason,
             risk_reasons: signal.components.risk_reasons,
@@ -230,19 +236,97 @@ export class SignalRepository {
   }
 
   async saveSignals(signals: SignalSnapshot[]): Promise<number> {
+    if (!signals || signals.length === 0) return 0;
+
+    // 1. Immediately cache all in memory
     for (const sig of signals) {
-      await this.save(sig);
-      if (sig.return_20d !== null || sig.return_10d !== null || sig.return_5d !== null) {
-        await this.updateOutcome(sig.id, {
-          return_5d: sig.return_5d ?? undefined,
-          return_10d: sig.return_10d ?? undefined,
-          return_20d: sig.return_20d ?? undefined,
-          current_return: sig.current_return ?? undefined,
-          status: sig.status,
-          is_closed: sig.is_closed,
-        });
+      dbClient.signals.set(sig.id, sig);
+    }
+
+    // 2. Ensure parent assets are registered in batch
+    const uniqueTickers = Array.from(new Set(signals.map((s) => s.ticker)));
+    const assetBatch = uniqueTickers.map((t) => {
+      const sig = signals.find((s) => s.ticker === t);
+      return {
+        ticker: t,
+        name: sig?.name || t,
+        asset_type: sig?.asset_type || 'equity',
+      };
+    });
+    await assetRepository.upsertBatch(assetBatch);
+
+    // 3. Batch upsert signals into Supabase if connected
+    if (dbClient.isTableAvailable('signals') && dbClient.supabase) {
+      try {
+        const signalRows = signals.map((s) => ({
+          ticker: s.ticker,
+          signal_date: s.signal_date,
+          strategy_type: s.strategy_type,
+          opportunity_score: s.opportunity_score,
+          risk_score: s.risk_score,
+          risk_level: s.risk_level,
+          decision: s.decision,
+          confidence: s.signal_confidence,
+          entry_price: s.signal_price,
+          technical_score: s.technical_score,
+          momentum_score: s.momentum_score,
+          fundamental_score: s.fundamental_score,
+          valuation_score: s.valuation_score,
+          status: s.status || 'ACTIVE',
+          reason_json: {
+            name: s.name,
+            asset_type: s.asset_type,
+            classification_confidence: s.classification_confidence,
+            rsi: s.rsi,
+            drawdown: s.drawdown,
+            return_60d: s.return_60d ?? null,
+            return_120d: s.return_120d ?? null,
+            return_252d: s.return_252d ?? null,
+            weights: s.components.weights,
+            decision_reason: s.components.decision_reason,
+            risk_reasons: s.components.risk_reasons,
+          },
+        }));
+
+        // Batch upsert in chunks of 50
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < signalRows.length; i += CHUNK_SIZE) {
+          const chunk = signalRows.slice(i, i + CHUNK_SIZE);
+          await dbClient.supabase
+            .from('signals')
+            .upsert(chunk, { onConflict: 'ticker,signal_date' });
+        }
+
+        // 4. Batch upsert signal outcomes if applicable
+        if (dbClient.isTableAvailable('signal_outcomes')) {
+          const outcomeRows = signals
+            .filter((s) => s.return_5d !== null || s.return_10d !== null || s.return_20d !== null || s.return_60d !== null)
+            .map((s) => ({
+              signal_id: s.id,
+              evaluation_date: s.signal_date,
+              price: s.signal_price,
+              return_5d: s.return_5d,
+              return_10d: s.return_10d,
+              return_20d: s.return_20d,
+              return_60d: s.return_60d,
+              return_120d: s.return_120d,
+              return_252d: s.return_252d,
+              is_win_20d: s.return_20d !== null ? s.return_20d > 0 : undefined,
+              closed_at: s.is_closed ? new Date().toISOString() : null,
+            }));
+
+          for (let i = 0; i < outcomeRows.length; i += CHUNK_SIZE) {
+            const chunk = outcomeRows.slice(i, i + CHUNK_SIZE);
+            await dbClient.supabase
+              .from('signal_outcomes')
+              .upsert(chunk, { onConflict: 'signal_id' });
+          }
+        }
+      } catch (err) {
+        dbClient.handleDbError('signals', 'saveSignalsBatch', err);
       }
     }
+
     return signals.length;
   }
 

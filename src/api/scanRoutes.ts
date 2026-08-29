@@ -21,10 +21,19 @@ scanRouter.post('/run', async (req, res) => {
       manualOverrides
     );
 
+    const actionableSignals = result.evaluations.filter(
+      (ev) =>
+        ev.signal_generated ||
+        ev.decision?.actionable ||
+        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
+        ev.decision?.decision === 'OPPORTUNITY'
+    );
+
     res.json({
       success: true,
       scan_log: result.runLog,
       new_signals: result.newSignals,
+      actionable_signals: actionableSignals,
       evaluations_count: result.evaluations.length,
       evaluations: result.evaluations,
     });

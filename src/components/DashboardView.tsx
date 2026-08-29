@@ -59,7 +59,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .filter((e) => e?.risk?.risk_level === 'HIGH')
     .sort((a, b) => (b.risk?.risk_score ?? 0) - (a.risk?.risk_score ?? 0));
 
-  const actionableSignalsToday = (evaluations || []).filter((e) => e?.decision?.actionable);
+  const actionableSignalsToday = (evaluations || []).filter(
+    (e) =>
+      e?.signal_generated ||
+      e?.decision?.actionable ||
+      e?.decision?.decision === 'STRONG_OPPORTUNITY' ||
+      e?.decision?.decision === 'OPPORTUNITY'
+  );
 
   const uniqueRecentSignals = useMemo(() => {
     const map = new Map<string, SignalSnapshot>();
@@ -248,23 +254,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1">
-              {opportunities.map((item) => (
+              {opportunities.map((item, idx) => (
                 <div
                   key={item.ticker}
                   onClick={() => onSelectTicker(item.ticker)}
                   className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-emerald-500/40 transition-all cursor-pointer flex items-center justify-between"
                 >
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-slate-100 font-mono group-hover:text-cyan-400 transition-colors">
-                        {item.ticker}
-                      </span>
-                      <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                        {item.name}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      {item.classification.strategy_type}
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <span className="text-[10px] font-mono font-bold text-emerald-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-emerald-500/20 min-w-[24px] text-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-slate-100 font-mono group-hover:text-cyan-400 transition-colors">
+                          {item.ticker}
+                        </span>
+                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                          {item.name}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {item.classification.strategy_type}
+                      </div>
                     </div>
                   </div>
 
@@ -307,23 +318,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1 max-h-[480px] overflow-y-auto pr-1">
-              {displayedWatchItems.map((item) => (
+              {displayedWatchItems.map((item, idx) => (
                 <div
                   key={item.ticker}
                   onClick={() => onSelectTicker(item.ticker)}
                   className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-amber-500/40 transition-all cursor-pointer flex items-center justify-between"
                 >
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-slate-100 font-mono group-hover:text-amber-400 transition-colors">
-                        {item.ticker}
-                      </span>
-                      <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                        {item.name}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      {item.classification.strategy_type}
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <span className="text-[10px] font-mono font-bold text-amber-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-amber-500/20 min-w-[24px] text-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-slate-100 font-mono group-hover:text-amber-400 transition-colors">
+                          {item.ticker}
+                        </span>
+                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                          {item.name}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {item.classification.strategy_type}
+                      </div>
                     </div>
                   </div>
 
@@ -385,23 +401,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1">
-              {highRiskItems.map((item) => (
+              {highRiskItems.map((item, idx) => (
                 <div
                   key={item.ticker}
                   onClick={() => onSelectTicker(item.ticker)}
                   className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-rose-500/40 transition-all cursor-pointer flex items-center justify-between"
                 >
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-slate-100 font-mono group-hover:text-rose-400 transition-colors">
-                        {item.ticker}
-                      </span>
-                      <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                        {item.name}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-rose-400/90 mt-0.5 truncate max-w-[180px]">
-                      {item.risk.risk_reasons[0] || '고위험 제약 적용'}
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <span className="text-[10px] font-mono font-bold text-rose-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-rose-500/20 min-w-[24px] text-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-slate-100 font-mono group-hover:text-rose-400 transition-colors">
+                          {item.ticker}
+                        </span>
+                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                          {item.name}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-rose-400/90 mt-0.5 truncate max-w-[180px]">
+                        {item.risk.risk_reasons[0] || '고위험 제약 적용'}
+                      </div>
                     </div>
                   </div>
 
@@ -444,7 +465,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 font-medium">
                 <th className="pb-3 font-semibold">발생일</th>
-                <th className="pb-3 font-semibold">종목코드 / 이름</th>
+                <th className="pb-3 font-semibold">
+                  <span className="text-slate-500 font-mono mr-1.5">No.</span>종목코드 / 이름
+                </th>
                 <th className="pb-3 font-semibold">전략 유형</th>
                 <th className="pb-3 font-semibold">진입가</th>
                 <th className="pb-3 font-semibold text-center">기회 점수</th>
@@ -456,7 +479,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {displayedSignals.map((sig) => (
+              {displayedSignals.map((sig, idx) => (
                 <tr
                   key={sig.id}
                   className="hover:bg-slate-800/40 transition-colors cursor-pointer"
@@ -464,8 +487,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 >
                   <td className="py-3 text-slate-400">{sig.signal_date}</td>
                   <td className="py-3 font-sans">
-                    <div className="font-bold text-slate-100 font-mono">{sig.ticker}</div>
-                    <div className="text-[11px] text-slate-400">{sig.name}</div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-center min-w-[22px]">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <div className="font-bold text-slate-100 font-mono">{sig.ticker}</div>
+                        <div className="text-[11px] text-slate-400">{sig.name}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="py-3 font-sans text-slate-300">{sig.strategy_type}</td>
                   <td className="py-3 text-slate-200">${sig.signal_price.toFixed(2)}</td>

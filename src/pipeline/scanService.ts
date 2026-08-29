@@ -24,7 +24,11 @@ export class ScanService {
     // If empty, fall back to initial standard watchlist tickers
     let tickers = watchlist.map((w) => w.ticker);
     if (tickers.length === 0) {
-      tickers = ['VOO', 'QQQ', 'NVDA', 'MSFT', 'PLTR', 'SCHD', 'SMH', 'V', 'JNJ', 'AAPL', 'META', 'ORCL', 'OKLO', 'SPCX'];
+      tickers = [
+        'VOO', 'SCHD', 'NVDA', 'MSFT', 'AAPL', 'JNJ', 'SMH', 'OKLO',
+        'PLTR', 'QQQ', 'SPY', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD',
+        'V', 'ORCL',
+      ];
     }
 
     if (options.providerType) {
@@ -92,8 +96,14 @@ export class ScanService {
       }
     }
 
-    // Check newly generated signals (signal_generated == evaluateV8().isSignal)
-    const actionableList = evaluations.filter((ev) => ev.signal_generated);
+    // Check newly generated signals (signal_generated == evaluateV8().isSignal or actionable decision)
+    const actionableList = evaluations.filter(
+      (ev) =>
+        ev.signal_generated ||
+        ev.decision?.actionable ||
+        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
+        ev.decision?.decision === 'OPPORTUNITY'
+    );
     let existingSignals: SignalSnapshot[] = [];
     try {
       existingSignals = await signalRepository.getAll();
@@ -102,13 +112,21 @@ export class ScanService {
     const newSignals: SignalSnapshot[] = [];
 
     for (const ev of evaluations) {
-      if (shouldGenerateSignal(ev, existingSignals)) {
-        const snap = createSignalSnapshot(ev);
-        newSignals.push(snap);
-        if (options.saveToDb !== false) {
-          try {
-            await signalRepository.save(snap);
-          } catch {}
+      const isActionable =
+        ev.signal_generated ||
+        ev.decision?.actionable ||
+        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
+        ev.decision?.decision === 'OPPORTUNITY';
+
+      if (isActionable) {
+        if (shouldGenerateSignal(ev, existingSignals) || !existingSignals.some((s) => s.ticker === ev.ticker)) {
+          const snap = createSignalSnapshot(ev);
+          newSignals.push(snap);
+          if (options.saveToDb !== false) {
+            try {
+              await signalRepository.save(snap);
+            } catch {}
+          }
         }
       }
     }

@@ -78,4 +78,20 @@ describe('classificationRepository PIT (local cache, no Supabase)', () => {
     const current = classificationRepository.getCurrent('NVDA');
     expect(current?.strategy_type).toBe('speculative');
   });
+
+  it('getHistoryAsOf returns snapshots in ascending effective_date order', async () => {
+    await classificationRepository.save(manualOverride('NVDA', '2024-06-01'));
+    await classificationRepository.save(manualOverride('NVDA', '2024-01-01'));
+    await classificationRepository.save(manualOverride('NVDA', '2024-09-01'));
+
+    const all = await classificationRepository.getHistoryAsOf('NVDA');
+    expect(all).toHaveLength(3);
+    expect(all[0].effective_date).toBe('2024-01-01');
+    expect(all[1].effective_date).toBe('2024-06-01');
+    expect(all[2].effective_date).toBe('2024-09-01');
+
+    const cutoff = await classificationRepository.getHistoryAsOf('NVDA', '2024-06-15');
+    expect(cutoff).toHaveLength(2);
+    expect(cutoff[1].effective_date).toBe('2024-06-01');
+  });
 });

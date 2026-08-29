@@ -93,9 +93,11 @@ export async function runHistoricalBackfill(
       const currentOverride = dbClient.classifications.get(ticker);
       const isEtfHint = dbAsset?.asset_type === 'etf' || currentOverride?.asset_type === 'etf';
 
-      // PIT fundamentals를 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
+      // PIT fundamentals & classification을 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
       const fundHistory = await fundamentalsRepository.getHistoryAsOf(ticker);
       let fundHistoryIdx = 0;
+      const classHistory = await classificationRepository.getHistoryAsOf(ticker);
+      let classHistoryIdx = 0;
 
       let lastSignalIndex = -999;
       const tickerSignals: SignalSnapshot[] = [];
@@ -106,7 +108,10 @@ export async function runHistoricalBackfill(
         if (barDate > maxDate) maxDate = barDate;
 
         // PIT 수동 오버라이드: barDate 기준 유효한 분류만 적용 (미래 오버라이드 look-ahead 방지)
-        const manualOverride = await classificationRepository.getAsOf(ticker, barDate);
+        while (classHistoryIdx + 1 < classHistory.length && classHistory[classHistoryIdx + 1].effective_date <= barDate) {
+          classHistoryIdx++;
+        }
+        const manualOverride = classHistory[classHistoryIdx]?.effective_date <= barDate ? classHistory[classHistoryIdx] : undefined;
 
         const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
         const pitBenchmark =
@@ -173,7 +178,10 @@ export async function runHistoricalBackfill(
               return_5d: outcomes.return5d,
               return_10d: outcomes.return10d,
               return_20d: outcomes.return20d,
-              current_return: outcomes.return20d,
+              return_60d: outcomes.return60d,
+              return_120d: outcomes.return120d,
+              return_252d: outcomes.return252d,
+              current_return: outcomes.return20d ?? outcomes.return10d ?? outcomes.return5d,
               status: outcomes.return20d !== null ? '20D_REACHED' : 'ACTIVE',
               is_closed: outcomes.return20d !== null,
               components: {

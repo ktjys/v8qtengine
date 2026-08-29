@@ -34,9 +34,11 @@ export async function runHistoricalReplay(
     const currentOverride = dbClient.classifications.get(ticker);
     const isEtfHint = dbAsset?.asset_type === 'etf' || currentOverride?.asset_type === 'etf';
 
-    // PIT fundamentals를 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
+    // PIT fundamentals & classification을 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
     const fundHistory = await fundamentalsRepository.getHistoryAsOf(ticker);
     let fundHistoryIdx = 0;
+    const classHistory = await classificationRepository.getHistoryAsOf(ticker);
+    let classHistoryIdx = 0;
 
     let lastSignalIndex = -999;
 
@@ -47,7 +49,10 @@ export async function runHistoricalReplay(
       if (config.endDate && barDate > config.endDate) break;
 
       // PIT 수동 오버라이드: barDate 기준 유효한 분류만 적용 (미래 오버라이드 look-ahead 방지)
-      const manualOverride = await classificationRepository.getAsOf(ticker, barDate);
+      while (classHistoryIdx + 1 < classHistory.length && classHistory[classHistoryIdx + 1].effective_date <= barDate) {
+        classHistoryIdx++;
+      }
+      const manualOverride = classHistory[classHistoryIdx]?.effective_date <= barDate ? classHistory[classHistoryIdx] : undefined;
 
       const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
       const pitBenchmark = benchmarkBars.length > 0

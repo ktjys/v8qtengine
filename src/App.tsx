@@ -121,12 +121,8 @@ export default function App() {
         setWatchlist(currentWl.watchlist);
       }
 
-      const wlEvals = currentWl?.success && Array.isArray(currentWl.evaluations) && currentWl.evaluations.length > 0
-        ? currentWl.evaluations
-        : (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) && loadedEvals.evaluations.length > 0 ? loadedEvals.evaluations : null);
-
-      if (wlEvals && wlEvals.length > 0) {
-        setEvaluations(wlEvals);
+      if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) && loadedEvals.evaluations.length > 0) {
+        setEvaluations(loadedEvals.evaluations);
       }
 
       if (latestSignals?.success && Array.isArray(latestSignals.signals) && latestSignals.signals.length > 0) {

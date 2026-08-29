@@ -96,6 +96,19 @@ export function calculateBacktestMetrics(
     }))
   );
 
+  // 60D, 120D, 252D Long Horizon stats
+  const sig60d = cleanSignals.filter((s) => s.return_60d !== undefined && s.return_60d !== null);
+  const win60d = sig60d.filter((s) => (s.return_60d ?? 0) > 0).length;
+  const avg60d = sig60d.length > 0 ? sig60d.reduce((sum, s) => sum + (s.return_60d ?? 0), 0) / sig60d.length : 0;
+
+  const sig120d = cleanSignals.filter((s) => s.return_120d !== undefined && s.return_120d !== null);
+  const win120d = sig120d.filter((s) => (s.return_120d ?? 0) > 0).length;
+  const avg120d = sig120d.length > 0 ? sig120d.reduce((sum, s) => sum + (s.return_120d ?? 0), 0) / sig120d.length : 0;
+
+  const sig252d = cleanSignals.filter((s) => s.return_252d !== undefined && s.return_252d !== null);
+  const win252d = sig252d.filter((s) => (s.return_252d ?? 0) > 0).length;
+  const avg252d = sig252d.length > 0 ? sig252d.reduce((sum, s) => sum + (s.return_252d ?? 0), 0) / sig252d.length : 0;
+
   return {
     total_signals: total,
     completed_signals: completed.length,
@@ -106,16 +119,15 @@ export function calculateBacktestMetrics(
     avg_return_10d: Math.round(avg10d * 10) / 10,
     avg_return_20d: Math.round(avg20d * 10) / 10,
     median_return_20d: Math.round(median20d * 10) / 10,
-    // 실시간 SignalSnapshot에는 장기(60/120/252d) 수익률 컬럼이 없다. 백테스트 리플레이에서만 제공.
-    completed_signals_60d: 0,
-    win_rate_60d: 0,
-    avg_return_60d: 0,
-    completed_signals_120d: 0,
-    win_rate_120d: 0,
-    avg_return_120d: 0,
-    completed_signals_252d: 0,
-    win_rate_252d: 0,
-    avg_return_252d: 0,
+    completed_signals_60d: sig60d.length,
+    win_rate_60d: sig60d.length > 0 ? Math.round((win60d / sig60d.length) * 1000) / 10 : 0,
+    avg_return_60d: Math.round(avg60d * 10) / 10,
+    completed_signals_120d: sig120d.length,
+    win_rate_120d: sig120d.length > 0 ? Math.round((win120d / sig120d.length) * 1000) / 10 : 0,
+    avg_return_120d: Math.round(avg120d * 10) / 10,
+    completed_signals_252d: sig252d.length,
+    win_rate_252d: sig252d.length > 0 ? Math.round((win252d / sig252d.length) * 1000) / 10 : 0,
+    avg_return_252d: Math.round(avg252d * 10) / 10,
     max_drawdown: Math.round(max_drawdown * 10) / 10,
     profit_factor,
     by_strategy,

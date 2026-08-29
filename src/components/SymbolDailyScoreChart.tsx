@@ -4,7 +4,6 @@ import {
   ComposedChart,
   Area,
   Line,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -27,6 +26,7 @@ import {
   RefreshCw,
   Sliders,
   Sparkles,
+  Touchpad,
   TrendingDown,
   TrendingUp,
   Zap,
@@ -51,6 +51,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [pinnedPoint, setPinnedPoint] = useState<DailyScorePoint | null>(null);
+  const [chartKey, setChartKey] = useState<number>(0);
 
   // Visibility Toggles
   const [showOpportunity, setShowOpportunity] = useState(true);
@@ -61,8 +62,15 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
   const [showMA50, setShowMA50] = useState(true);
   const [showMA200, setShowMA200] = useState(true);
   const [showRsiPanel, setShowRsiPanel] = useState(true);
-  const [showMacdPanel, setShowMacdPanel] = useState(false);
   const [showDrawdownPanel, setShowDrawdownPanel] = useState(false);
+
+  // Force re-render of Recharts on mount or range change to ensure container size is measured correctly on mobile
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setChartKey((prev) => prev + 1);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [range]);
 
   const fetchHistory = async (selectedRange: string) => {
     setLoading(true);
@@ -127,17 +135,17 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
     return Math.ceil(max * 1.04);
   }, [history]);
 
-  // Custom Chart Tooltip
+  // Custom Chart Tooltip optimized for mobile touch and desktop hover
   const CustomScoreTooltip = ({ active, payload }: any) => {
     if (!active || !payload || !payload.length) return null;
     const pt: DailyScorePoint = payload[0].payload;
 
     return (
-      <div className="bg-slate-950/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-3.5 shadow-2xl text-xs space-y-2.5 min-w-[240px] pointer-events-none z-50">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+      <div className="bg-slate-950/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-3 shadow-2xl text-xs space-y-2 max-w-[260px] sm:max-w-[280px] pointer-events-none z-50">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
           <div className="font-mono font-bold text-slate-200">{pt.date}</div>
           <span
-            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+            className={`px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold ${
               pt.decision === 'STRONG_OPPORTUNITY'
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                 : pt.decision === 'OPPORTUNITY'
@@ -152,12 +160,12 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
         </div>
 
         {/* Price & Change */}
-        <div className="flex items-center justify-between font-mono">
-          <span className="text-slate-400">종가 (Price):</span>
+        <div className="flex items-center justify-between font-mono text-[11px]">
+          <span className="text-slate-400">종가:</span>
           <div className="flex items-center space-x-1.5">
             <span className="font-bold text-slate-100">{formatStockPrice(pt.price, ticker)}</span>
             <span
-              className={`text-[11px] font-semibold ${
+              className={`text-[10px] sm:text-[11px] font-semibold ${
                 pt.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
@@ -168,34 +176,34 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
 
         {/* Scores Matrix */}
         <div className="space-y-1 pt-1 border-t border-slate-800/80">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between text-[11px]">
             <span className="text-cyan-400 font-bold flex items-center space-x-1">
               <Sparkles className="w-3 h-3" />
-              <span>종합 기회 점수:</span>
+              <span>기회 점수:</span>
             </span>
-            <span className="font-bold font-mono text-cyan-300 text-sm">
+            <span className="font-bold font-mono text-cyan-300 text-xs sm:text-sm">
               {pt.opportunityScore}점
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-mono">
-            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800">
-              <div className="text-blue-400">기술 (Tech)</div>
-              <div className="font-bold text-slate-200">{pt.technicalScore}pt</div>
+          <div className="grid grid-cols-3 gap-1 pt-1 text-[9px] sm:text-[10px] font-mono">
+            <div className="bg-slate-900/80 p-1 rounded border border-slate-800 text-center">
+              <div className="text-blue-400">기술</div>
+              <div className="font-bold text-slate-200">{pt.technicalScore}</div>
             </div>
-            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800">
-              <div className="text-teal-400">모멘텀 (Mom)</div>
-              <div className="font-bold text-slate-200">{pt.momentumScore}pt</div>
+            <div className="bg-slate-900/80 p-1 rounded border border-slate-800 text-center">
+              <div className="text-teal-400">모멘텀</div>
+              <div className="font-bold text-slate-200">{pt.momentumScore}</div>
             </div>
-            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800">
-              <div className="text-rose-400">리스크 (Risk)</div>
-              <div className="font-bold text-slate-200">{pt.riskScore}pt</div>
+            <div className="bg-slate-900/80 p-1 rounded border border-slate-800 text-center">
+              <div className="text-rose-400">리스크</div>
+              <div className="font-bold text-slate-200">{pt.riskScore}</div>
             </div>
           </div>
         </div>
 
         {/* Technical Indicators */}
-        <div className="space-y-1 pt-1 border-t border-slate-800/80 text-[11px]">
+        <div className="space-y-0.5 pt-1 border-t border-slate-800/80 text-[10px]">
           <div className="flex items-center justify-between">
             <span className="text-slate-400">RSI(14):</span>
             <span
@@ -210,24 +218,18 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
               {pt.rsi14.toFixed(1)} {pt.rsi14 <= 35 ? '(과매도)' : pt.rsi14 >= 70 ? '(과열)' : ''}
             </span>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-            <span>MA20 / 50 / 200:</span>
+          <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono">
+            <span>이평:</span>
             <span>
-              {pt.ma20} / {pt.ma50} / {pt.ma200}
+              20:{pt.ma20} 50:{pt.ma50} 200:{pt.ma200}
             </span>
           </div>
-          {pt.drawdownFromHigh !== undefined && (
-            <div className="flex items-center justify-between text-[10px] font-mono">
-              <span className="text-slate-400">고점대비 낙폭:</span>
-              <span className="text-amber-400">{pt.drawdownFromHigh}%</span>
-            </div>
-          )}
         </div>
 
         {pt.isSignal && (
-          <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-1.5 text-[10px] text-emerald-300 flex items-center space-x-1.5">
-            <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-semibold">퀀트 매수 시그널 포착일</span>
+          <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-lg p-1 text-[9px] text-emerald-300 flex items-center space-x-1">
+            <Zap className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span className="font-semibold">매수 시그널 포착일</span>
           </div>
         )}
       </div>
@@ -236,9 +238,9 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
 
   if (loading && !data) {
     return (
-      <div className="p-8 rounded-3xl bg-slate-950/60 border border-slate-800 flex flex-col items-center justify-center space-y-3 min-h-[320px]">
+      <div className="p-8 rounded-3xl bg-slate-950/60 border border-slate-800 flex flex-col items-center justify-center space-y-3 min-h-[280px]">
         <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
-        <div className="text-sm font-medium text-slate-300 font-mono">
+        <div className="text-xs sm:text-sm font-medium text-slate-300 font-mono text-center">
           {ticker}의 일별 점수 및 기술적 지표 시계열 데이터를 산출 중입니다...
         </div>
       </div>
@@ -265,26 +267,26 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Top Header & Range Filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-950/80 p-4 rounded-2xl border border-slate-800">
-        <div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-950/80 p-3.5 sm:p-4 rounded-2xl border border-slate-800">
+        <div className="min-w-0">
           <div className="flex items-center space-x-2">
-            <h4 className="text-base font-bold text-slate-100 flex items-center space-x-2">
+            <h4 className="text-sm sm:text-base font-bold text-slate-100 flex items-center space-x-1.5 truncate">
               <span>📈 일별 퀀트 점수 & 기술 지표 타임라인</span>
-              <span className="text-xs px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 font-mono border border-cyan-500/30">
+              <span className="text-xs px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 font-mono border border-cyan-500/30 shrink-0">
                 {ticker}
               </span>
             </h4>
-            {loading && <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin" />}
+            {loading && <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin shrink-0" />}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            기회 4대 서브 스코어 변동, 주가 이동평균선(MA20/50/200), RSI 오실레이터의 일별 동기화 추적
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-relaxed">
+            기회 점수 4대 팩터, 주가 이평선(MA20/50/200), RSI 오실레이터의 일별 동기화 추적
           </p>
         </div>
 
-        {/* Range Buttons */}
-        <div className="flex items-center space-x-1 bg-slate-900/90 p-1 rounded-xl border border-slate-700/60 self-stretch sm:self-auto justify-center">
+        {/* Range Buttons - Grid on mobile for perfect fit */}
+        <div className="grid grid-cols-5 gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-700/60 w-full sm:w-auto shrink-0">
           {[
             { key: '1m', label: '1개월' },
             { key: '3m', label: '3개월' },
@@ -295,7 +297,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
             <button
               key={r.key}
               onClick={() => setRange(r.key)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-1.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold text-center transition-all ${
                 range === r.key
                   ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30'
                   : 'text-slate-400 hover:text-slate-200'
@@ -307,19 +309,27 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
         </div>
       </div>
 
+      {/* Mobile Touch Scrubbing Helper Hint */}
+      <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-[11px] text-cyan-300">
+        <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+        <span className="leading-tight">
+          💡 차트를 탭하면 해당 일자의 주가, 4대 서브 스코어 및 매수 신호 진단 내역이 하단 스냅샷 카드에 상세히 표시됩니다.
+        </span>
+      </div>
+
       {/* Summary KPI Cards Bar */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5">
           {/* Card 1: Current Score */}
-          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
-            <div className="text-[11px] text-slate-400 font-medium flex items-center justify-between">
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium flex items-center justify-between">
               <span>현재 기회 점수</span>
               <Sparkles className="w-3 h-3 text-cyan-400" />
             </div>
-            <div className="text-xl font-bold font-mono text-cyan-400 mt-1 flex items-baseline space-x-1.5">
+            <div className="text-lg sm:text-xl font-bold font-mono text-cyan-400 mt-0.5 sm:mt-1 flex items-baseline space-x-1.5 flex-wrap">
               <span>{summary.currentScore}점</span>
               <span
-                className={`text-xs font-semibold ${
+                className={`text-[10px] sm:text-xs font-semibold ${
                   summary.scoreChange30d > 0
                     ? 'text-emerald-400'
                     : summary.scoreChange30d < 0
@@ -336,25 +346,25 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
           </div>
 
           {/* Card 2: Highest & Lowest Score */}
-          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
-            <div className="text-[11px] text-slate-400 font-medium">기간 최고 / 최저점</div>
-            <div className="text-sm font-bold font-mono text-slate-200 mt-1 flex items-center space-x-2">
-              <span className="text-emerald-400">▲ {summary.highestScore}점</span>
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">최고 / 최저점</div>
+            <div className="text-xs sm:text-sm font-bold font-mono text-slate-200 mt-0.5 sm:mt-1 flex items-center space-x-1.5">
+              <span className="text-emerald-400">▲ {summary.highestScore}</span>
               <span className="text-slate-600">/</span>
-              <span className="text-rose-400">▼ {summary.lowestScore}점</span>
+              <span className="text-rose-400">▼ {summary.lowestScore}</span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
-              최고일: {summary.highestScoreDate}
+            <div className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
+              최고: {summary.highestScoreDate}
             </div>
           </div>
 
           {/* Card 3: RSI Level & State */}
-          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
-            <div className="text-[11px] text-slate-400 font-medium">RSI(14) 상태</div>
-            <div className="text-sm font-bold font-mono mt-1 flex items-center space-x-1.5">
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">RSI(14) 상태</div>
+            <div className="text-xs sm:text-sm font-bold font-mono mt-0.5 sm:mt-1 flex items-center space-x-1.5 flex-wrap">
               <span className="text-slate-100">{summary.currentRsi.toFixed(1)}</span>
               <span
-                className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                className={`px-1.5 py-0.2 rounded text-[9px] sm:text-[10px] font-bold ${
                   summary.rsiState === 'OVERSOLD'
                     ? 'bg-emerald-500/20 text-emerald-300'
                     : summary.rsiState === 'HEALTHY_BUY'
@@ -365,49 +375,49 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                 }`}
               >
                 {summary.rsiState === 'OVERSOLD'
-                  ? '과매도 (반등기회)'
+                  ? '과매도'
                   : summary.rsiState === 'HEALTHY_BUY'
-                  ? '눌림목 매수권'
+                  ? '매수권'
                   : summary.rsiState === 'OVERBOUGHT'
-                  ? '단기 과열'
-                  : '중립 구간'}
+                  ? '과열'
+                  : '중립'}
               </span>
             </div>
           </div>
 
           {/* Card 4: Moving Average Alignment Trend */}
-          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
-            <div className="text-[11px] text-slate-400 font-medium">이평선 추세 배열</div>
-            <div className="text-sm font-bold mt-1">
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">이평선 추세</div>
+            <div className="text-xs sm:text-sm font-bold mt-0.5 sm:mt-1 truncate">
               {summary.trendState === 'STRONG_BULL' ? (
-                <span className="text-emerald-400 flex items-center space-x-1">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>완전 정배열 (강세)</span>
+                <span className="text-emerald-400 flex items-center space-x-1 truncate">
+                  <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">완전 정배열</span>
                 </span>
               ) : summary.trendState === 'BULL' ? (
-                <span className="text-cyan-400 flex items-center space-x-1">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>상승 추세 (MA50 위)</span>
+                <span className="text-cyan-400 flex items-center space-x-1 truncate">
+                  <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">상승 추세</span>
                 </span>
               ) : summary.trendState === 'CORRECTION' ? (
-                <span className="text-amber-400 flex items-center space-x-1">
-                  <TrendingDown className="w-3.5 h-3.5" />
-                  <span>조정 국면 (MA50 아래)</span>
+                <span className="text-amber-400 flex items-center space-x-1 truncate">
+                  <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">조정 국면</span>
                 </span>
               ) : (
-                <span className="text-rose-400 flex items-center space-x-1">
-                  <TrendingDown className="w-3.5 h-3.5" />
-                  <span>역배열 / 약세</span>
+                <span className="text-rose-400 flex items-center space-x-1 truncate">
+                  <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">역배열 / 약세</span>
                 </span>
               )}
             </div>
           </div>
 
           {/* Card 5: Period Signal Counts */}
-          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 col-span-2 sm:col-span-1">
-            <div className="text-[11px] text-slate-400 font-medium">기회 포착 신호 발생</div>
-            <div className="text-base font-bold font-mono text-emerald-400 mt-1 flex items-center space-x-1">
-              <Zap className="w-4 h-4 text-emerald-400" />
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 col-span-2 sm:col-span-1">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">신호 발생 횟수</div>
+            <div className="text-sm sm:text-base font-bold font-mono text-emerald-400 mt-0.5 sm:mt-1 flex items-center space-x-1">
+              <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>총 {summary.totalSignalsInPeriod}회 포착</span>
             </div>
           </div>
@@ -415,59 +425,59 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
       )}
 
       {/* Indicator Toggle Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-950/60 rounded-2xl border border-slate-800/80 text-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-slate-400 text-[11px] font-semibold mr-1 flex items-center space-x-1">
-            <Sliders className="w-3.5 h-3.5" />
-            <span>지표 토글:</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 sm:p-3 bg-slate-950/60 rounded-2xl border border-slate-800/80 text-[11px] sm:text-xs">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+          <span className="text-slate-400 text-[10px] sm:text-[11px] font-semibold mr-1 flex items-center space-x-1">
+            <Sliders className="w-3 h-3" />
+            <span>점수:</span>
           </span>
 
           <button
             onClick={() => setShowOpportunity(!showOpportunity)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showOpportunity
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            🎯 종합 기회 점수
+            🎯 종합
           </button>
 
           <button
             onClick={() => setShowTechScore(!showTechScore)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showTechScore
                 ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            ⚡ 기술 점수
+            ⚡ 기술
           </button>
 
           <button
             onClick={() => setShowMomScore(!showMomScore)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showMomScore
                 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            🚀 모멘텀 점수
+            🚀 모멘텀
           </button>
 
           <button
             onClick={() => setShowRiskScore(!showRiskScore)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showRiskScore
                 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            🛡️ 리스크 점수
+            🛡️ 리스크
           </button>
         </div>
 
-        <div className="flex items-center space-x-1.5">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
           <button
             onClick={() => {
               const next = !(showMA20 && showMA50 && showMA200);
@@ -475,35 +485,35 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
               setShowMA50(next);
               setShowMA200(next);
             }}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showMA20 || showMA50 || showMA200
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            이평선 (MA20/50/200)
+            이평선 (20/50/200)
           </button>
 
           <button
             onClick={() => setShowRsiPanel(!showRsiPanel)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showRsiPanel
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            RSI(14) 패널
+            RSI(14)
           </button>
 
           <button
             onClick={() => setShowDrawdownPanel(!showDrawdownPanel)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1 rounded-lg font-medium transition-all ${
               showDrawdownPanel
                 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
                 : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
-            고점낙폭 %
+            고점낙폭%
           </button>
         </div>
       </div>
@@ -511,32 +521,32 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
       {/* ========================================================
           PANEL 1: 퀀트 기회 점수 & 서브 스코어 차트 (0 ~ 100)
          ======================================================== */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+      <div className="p-3.5 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
             <span className="text-xs font-bold text-slate-200">
               📊 퀀트 기회 점수 & 서브 스코어 트렌드
             </span>
-            <span className="text-[11px] text-slate-400 font-mono">(0 ~ 100 pt)</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">(0 ~ 100 pt)</span>
           </div>
-          <div className="flex items-center space-x-3 text-[11px]">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 text-[10px] sm:text-[11px]">
             <span className="flex items-center space-x-1 text-cyan-400 font-semibold">
-              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span>
+              <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
               <span>기회 점수</span>
             </span>
             <span className="flex items-center space-x-1 text-emerald-400">
               <span className="w-2.5 h-0.5 bg-emerald-400 inline-block"></span>
-              <span>70pt 포착선</span>
+              <span>70pt 포착</span>
             </span>
             <span className="flex items-center space-x-1 text-rose-400">
               <span className="w-2.5 h-0.5 border-t border-dashed border-rose-400 inline-block"></span>
-              <span>리스크 점수</span>
+              <span>리스크</span>
             </span>
           </div>
         </div>
 
-        <div className="h-64 sm:h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-60 sm:h-72 w-full min-w-0">
+          <ResponsiveContainer key={`score-${chartKey}`} width="100%" height="100%" minWidth={0} debounce={50}>
             <ComposedChart
               data={history}
               onClick={(e: any) => {
@@ -545,7 +555,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   if (onSelectDate) onSelectDate(e.activePayload[0].payload);
                 }
               }}
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              margin={{ top: 10, right: 12, left: -12, bottom: 0 }}
             >
               <defs>
                 <linearGradient id="scoreAreaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -559,17 +569,20 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
               <XAxis
                 dataKey="date"
                 stroke="#64748b"
-                tick={{ fontSize: 10 }}
+                minTickGap={24}
+                interval="preserveStartEnd"
+                tick={{ fontSize: 9, fill: '#64748b' }}
                 tickFormatter={(val) => val.slice(5)}
               />
               <YAxis
                 domain={[0, 100]}
                 ticks={[0, 25, 50, 70, 85, 100]}
+                width={36}
                 stroke="#64748b"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 9, fill: '#64748b' }}
               />
 
-              <Tooltip content={<CustomScoreTooltip />} />
+              <Tooltip content={<CustomScoreTooltip />} wrapperStyle={{ zIndex: 50, pointerEvents: 'none' }} />
 
               {/* 70 Threshold Line */}
               <ReferenceLine
@@ -578,10 +591,10 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
                 label={{
-                  value: '기회 포착선 (70pt)',
+                  value: '70pt 포착선',
                   fill: '#10b981',
-                  fontSize: 10,
-                  position: 'right',
+                  fontSize: 9,
+                  position: 'insideTopRight',
                 }}
               />
 
@@ -592,10 +605,10 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                 strokeDasharray="2 2"
                 strokeWidth={1}
                 label={{
-                  value: '강력 포착 (85pt)',
+                  value: '85pt 강력',
                   fill: '#06b6d4',
                   fontSize: 9,
-                  position: 'right',
+                  position: 'insideTopRight',
                 }}
               />
 
@@ -609,6 +622,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#scoreAreaGradient)"
+                  isAnimationActive={false}
                 />
               )}
 
@@ -621,6 +635,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#3b82f6"
                   strokeWidth={1.5}
                   dot={false}
+                  isAnimationActive={false}
                 />
               )}
 
@@ -632,6 +647,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#14b8a6"
                   strokeWidth={1.5}
                   dot={false}
+                  isAnimationActive={false}
                 />
               )}
 
@@ -644,6 +660,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   strokeDasharray="3 3"
                   strokeWidth={1.5}
                   dot={false}
+                  isAnimationActive={false}
                 />
               )}
             </ComposedChart>
@@ -654,14 +671,14 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
       {/* ========================================================
           PANEL 2: 주가 & 이동평균선 (MA20, MA50, MA200)
          ======================================================== */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-        <div className="flex items-center justify-between">
+      <div className="p-3.5 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-200">
               💵 주가 및 이동평균선 (Price & MA Trend)
             </span>
           </div>
-          <div className="flex items-center space-x-3 text-[11px] font-mono">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 text-[10px] sm:text-[11px] font-mono flex-wrap">
             <span className="flex items-center space-x-1 text-slate-200 font-bold">
               <span className="w-2.5 h-0.5 bg-slate-200 inline-block"></span>
               <span>종가</span>
@@ -687,8 +704,8 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
           </div>
         </div>
 
-        <div className="h-56 sm:h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-56 sm:h-64 w-full min-w-0">
+          <ResponsiveContainer key={`price-${chartKey}`} width="100%" height="100%" minWidth={0} debounce={50}>
             <ComposedChart
               data={history}
               onClick={(e: any) => {
@@ -697,7 +714,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   if (onSelectDate) onSelectDate(e.activePayload[0].payload);
                 }
               }}
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              margin={{ top: 10, right: 12, left: -12, bottom: 0 }}
             >
               <defs>
                 <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
@@ -711,17 +728,20 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
               <XAxis
                 dataKey="date"
                 stroke="#64748b"
-                tick={{ fontSize: 10 }}
+                minTickGap={24}
+                interval="preserveStartEnd"
+                tick={{ fontSize: 9, fill: '#64748b' }}
                 tickFormatter={(val) => val.slice(5)}
               />
               <YAxis
                 domain={[priceMin, priceMax]}
+                width={40}
                 stroke="#64748b"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 9, fill: '#64748b' }}
                 tickFormatter={(v) => `$${v}`}
               />
 
-              <Tooltip content={<CustomScoreTooltip />} />
+              <Tooltip content={<CustomScoreTooltip />} wrapperStyle={{ zIndex: 50, pointerEvents: 'none' }} />
 
               {/* Price Line & Gradient */}
               <Area
@@ -731,6 +751,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#priceGradient)"
+                isAnimationActive={false}
               />
 
               {/* Moving Averages */}
@@ -742,6 +763,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#f59e0b"
                   strokeWidth={1.5}
                   dot={false}
+                  isAnimationActive={false}
                 />
               )}
 
@@ -753,6 +775,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#38bdf8"
                   strokeWidth={1.5}
                   dot={false}
+                  isAnimationActive={false}
                 />
               )}
 
@@ -764,6 +787,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#c084fc"
                   strokeWidth={1.5}
                   dot={false}
+                  isAnimationActive={false}
                 />
               )}
             </ComposedChart>
@@ -775,25 +799,25 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
           PANEL 3: RSI(14) 모멘텀 오실레이터 (30 과매도 / 70 과열)
          ======================================================== */}
       {showRsiPanel && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
               <span className="text-xs font-bold text-slate-200">
                 ⚡ RSI (14) 모멘텀 오실레이터
               </span>
-              <span className="text-[11px] text-slate-400">
-                (30 과매도 반등구간 / 70 과열 주의구간)
+              <span className="text-[10px] sm:text-[11px] text-slate-400">
+                (30 과매도 반등 / 70 과열)
               </span>
             </div>
-            <div className="flex items-center space-x-3 text-[11px]">
-              <span className="text-emerald-400 font-mono">30 과매도 기준</span>
-              <span className="text-slate-500 font-mono">50 중심선</span>
-              <span className="text-rose-400 font-mono">70 과열선</span>
+            <div className="flex items-center space-x-2.5 sm:space-x-3 text-[10px] sm:text-[11px] font-mono">
+              <span className="text-emerald-400">30 과매도</span>
+              <span className="text-slate-500">50 중심</span>
+              <span className="text-rose-400">70 과열</span>
             </div>
           </div>
 
-          <div className="h-40 sm:h-44 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-36 sm:h-44 w-full min-w-0">
+            <ResponsiveContainer key={`rsi-${chartKey}`} width="100%" height="100%" minWidth={0} debounce={50}>
               <ComposedChart
                 data={history}
                 onClick={(e: any) => {
@@ -802,19 +826,27 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                     if (onSelectDate) onSelectDate(e.activePayload[0].payload);
                   }
                 }}
-                margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
+                margin={{ top: 5, right: 12, left: -12, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.6} />
 
                 <XAxis
                   dataKey="date"
                   stroke="#64748b"
-                  tick={{ fontSize: 10 }}
+                  minTickGap={24}
+                  interval="preserveStartEnd"
+                  tick={{ fontSize: 9, fill: '#64748b' }}
                   tickFormatter={(val) => val.slice(5)}
                 />
-                <YAxis domain={[10, 90]} ticks={[30, 50, 70]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                <YAxis
+                  domain={[10, 90]}
+                  ticks={[30, 50, 70]}
+                  width={32}
+                  stroke="#64748b"
+                  tick={{ fontSize: 9, fill: '#64748b' }}
+                />
 
-                <Tooltip content={<CustomScoreTooltip />} />
+                <Tooltip content={<CustomScoreTooltip />} wrapperStyle={{ zIndex: 50, pointerEvents: 'none' }} />
 
                 {/* Overbought line */}
                 <ReferenceLine
@@ -822,7 +854,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#f43f5e"
                   strokeDasharray="3 3"
                   strokeWidth={1}
-                  label={{ value: '과열 (70)', fill: '#f43f5e', fontSize: 9, position: 'right' }}
+                  label={{ value: '과열 (70)', fill: '#f43f5e', fontSize: 9, position: 'insideTopRight' }}
                 />
 
                 {/* Midline */}
@@ -834,7 +866,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#10b981"
                   strokeDasharray="3 3"
                   strokeWidth={1}
-                  label={{ value: '과매도 (30)', fill: '#10b981', fontSize: 9, position: 'right' }}
+                  label={{ value: '과매도 (30)', fill: '#10b981', fontSize: 9, position: 'insideBottomRight' }}
                 />
 
                 {/* RSI Line */}
@@ -845,6 +877,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   stroke="#a855f7"
                   strokeWidth={2}
                   dot={false}
+                  isAnimationActive={false}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -856,7 +889,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
           PANEL 4: 고점 대비 낙폭 (Drawdown %)
          ======================================================== */}
       {showDrawdownPanel && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-bold text-slate-200">
@@ -865,25 +898,28 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
             </div>
           </div>
 
-          <div className="h-36 sm:h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-32 sm:h-40 w-full min-w-0">
+            <ResponsiveContainer key={`dd-${chartKey}`} width="100%" height="100%" minWidth={0} debounce={50}>
               <ComposedChart
                 data={history}
-                margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
+                margin={{ top: 5, right: 12, left: -12, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.6} />
                 <XAxis
                   dataKey="date"
                   stroke="#64748b"
-                  tick={{ fontSize: 10 }}
+                  minTickGap={24}
+                  interval="preserveStartEnd"
+                  tick={{ fontSize: 9, fill: '#64748b' }}
                   tickFormatter={(val) => val.slice(5)}
                 />
                 <YAxis
                   stroke="#64748b"
-                  tick={{ fontSize: 10 }}
+                  width={36}
+                  tick={{ fontSize: 9, fill: '#64748b' }}
                   tickFormatter={(v) => `${v}%`}
                 />
-                <Tooltip content={<CustomScoreTooltip />} />
+                <Tooltip content={<CustomScoreTooltip />} wrapperStyle={{ zIndex: 50, pointerEvents: 'none' }} />
 
                 <Area
                   type="monotone"
@@ -892,6 +928,7 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   fill="#f43f5e"
                   fillOpacity={0.2}
                   strokeWidth={1.5}
+                  isAnimationActive={false}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -901,20 +938,20 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
 
       {/* Selected Day Diagnosis Detail Inspector */}
       {pinnedPoint && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/90 border border-cyan-500/30 space-y-3 animate-fadeIn">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-slate-950/90 border border-cyan-500/30 space-y-3 animate-fadeIn">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold shrink-0">
                 <Crosshair className="w-4 h-4" />
               </div>
-              <div>
-                <div className="text-xs text-slate-400">선택 일자 퀀트 진단 세부 스냅샷</div>
-                <div className="text-sm font-bold text-slate-100 font-mono flex items-center space-x-2">
+              <div className="min-w-0">
+                <div className="text-[11px] text-slate-400">선택 일자 퀀트 진단 세부 스냅샷</div>
+                <div className="text-xs sm:text-sm font-bold text-slate-100 font-mono flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
                   <span>📅 {pinnedPoint.date}</span>
                   <span>•</span>
                   <span>{formatStockPrice(pinnedPoint.price, ticker)}</span>
                   <span
-                    className={`text-xs ${
+                    className={`text-[11px] sm:text-xs ${
                       pinnedPoint.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}
                   >
@@ -924,9 +961,9 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 self-start sm:self-auto">
               <span
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold font-mono ${
+                className={`px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold font-mono ${
                   pinnedPoint.decision === 'STRONG_OPPORTUNITY'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                     : pinnedPoint.decision === 'OPPORTUNITY'
@@ -938,46 +975,46 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
               >
                 🎯 {pinnedPoint.decision}
               </span>
-              <div className="px-3 py-1 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-cyan-400">
+              <div className="px-2.5 sm:px-3 py-1 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-cyan-400">
                 {pinnedPoint.opportunityScore}점
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-              <span className="text-slate-400 text-[11px]">기술 점수 (Tech)</span>
-              <div className="font-bold text-blue-400 font-mono text-sm mt-0.5">
+            <div className="bg-slate-900/60 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+              <span className="text-slate-400 text-[10px] sm:text-[11px]">기술 점수 (Tech)</span>
+              <div className="font-bold text-blue-400 font-mono text-xs sm:text-sm mt-0.5">
                 {pinnedPoint.technicalScore}pt
               </div>
-              <div className="text-[10px] text-slate-400 mt-0.5">
+              <div className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
                 RSI {pinnedPoint.rsi14.toFixed(1)} / MA20 {pinnedPoint.ma20}
               </div>
             </div>
 
-            <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-              <span className="text-slate-400 text-[11px]">모멘텀 점수 (Mom)</span>
-              <div className="font-bold text-teal-400 font-mono text-sm mt-0.5">
+            <div className="bg-slate-900/60 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+              <span className="text-slate-400 text-[10px] sm:text-[11px]">모멘텀 점수 (Mom)</span>
+              <div className="font-bold text-teal-400 font-mono text-xs sm:text-sm mt-0.5">
                 {pinnedPoint.momentumScore}pt
               </div>
-              <div className="text-[10px] text-slate-400 mt-0.5">
+              <div className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
                 MA50 {pinnedPoint.ma50} / MA200 {pinnedPoint.ma200}
               </div>
             </div>
 
-            <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-              <span className="text-slate-400 text-[11px]">독립 리스크 (Risk)</span>
-              <div className="font-bold text-rose-400 font-mono text-sm mt-0.5">
+            <div className="bg-slate-900/60 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+              <span className="text-slate-400 text-[10px] sm:text-[11px]">독립 리스크 (Risk)</span>
+              <div className="font-bold text-rose-400 font-mono text-xs sm:text-sm mt-0.5">
                 {pinnedPoint.riskScore}pt ({pinnedPoint.riskLevel})
               </div>
-              <div className="text-[10px] text-slate-400 mt-0.5">
-                고점대비 낙폭: {pinnedPoint.drawdownFromHigh}%
+              <div className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
+                낙폭: {pinnedPoint.drawdownFromHigh}%
               </div>
             </div>
 
-            <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-              <span className="text-slate-400 text-[11px]">시그널 상태</span>
-              <div className="font-bold text-slate-200 font-mono text-sm mt-0.5 flex items-center space-x-1">
+            <div className="bg-slate-900/60 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+              <span className="text-slate-400 text-[10px] sm:text-[11px]">시그널 상태</span>
+              <div className="font-bold text-slate-200 font-mono text-xs sm:text-sm mt-0.5 flex items-center space-x-1">
                 {pinnedPoint.isSignal ? (
                   <span className="text-emerald-400 flex items-center space-x-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -987,14 +1024,14 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
                   <span className="text-slate-400">관망 / 기준미달</span>
                 )}
               </div>
-              <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+              <div className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
                 전략: {pinnedPoint.strategyType}
               </div>
             </div>
           </div>
 
           {pinnedPoint.decisionReason && (
-            <div className="text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 leading-relaxed">
+            <div className="text-[11px] sm:text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 leading-relaxed">
               💡 <strong>당일 판단 근거:</strong> "{pinnedPoint.decisionReason}"
             </div>
           )}
@@ -1003,3 +1040,4 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
     </div>
   );
 };
+
