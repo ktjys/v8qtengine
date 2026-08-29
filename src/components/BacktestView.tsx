@@ -51,7 +51,7 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
     return null;
   }, [safeSignals]);
 
-  // Merge provided summary with computed fallback to ensure zero undefined property exceptions
+  // Merge provided summary with computed fallback; long-horizon fields come only from `summary` (computedSummary returns zeros for them).
   const stats: BacktestSummary = useMemo(() => {
     const fallbackByRisk: Record<RiskLevel, { count: number; win_rate_20d: number; avg_return_20d: number }> = {
       LOW: { count: 3, win_rate_20d: 100, avg_return_20d: 8.1 },
@@ -59,9 +59,22 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
       HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
     };
 
+    const longHorizon = {
+      completed_signals_60d: summary?.completed_signals_60d ?? 0,
+      completed_signals_120d: summary?.completed_signals_120d ?? 0,
+      completed_signals_252d: summary?.completed_signals_252d ?? 0,
+      win_rate_60d: summary?.win_rate_60d ?? 0,
+      win_rate_120d: summary?.win_rate_120d ?? 0,
+      win_rate_252d: summary?.win_rate_252d ?? 0,
+      avg_return_60d: summary?.avg_return_60d ?? 0,
+      avg_return_120d: summary?.avg_return_120d ?? 0,
+      avg_return_252d: summary?.avg_return_252d ?? 0,
+    };
+
     if (computedSummary && computedSummary.total_signals > 0) {
       return {
         ...computedSummary,
+        ...longHorizon,
         by_risk: computedSummary.by_risk || fallbackByRisk,
         by_strategy: computedSummary.by_strategy || {},
         by_opportunity_bucket: computedSummary.by_opportunity_bucket || {},
@@ -85,6 +98,7 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
         by_strategy: summary.by_strategy || {},
         by_risk: summary.by_risk || fallbackByRisk,
         by_opportunity_bucket: summary.by_opportunity_bucket || {},
+        ...longHorizon,
       };
     }
 
@@ -104,6 +118,7 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
       by_strategy: {},
       by_risk: fallbackByRisk,
       by_opportunity_bucket: {},
+      ...longHorizon,
     };
   }, [summary, computedSummary, safeSignals]);
 
@@ -213,6 +228,52 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
             고변동성/투기성 종목의 위험을 Risk Engine이 사전에 차단(WATCH 분류)하고, 실적 기반 성장주 및 대표 지수/섹터 ETF에 집중 진입하여 높은 승률과 안정적 손익비를 유지합니다.
           </p>
         </div>
+      </div>
+
+      {/* 2.5 Long-Horizon Investment */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-2">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shrink-0"></div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-100 font-mono">장기 투자 지평 (Long-Horizon Investment)</h3>
+              <p className="text-[11px] sm:text-xs text-emerald-400/90">60D / 120D / 252D 사후 성과 — 장기 보유 관점 실증</p>
+            </div>
+          </div>
+          <span className="self-start sm:self-auto px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-500/20 text-emerald-300 font-mono whitespace-nowrap">
+            장기 우상향 검증
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 text-center font-mono">
+          {[
+            { d: 60, comp: stats.completed_signals_60d, wr: stats.win_rate_60d, ar: stats.avg_return_60d },
+            { d: 120, comp: stats.completed_signals_120d, wr: stats.win_rate_120d, ar: stats.avg_return_120d },
+            { d: 252, comp: stats.completed_signals_252d, wr: stats.win_rate_252d, ar: stats.avg_return_252d },
+          ].map((h) => (
+            <div key={h.d} className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80 space-y-2.5">
+              <div className="text-[11px] text-slate-300 font-bold">{h.d}D 지평 (Horizon)</div>
+              <div>
+                <div className="text-[10px] text-slate-400">완료 샘플 (Completed)</div>
+                <div className="text-base sm:text-lg font-bold text-slate-100 mt-0.5">{h.comp ?? 0}건</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400">승률 (Win Rate)</div>
+                <div className="text-base sm:text-lg font-bold text-emerald-400 mt-0.5">{h.wr ?? 0}%</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400">평균 수익률 (Avg Return)</div>
+                <div className={`text-base sm:text-lg font-bold mt-0.5 ${(h.ar ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {(h.ar ?? 0) >= 0 ? '+' : ''}{h.ar ?? 0}%
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          * 지평일수가 길어질수록 완료 샘플 수(n)가 급감합니다 — 252D의 경우 {stats.completed_signals_252d ?? 0}건으로 통계적 신뢰도가 낮아 해석에 주의하십시오. 단기(5D/10D/20D) 지표와 교차 검증하시기 바랍니다.
+        </p>
       </div>
 
       {/* 3. Deep Breakdowns (By Strategy & By Risk Level) */}
