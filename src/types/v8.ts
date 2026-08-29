@@ -281,6 +281,16 @@ export interface BacktestSummary {
   avg_return_10d: number;
   avg_return_20d: number;
   median_return_20d: number;
+  /** 장기 투자 지평 성과. 시그널당 전개 시간이 길어 샘플 수가 급감한다. */
+  completed_signals_60d: number;
+  win_rate_60d: number;
+  avg_return_60d: number;
+  completed_signals_120d: number;
+  win_rate_120d: number;
+  avg_return_120d: number;
+  completed_signals_252d: number;
+  win_rate_252d: number;
+  avg_return_252d: number;
   /** positionSizePct(제안 비중)로 가중한 20d 평균 수익률. 사이징 적용 성과 */
   weighted_avg_return_20d?: number;
   /** 같은 시그널 셋의 등가중 20d 평균 수익률 (weighted와 비교용) */

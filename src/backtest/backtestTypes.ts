@@ -26,6 +26,13 @@ export interface SimulatedTradeSignal {
   /** 최대 불리한 일탈(Max Adverse Excursion): 진입 후 최저가 기준 낙폭 (Portfolio MDD 아님) */
   maxAdverseExcursionTrade?: number;
   isWin20d?: boolean;
+  /** 장기 투자 지평: 60/120/252 거래일 사후 수익률 (%) 및 진입 후 해당 일 종가 */
+  exitPrice60d?: number;
+  return60d?: number;
+  exitPrice120d?: number;
+  return120d?: number;
+  exitPrice252d?: number;
+  return252d?: number;
 }
 
 export interface EquityCurvePoint {

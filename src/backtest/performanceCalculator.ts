@@ -90,6 +90,15 @@ export function calculateReplayPerformance(
       avg_return_10d: 0,
       avg_return_20d: 0,
       median_return_20d: 0,
+      completed_signals_60d: 0,
+      win_rate_60d: 0,
+      avg_return_60d: 0,
+      completed_signals_120d: 0,
+      win_rate_120d: 0,
+      avg_return_120d: 0,
+      completed_signals_252d: 0,
+      win_rate_252d: 0,
+      avg_return_252d: 0,
       max_drawdown: 0,
       profit_factor: 0,
       expectancy: 0,
@@ -116,6 +125,23 @@ export function calculateReplayPerformance(
 
   const win20d = completed.filter((s) => (s.return20d ?? 0) > 0).length;
   const avg20d = completed.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / nCompleted;
+
+  // 장기 투자 지평 (60/120/252 거래일): 시그널당 전개가 길어 샘플 수가 급감하므로
+  // 각자 완료된 시그널 수를 별도로 보고한다 (샘플이 적으면 신뢰도 낮음).
+  const longStats = (field: 'return60d' | 'return120d' | 'return252d') => {
+    const subset = signals.filter((s) => s[field] !== undefined && s[field] !== null);
+    const count = subset.length;
+    const wins = subset.filter((s) => (s[field] ?? 0) > 0).length;
+    const avg = count > 0 ? subset.reduce((sum, s) => sum + (s[field] ?? 0), 0) / count : 0;
+    return {
+      count,
+      winRate: count > 0 ? Math.round((wins / count) * 1000) / 10 : 0,
+      avg: Math.round(avg * 10) / 10,
+    };
+  };
+  const s60 = longStats('return60d');
+  const s120 = longStats('return120d');
+  const s252 = longStats('return252d');
 
   // Portfolio 사이징 가중 성과: positionSizePct(제안 비중)로 가중한 20d 수익률.
   // positionSizePct와 return20d가 모두 있는 completed 시그널만 대상.
@@ -190,6 +216,15 @@ export function calculateReplayPerformance(
     avg_return_10d: Math.round(avg10d * 10) / 10,
     avg_return_20d: Math.round(avg20d * 10) / 10,
     median_return_20d: Math.round(median20d * 10) / 10,
+    completed_signals_60d: s60.count,
+    win_rate_60d: s60.winRate,
+    avg_return_60d: s60.avg,
+    completed_signals_120d: s120.count,
+    win_rate_120d: s120.winRate,
+    avg_return_120d: s120.avg,
+    completed_signals_252d: s252.count,
+    win_rate_252d: s252.winRate,
+    avg_return_252d: s252.avg,
     weighted_avg_return_20d:
       weightedAvg20d !== undefined ? Math.round(weightedAvg20d * 100) / 100 : undefined,
     equal_weight_avg_return_20d:

@@ -107,6 +107,27 @@ describe('getForwardOutcomes — 수동 대조', () => {
     expect(outcomes.return20d).not.toBeNull();
   });
 
+  it('장기 지평(60/120/252d) return이 실제 미래 봉 종가와 일치한다', async () => {
+    const bars = await fixtureBars('TESTLONG', '2024-06-30');
+    const entryIdx = 10; // 모든 지평이 범위 안에 있도록 앞쪽 인덱스
+    const outcomes = historicalDataProvider.getForwardOutcomes(bars, entryIdx);
+    const entryPrice = bars[entryIdx].close;
+
+    const check = (n: number, ret: number | null) => {
+      if (entryIdx + n < bars.length) {
+        const expected = Math.round(((bars[entryIdx + n].close - entryPrice) / entryPrice) * 10000) / 100;
+        expect(ret).toBe(expected);
+      }
+    };
+    check(60, outcomes.return60d);
+    check(120, outcomes.return120d);
+    check(252, outcomes.return252d);
+
+    // 60/120d는 이 픽스처 바 수(~180개)에서 완료되어야 함
+    expect(outcomes.return60d).not.toBeNull();
+    expect(outcomes.return120d).not.toBeNull();
+  });
+
   it('기간 끝의 시그널은 미래 수익률이 null(미확정)이다', async () => {
     const bars = await fixtureBars('TESTEND', '2024-06-30');
     // 20봉 앞은 범위 밖, 10봉 앞은 범위 안이 되는 인덱스 (length-15)

@@ -102,6 +102,12 @@ export async function runHistoricalReplay(
             return20d: outcomes.return20d ?? undefined,
             maxAdverseExcursionTrade: outcomes.maxAdverseExcursion,
             isWin20d: outcomes.return20d !== null ? outcomes.return20d > 0 : undefined,
+            exitPrice60d: outcomes.exit60d,
+            return60d: outcomes.return60d ?? undefined,
+            exitPrice120d: outcomes.exit120d,
+            return120d: outcomes.return120d ?? undefined,
+            exitPrice252d: outcomes.exit252d,
+            return252d: outcomes.return252d ?? undefined,
           });
           lastSignalIndex = i;
         }

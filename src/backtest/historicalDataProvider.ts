@@ -77,7 +77,9 @@ export class HistoricalDataProvider {
   }
 
   /**
-   * Extracts forward outcome prices at +5, +10, +20 trading days
+   * Extracts forward outcome prices at +5, +10, +20, +60, +120, +252 trading days.
+   * Longer horizons capture the long-term-holder view (return252d needs ~1yr of
+   * forward bars, so near-period-end signals return null).
    */
   getForwardOutcomes(
     bars: OHLCVBar[],
@@ -87,18 +89,30 @@ export class HistoricalDataProvider {
     return5d: number | null;
     return10d: number | null;
     return20d: number | null;
+    return60d: number | null;
+    return120d: number | null;
+    return252d: number | null;
+    exit60d?: number;
+    exit120d?: number;
+    exit252d?: number;
     maxAdverseExcursion: number;
   } {
     const entryBar = bars[currentIndex];
     const entryPrice = entryBar.close;
 
-    const bar5 = currentIndex + 5 < bars.length ? bars[currentIndex + 5] : null;
-    const bar10 = currentIndex + 10 < bars.length ? bars[currentIndex + 10] : null;
-    const bar20 = currentIndex + 20 < bars.length ? bars[currentIndex + 20] : null;
+    const retAt = (n: number): { ret: number | null; exit?: number } => {
+      const idx = currentIndex + n;
+      if (idx >= bars.length) return { ret: null };
+      const close = bars[idx].close;
+      return { ret: Math.round(((close - entryPrice) / entryPrice) * 10000) / 100, exit: close };
+    };
 
-    const return5d = bar5 ? ((bar5.close - entryPrice) / entryPrice) * 100 : null;
-    const return10d = bar10 ? ((bar10.close - entryPrice) / entryPrice) * 100 : null;
-    const return20d = bar20 ? ((bar20.close - entryPrice) / entryPrice) * 100 : null;
+    const r5 = retAt(5);
+    const r10 = retAt(10);
+    const r20 = retAt(20);
+    const r60 = retAt(60);
+    const r120 = retAt(120);
+    const r252 = retAt(252);
 
     // Max Adverse Excursion: entry 이후 최저가 기준 낙폭 (Portfolio MDD 아님)
     let lowestPrice = entryPrice;
@@ -112,9 +126,15 @@ export class HistoricalDataProvider {
 
     return {
       entryPrice,
-      return5d: return5d !== null ? Math.round(return5d * 100) / 100 : null,
-      return10d: return10d !== null ? Math.round(return10d * 100) / 100 : null,
-      return20d: return20d !== null ? Math.round(return20d * 100) / 100 : null,
+      return5d: r5.ret,
+      return10d: r10.ret,
+      return20d: r20.ret,
+      return60d: r60.ret,
+      return120d: r120.ret,
+      return252d: r252.ret,
+      exit60d: r60.exit,
+      exit120d: r120.exit,
+      exit252d: r252.exit,
       maxAdverseExcursion: Math.round(maxAdverseExcursion * 100) / 100,
     };
   }
