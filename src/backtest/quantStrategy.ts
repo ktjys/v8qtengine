@@ -130,7 +130,14 @@ export function buildEvaluationInput(
     market,
     classification: classificationResult,
     signalThreshold,
-    provenance: provenance || { source: 'backtest', isFallback: false },
+    provenance:
+      provenance || {
+        source: 'backtest',
+        isFallback: false,
+        marketDataSource: 'database',
+        fundamentalDataSource: fundamentals ? 'database' : 'unknown',
+        classificationSource: classificationResult.classification_source,
+      },
     dataQuality,
   };
 }

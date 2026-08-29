@@ -6,6 +6,7 @@ import { buildEvaluationInput, ClassificationInputs } from '../backtest/quantStr
 import { evaluateV8 } from '../engine/evaluateV8';
 import { dbClient } from '../db/supabaseClient';
 import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
+import { classificationRepository } from '../db/repositories/classificationRepository';
 import { assetRepository } from '../db/repositories/assetRepository';
 import { DecisionType, RiskLevel, StrategyType } from '../types/v8';
 
@@ -76,9 +77,9 @@ export class DailyScoreHistoryService {
 
     // 2. Fetch static metadata from DB if available (classification hints / manual override)
     const dbAsset = await assetRepository.findByTicker(cleanTicker);
-    const manualOverride = dbClient.classifications.get(cleanTicker);
+    const currentOverride = dbClient.classifications.get(cleanTicker);
 
-    const isEtfHint = dbAsset?.asset_type === 'etf' || manualOverride?.asset_type === 'etf';
+    const isEtfHint = dbAsset?.asset_type === 'etf' || currentOverride?.asset_type === 'etf';
 
     // 3. Determine start date based on range
     const now = new Date();
@@ -120,6 +121,9 @@ export class DailyScoreHistoryService {
       // Date-based PIT benchmark slicing (future bars excluded, consistent with strategyReplay)
       const pitBenchmark =
         benchmarkBars.length > 0 ? benchmarkBars.filter((b) => b.date <= barDate) : undefined;
+
+      // PIT 수동 오버라이드: barDate 기준 유효한 분류만 적용 (미래 오버라이드 look-ahead 방지)
+      const manualOverride = await classificationRepository.getAsOf(cleanTicker, barDate);
 
       // Momentum-derived beta for classification (PIT over the same bar window)
       const mom = calculateMomentumIndicators(pitBars, pitBenchmark);

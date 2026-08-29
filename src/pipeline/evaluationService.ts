@@ -47,6 +47,14 @@ export class EvaluationService {
       riskInputs: processed.riskInputs,
     };
 
+    // 독립 출처 추적: 시장/펀더멘털/분류 각각의 실제 출처를 정직하게 기록한다.
+    // 펀더멘털이 seed baseline이면 차단하지 않고 warnings로만 표시한다.
+    // (시장/OHLCV 폴백만 isFallback 하드 게이트로 신호를 차단한다.)
+    const provenanceWarnings: string[] = [];
+    if (processed.fundamentalDataSource === 'seed') {
+      provenanceWarnings.push('fundamentals sourced from seed baseline');
+    }
+
     const evaluation = evaluateV8({
       ticker: processed.ticker,
       evaluationAt: new Date(),
@@ -56,6 +64,10 @@ export class EvaluationService {
       provenance: {
         source: processed.normalized.source,
         isFallback: processed.isFallback,
+        marketDataSource: processed.marketDataSource,
+        fundamentalDataSource: processed.fundamentalDataSource,
+        classificationSource: classification.classification_source,
+        warnings: provenanceWarnings,
       },
     });
 
@@ -71,6 +83,14 @@ export class EvaluationService {
       decision: evaluation.decision,
       signal_generated: evaluation.isSignal,
       data_quality: processed.dataQuality,
+      provenance: {
+        source: processed.normalized.source,
+        isFallback: processed.isFallback,
+        marketDataSource: processed.marketDataSource,
+        fundamentalDataSource: processed.fundamentalDataSource,
+        classificationSource: classification.classification_source,
+        warnings: provenanceWarnings,
+      },
       raw_metadata: processed.rawMetadata,
     };
   }

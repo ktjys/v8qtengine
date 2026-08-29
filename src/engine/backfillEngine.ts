@@ -8,6 +8,7 @@ import { buildEvaluationInput } from '../backtest/quantStrategy';
 import { evaluateV8 } from './evaluateV8';
 import { SignalSnapshot, ScanRunLog } from '../types/v8';
 import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
+import { classificationRepository } from '../db/repositories/classificationRepository';
 import { assetRepository } from '../db/repositories/assetRepository';
 import { dbClient } from '../db/supabaseClient';
 import { RawYahooMetadata } from './classificationEngine';
@@ -89,8 +90,8 @@ export async function runHistoricalBackfill(
       totalBarsIngested += bars.length;
 
       const dbAsset = await assetRepository.findByTicker(ticker);
-      const manualOverride = dbClient.classifications.get(ticker);
-      const isEtfHint = dbAsset?.asset_type === 'etf' || manualOverride?.asset_type === 'etf';
+      const currentOverride = dbClient.classifications.get(ticker);
+      const isEtfHint = dbAsset?.asset_type === 'etf' || currentOverride?.asset_type === 'etf';
 
       // PIT fundamentals를 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
       const fundHistory = await fundamentalsRepository.getHistoryAsOf(ticker);
@@ -103,6 +104,9 @@ export async function runHistoricalBackfill(
         const barDate = bars[i].date;
         if (barDate < minDate) minDate = barDate;
         if (barDate > maxDate) maxDate = barDate;
+
+        // PIT 수동 오버라이드: barDate 기준 유효한 분류만 적용 (미래 오버라이드 look-ahead 방지)
+        const manualOverride = await classificationRepository.getAsOf(ticker, barDate);
 
         const pitBars = historicalDataProvider.getPointInTimeSlice(bars, i);
         const pitBenchmark =

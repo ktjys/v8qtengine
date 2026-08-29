@@ -1,16 +1,6 @@
-import { DataQualityReport } from '../types/v8';
+import { DataQualityReport, DataProvenance } from '../types/v8';
 
-/**
- * 데이터 소스 신뢰성 계약.
- *
- * - `isFallback`이 true이면 실제 데이터 수집이 실패하고 허용된 폴백(seed 등)으로
- *   대체되었음을 의미한다. 이런 입력은 절대 매수/액션 신호를 생성해서는 안 된다.
- * - `source`는 데이터의 실제 출처를 정직하게 기록한다 (yahoo / seed / database / custom).
- */
-export interface DataProvenance {
-  source: string;
-  isFallback: boolean;
-}
+export type { DataProvenance } from '../types/v8';
 
 /** 신호 생성 허용 최소 데이터 품질 점수 (진입 신뢰성 문턱). */
 export const MIN_SIGNAL_DATA_QUALITY = 70;

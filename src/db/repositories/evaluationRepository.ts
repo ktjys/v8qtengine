@@ -63,6 +63,8 @@ export class EvaluationRepository {
             risk: ev.risk,
             decision: ev.decision,
             data_quality: ev.data_quality,
+            signal_generated: ev.signal_generated,
+            provenance: ev.provenance,
           },
         };
       });
@@ -155,8 +157,16 @@ export class EvaluationRepository {
                 reasons: [],
                 summary: `DB 레코드 로드 (결정: ${decision})`,
               },
-              signal_generated: decision.includes('OPPORTUNITY'),
+              signal_generated:
+                typeof r.signal_generated === 'boolean'
+                  ? r.signal_generated
+                  : decision.includes('OPPORTUNITY'),
               data_quality: r.data_quality || { isFresh: true, isComplete: true, qualityScore: 100, warnings: [] },
+              provenance: r.provenance || {
+                source: 'unknown',
+                isFallback: false,
+                warnings: ['provenance unknown (legacy record)'],
+              },
             };
 
             map.set(ticker, ev);

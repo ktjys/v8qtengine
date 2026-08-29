@@ -2,6 +2,30 @@ import { MarketDataProvider } from '../providers/marketDataProvider';
 import { FundamentalData, NormalizedMarketData, OHLCVBar, QuoteData } from '../providers/types';
 import { INITIAL_WATCHLIST_RAW } from './initialData';
 
+// Deterministic PRNG (mulberry32) seeded from the ticker so the same ticker
+// always produces the same synthetic bar series. Backtest reproducibility
+// requires that `getHistorical(ticker)` returns an identical series on every
+// call — never use Math.random() here.
+function hashString(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class SeedDataProvider implements MarketDataProvider {
   readonly name = 'seed';
 
@@ -26,9 +50,14 @@ export class SeedDataProvider implements MarketDataProvider {
   }
 
   async getHistorical(ticker: string, range = '1y', interval = '1d'): Promise<OHLCVBar[]> {
-    const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === ticker.toUpperCase());
+    const clean = ticker.toUpperCase();
+    const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === clean);
     const basePrice = seed ? seed.price : 100;
     const bars: OHLCVBar[] = [];
+
+    // Seed the PRNG deterministically from the ticker + range so repeated calls
+    // yield an identical synthetic series (backtest reproducibility).
+    const rng = mulberry32(hashString(`${clean}:${range}:${interval}`));
 
     // Generate 252 synthetic daily bars with realistic drift and volatility
     const now = new Date();
@@ -39,13 +68,13 @@ export class SeedDataProvider implements MarketDataProvider {
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       if (isWeekend) continue;
 
-      const randomShock = (Math.random() - 0.48) * 0.025;
+      const randomShock = (rng() - 0.48) * 0.025;
       current = current * (1 + randomShock);
-      const open = current * (1 + (Math.random() - 0.5) * 0.005);
-      const high = Math.max(open, current) * (1 + Math.random() * 0.008);
-      const low = Math.min(open, current) * (1 - Math.random() * 0.008);
+      const open = current * (1 + (rng() - 0.5) * 0.005);
+      const high = Math.max(open, current) * (1 + rng() * 0.008);
+      const low = Math.min(open, current) * (1 - rng() * 0.008);
       const close = current;
-      const volume = Math.floor(1000000 + Math.random() * 5000000);
+      const volume = Math.floor(1000000 + rng() * 5000000);
 
       bars.push({
         date: d.toISOString().split('T')[0],
@@ -59,8 +88,13 @@ export class SeedDataProvider implements MarketDataProvider {
     }
 
     if (bars.length > 0) {
-      bars[bars.length - 1].close = basePrice;
-      bars[bars.length - 1].adjClose = basePrice;
+      // Anchor the latest bar to the seeded price while preserving OHLC
+      // invariants (high >= max(open, close), low <= min(open, close)).
+      const last = bars[bars.length - 1];
+      last.close = basePrice;
+      last.adjClose = basePrice;
+      last.high = Math.max(last.high, last.open, last.close);
+      last.low = Math.min(last.low, last.open, last.close);
     }
 
     return bars;

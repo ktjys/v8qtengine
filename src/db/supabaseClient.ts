@@ -23,6 +23,7 @@ export interface DatabaseState {
   evaluations: Map<string, FullTickerEvaluation>;
   signals: Map<string, SignalSnapshot>;
   scan_runs: Map<string, ScanRunLog>;
+  classification_snapshots: Map<string, any>;
 }
 
 export interface TableStatusInfo {
@@ -52,6 +53,7 @@ class UniversalDatabaseClient {
     evaluations: new Map(),
     signals: new Map(),
     scan_runs: new Map(),
+    classification_snapshots: new Map(),
   };
 
   constructor() {
@@ -211,6 +213,7 @@ class UniversalDatabaseClient {
       'signal_outcomes',
       'scan_runs',
       'scan_run_items',
+      'classification_snapshot',
     ];
 
     const result: Record<string, TableStatusInfo> = {};
@@ -395,6 +398,7 @@ class UniversalDatabaseClient {
       this.state.evaluations.clear();
       this.state.signals.clear();
       this.state.scan_runs.clear();
+      this.state.classification_snapshots.clear();
 
       return { success: true, clearedTables };
     } catch (err: any) {
@@ -429,6 +433,10 @@ class UniversalDatabaseClient {
   }
   get scan_runs() {
     return this.state.scan_runs;
+  }
+
+  get classificationSnapshots() {
+    return this.state.classification_snapshots;
   }
 
   // Intentionally does NOT return the URL or any form of the key (masked or

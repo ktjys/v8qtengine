@@ -26,8 +26,12 @@ export interface ProcessedAssetData {
   riskInputs: RawRiskInputs;
   dataQuality: DataQualityReport;
   normalized: NormalizedMarketData;
-  /** 실제 데이터 수집 실패로 seed 폴백이 사용되었는지 여부 (신호 게이트 입력). */
+  /** 실제 데이터 수집 실패로 seed 폴백이 사용되었는지 여부 (시장/OHLCV 신호 게이트 입력). */
   isFallback: boolean;
+  /** OHLCV 시장 데이터의 실제 출처 (yahoo / seed / database). */
+  marketDataSource: string;
+  /** 펀더멘털 데이터의 실제 출처 (yahoo / seed / database). */
+  fundamentalDataSource: string;
 }
 
 export class MarketDataService {
@@ -246,6 +250,14 @@ export class MarketDataService {
       normalized.source = 'seed';
     }
 
+    // 독립 출처 추적: 시장(OHLCV)과 펀더멘털은 서로 다른 출처일 수 있다.
+    const marketDataSource = isFallback ? 'seed' : this.provider.name;
+    const fundamentalDataSource = dbFund
+      ? 'database'
+      : this.provider.name === 'yahoo'
+        ? 'seed'
+        : this.provider.name;
+
     const dataQuality = evaluateDataQuality(normalized, isEtf);
 
     return {
@@ -259,6 +271,8 @@ export class MarketDataService {
       dataQuality,
       normalized,
       isFallback,
+      marketDataSource,
+      fundamentalDataSource,
     };
   }
 
@@ -321,6 +335,8 @@ export class MarketDataService {
               },
               normalized: norm,
               isFallback: true,
+              marketDataSource: 'seed',
+              fundamentalDataSource: 'seed',
             } as ProcessedAssetData;
           }
         })

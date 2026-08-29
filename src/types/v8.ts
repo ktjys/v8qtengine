@@ -27,6 +27,8 @@ export interface AssetClassification {
   reason: string;
   classified_at: string;
   updated_at: string;
+  /** 수동 오버라이드가 유효해지는 기준일 (YYYY-MM-DD). PIT 백테스트에서 이 날짜 이후에만 적용. */
+  effective_date?: string;
 }
 
 export interface TechnicalComponents {
@@ -144,6 +146,31 @@ export interface DataQualityReport {
   has_fundamentals: boolean;
 }
 
+/**
+ * 데이터 소스 신뢰성 계약.
+ *
+ * - `isFallback`이 true이면 시장(OHLCV) 데이터 수집이 실패하고 허용된 폴백(seed 등)으로
+ *   대체되었음을 의미한다. 이런 입력은 절대 매수/액션 신호를 생성해서는 안 된다. (하드 게이트)
+ * - `source`는 데이터의 실제 출처를 정직하게 기록한다 (yahoo / seed / database / custom).
+ * - `marketDataSource` / `fundamentalDataSource` / `classificationSource`는 각 데이터
+ *   구성 요소의 출처를 독립적으로 추적한다. Fundamental이 seed baseline에서 온 경우
+ *   `warnings`에 정직하게 표시한다 (차단하지 않고 플래그).
+ */
+export interface DataProvenance {
+  /** 레거시: 전체 데이터의 대표 출처 (yahoo / seed / database / custom). */
+  source: string;
+  /** 시장(OHLCV) 폴백 여부 — 유일한 하드 게이트 판정 기준. true면 신호 차단. */
+  isFallback: boolean;
+  /** OHLCV 시장 데이터의 실제 출처 (yahoo / seed / database). */
+  marketDataSource?: string;
+  /** 펀더멘털 데이터의 실제 출처 (yahoo / seed / database). */
+  fundamentalDataSource?: string;
+  /** 분류의 출처 (rule_based / manual_override / seed). */
+  classificationSource?: string;
+  /** 정직한 출처 경고 (예: 'fundamentals sourced from seed baseline'). 차단하지 않는다. */
+  warnings?: string[];
+}
+
 export interface FullTickerEvaluation {
   ticker: string;
   name: string;
@@ -156,6 +183,7 @@ export interface FullTickerEvaluation {
   decision: DecisionEvaluation;
   signal_generated: boolean;
   data_quality?: DataQualityReport;
+  provenance?: DataProvenance;
   raw_metadata?: Record<string, any>;
 }
 

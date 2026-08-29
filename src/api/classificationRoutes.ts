@@ -3,6 +3,7 @@ import { AssetClassification } from '../types/v8';
 import { dbClient } from '../db/supabaseClient';
 import { evaluationService } from '../pipeline/evaluationService';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
+import { classificationRepository } from '../db/repositories/classificationRepository';
 
 export const classificationRouter = Router();
 
@@ -34,9 +35,10 @@ classificationRouter.post('/override', async (req, res) => {
       reason: reason || '관리자 수동 지정 (Manual Override)',
       classified_at: existing?.classified_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      effective_date: new Date().toISOString().split('T')[0],
     };
 
-    dbClient.classifications.set(cleanTicker, override);
+    await classificationRepository.save(override);
 
     // Re-evaluate ticker with override
     const reEvaluated = await evaluationService.evaluateTicker(cleanTicker, override);
@@ -56,6 +58,13 @@ classificationRouter.delete('/override/:ticker', async (req, res) => {
   try {
     const cleanTicker = req.params.ticker.toUpperCase().trim();
     dbClient.classifications.delete(cleanTicker);
+
+    // 수동 오버라이드 스냅샷 제거 (PIT 조회에서 더 이상 이 오버라이드가 나타나지 않도록)
+    for (const [k] of Array.from(dbClient.classificationSnapshots.entries())) {
+      if (k.startsWith(`${cleanTicker}_`)) {
+        dbClient.classificationSnapshots.delete(k);
+      }
+    }
 
     // Re-evaluate with auto
     const reEvaluated = await evaluationService.evaluateTicker(cleanTicker);
