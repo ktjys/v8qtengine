@@ -1,4 +1,4 @@
-import { runV8PipelineOnSeedData } from '../data/seed/initialData';
+import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { scanRunRepository } from '../db/repositories/scanRunRepository';
 import { signalRepository } from '../db/repositories/signalRepository';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
@@ -67,29 +67,28 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
     let evaluations: FullTickerEvaluation[] = [];
     let actionable: FullTickerEvaluation[] = [];
     let watchlistTotalCount = 0;
+    let scanError: string | undefined;
 
     try {
       const scanResult = await scanService.executeScan({ saveToDb: true });
       evaluations = scanResult.evaluations || [];
       watchlistTotalCount = scanResult.watchlist?.length || evaluations.length;
-    } catch (scanErr) {
-      console.warn('[CronScan] ScanService failed, falling back to seed data:', scanErr);
-      const pipelineData = runV8PipelineOnSeedData();
-      evaluations = pipelineData.evaluations || [];
-      watchlistTotalCount = pipelineData.watchlist?.length || evaluations.length;
+    } catch (scanErr: any) {
+      console.error('[CronScan] ScanService failed:', scanErr);
+      scanError = scanErr?.message || 'Scan execution failed';
+      // Attempt to read latest real evaluations from DB rather than fake seed prices
+      try {
+        const cached = await evaluationRepository.getAll();
+        if (cached && cached.length > 0) {
+          evaluations = cached;
+          watchlistTotalCount = cached.length;
+        }
+      } catch (cacheErr) {
+        console.warn('[CronScan] Failed to load cached evaluations from DB:', cacheErr);
+      }
     }
 
     actionable = evaluations.filter((e) => e.signal_generated);
-
-    // 3. Save new actionable snapshots into signalRepository
-    for (const item of actionable) {
-      try {
-        const snapshot = createSignalSnapshot(item);
-        await signalRepository.save(snapshot);
-      } catch (err) {
-        console.warn(`[CronScan] Failed to persist signal snapshot for ${item.ticker}:`, err);
-      }
-    }
 
     // 4. Record the scan run log
     const durationMs = Date.now() - startTime;
@@ -100,10 +99,10 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       watchlist_count: watchlistTotalCount,
       evaluated_count: evaluations.length,
       signal_count: actionable.length,
-      failure_count: 0,
-      failed_tickers: [],
-      status: 'SUCCESS',
-      error_summary: `${slotName} 무결성 스캔 완료 (${actionable.length}건 시그널 도출)`,
+      failure_count: scanError ? 1 : 0,
+      failed_tickers: scanError ? [{ ticker: 'SCAN_SERVICE', error: scanError }] : [],
+      status: scanError ? 'FAILED' : 'SUCCESS',
+      error_summary: scanError ? `스캔 오류: ${scanError}` : `${slotName} 무결성 스캔 완료 (${actionable.length}건 시그널 도출)`,
     };
 
     try {

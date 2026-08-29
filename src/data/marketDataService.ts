@@ -73,7 +73,7 @@ export class MarketDataService {
     // 1. Check DB first for SPY
     let dbBars = await marketDataRepository.getBars('SPY', 252);
     const lastDate = dbBars.length > 0 ? new Date(dbBars[dbBars.length - 1].date).getTime() : 0;
-    const isStale = dbBars.length < 20 || isNaN(lastDate) || (now - lastDate > 4 * 24 * 60 * 60 * 1000);
+    const isStale = dbBars.length < 200 || isNaN(lastDate) || (now - lastDate > 24 * 60 * 60 * 1000);
 
     if (isStale) {
       const bars = await this.provider.getBenchmark('1y');
@@ -103,10 +103,10 @@ export class MarketDataService {
     // 1. Always fetch live real-time quote first
     const liveQuote = await this.provider.getQuote(cleanTicker);
 
-    // 2. Fetch historical bars from DB or live provider, verifying freshness
+    // 2. Fetch historical bars from DB or live provider, verifying freshness (< 24h)
     let dbBars = await marketDataRepository.getBars(cleanTicker, 252);
     const lastDate = dbBars.length > 0 ? new Date(dbBars[dbBars.length - 1].date).getTime() : 0;
-    const isStale = dbBars.length < 20 || isNaN(lastDate) || (Date.now() - lastDate > 4 * 24 * 60 * 60 * 1000);
+    const isStale = dbBars.length < 200 || isNaN(lastDate) || (Date.now() - lastDate > 24 * 60 * 60 * 1000);
 
     if (isStale) {
       const fetchedBars = await this.provider.getHistorical(cleanTicker, '1y');
@@ -122,18 +122,18 @@ export class MarketDataService {
     // 3. Synchronize / enrich latest bar with current live price
     if (liveQuote && liveQuote.price > 0) {
       if (dbBars.length > 0) {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const quoteDate = liveQuote.timestamp ? liveQuote.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
         const lastBar = dbBars[dbBars.length - 1];
-        if (lastBar.date === todayStr) {
+        if (lastBar.date === quoteDate) {
           lastBar.close = liveQuote.price;
           lastBar.high = Math.max(lastBar.high, liveQuote.price);
           lastBar.low = Math.min(lastBar.low, liveQuote.price);
-        } else {
+        } else if (quoteDate >= lastBar.date) {
           dbBars.push({
-            date: todayStr,
-            open: Math.round((liveQuote.price - liveQuote.change) * 100) / 100,
-            high: Math.max(liveQuote.price, liveQuote.price - liveQuote.change),
-            low: Math.min(liveQuote.price, liveQuote.price - liveQuote.change),
+            date: quoteDate,
+            open: Math.round((liveQuote.price - (liveQuote.change || 0)) * 100) / 100,
+            high: Math.max(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
+            low: Math.min(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
             close: liveQuote.price,
             adjClose: liveQuote.price,
             volume: 100000,

@@ -922,8 +922,8 @@ export function runPipelineOnSeedData(
     // 4. Decision
     const decision = makeDecision(classification, opportunity, risk);
 
-    // 5. Signal check
-    const isSignal = decision.actionable;
+    // 5. Signal check - Seed/fallback data must NEVER generate live actionable signals
+    const isSignal = false;
 
     evaluations.push({
       ticker: item.ticker,
@@ -934,14 +934,17 @@ export function runPipelineOnSeedData(
       classification,
       opportunity,
       risk,
-      decision,
+      decision: {
+        ...decision,
+        actionable: false, // Ensure seed is not marked actionable
+      },
       signal_generated: isSignal,
       data_quality: {
-        data_quality_score: 98,
-        data_freshness: 'FRESH',
+        data_quality_score: 60,
+        data_freshness: 'STALE',
         last_updated: new Date().toISOString(),
         source: 'seed',
-        data_warnings: [],
+        data_warnings: ['초기 시드 데이터 (실시간 시세 반영 전)'],
         bars_count: 252,
         has_fundamentals: classification.asset_type === 'equity',
       },

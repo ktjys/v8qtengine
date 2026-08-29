@@ -44,12 +44,13 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const cached = this.getCached<QuoteData>(cacheKey, 30 * 1000);
     if (cached) return cached;
 
-    const urls = [
+    // 1. Try Yahoo Finance Chart API (query1 & query2)
+    const chartUrls = [
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
     ];
 
-    for (const url of urls) {
+    for (const url of chartUrls) {
       try {
         const res = await fetch(url, {
           headers: {
@@ -61,7 +62,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
         if (res.ok) {
           const json = await res.json();
           const meta = json?.chart?.result?.[0]?.meta;
-          if (meta) {
+          if (meta && typeof (meta.regularMarketPrice ?? meta.previousClose) === 'number') {
             const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
             const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
             const change = currentPrice - prevClose;
@@ -90,7 +91,53 @@ export class YahooFinanceProvider implements MarketDataProvider {
       }
     }
 
-    // Try Stooq quote fallback
+    // 2. Try Yahoo Finance Quote API v7 (query1 & query2)
+    const quoteUrls = [
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
+      `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
+    ];
+
+    for (const url of quoteUrls) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            Accept: 'application/json',
+          },
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const qRes = json?.quoteResponse?.result?.[0];
+          if (qRes && typeof (qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice) === 'number') {
+            const currentPrice = qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice;
+            const change = qRes.regularMarketChange ?? 0;
+            const changePercent = qRes.regularMarketChangePercent ?? 0;
+
+            const quote: QuoteData = {
+              ticker: clean,
+              price: Math.round(currentPrice * 100) / 100,
+              change: Math.round(change * 100) / 100,
+              changePercent: Math.round(changePercent * 100) / 100,
+              currency: qRes.currency || 'USD',
+              exchange: qRes.fullExchangeName || 'US',
+              shortName: qRes.shortName || clean,
+              longName: qRes.longName || qRes.shortName || clean,
+              fiftyTwoWeekHigh: qRes.fiftyTwoWeekHigh,
+              fiftyTwoWeekLow: qRes.fiftyTwoWeekLow,
+              timestamp: new Date().toISOString(),
+            };
+
+            this.setCache(cacheKey, quote);
+            return quote;
+          }
+        }
+      } catch (e) {
+        // try next
+      }
+    }
+
+    // 3. Try Stooq quote fallback
     try {
       const stooqUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&f=sd2t2ohlcv&h&e=csv`;
       const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });

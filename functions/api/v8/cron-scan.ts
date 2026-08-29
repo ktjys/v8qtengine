@@ -1,5 +1,4 @@
 import { scanService } from '../../../src/pipeline/scanService';
-import { runV8PipelineOnSeedData } from '../../../src/data/seed/initialData';
 
 function sanitizeToken(token?: string | null): string | null {
   if (!token) return null;
@@ -113,18 +112,10 @@ export async function onRequest(context: any) {
       const scanResult = await scanService.executeScan({ saveToDb: false });
       evaluations = scanResult.evaluations || [];
     } catch (scanErr) {
-      console.warn('[CronScan Worker] scanService failed, evaluating with fallback:', scanErr);
-      const scanResult = runV8PipelineOnSeedData();
-      evaluations = scanResult.evaluations || [];
+      console.warn('[CronScan Worker] scanService failed:', scanErr);
     }
 
-    // Ensure all evaluations have live prices if possible
-    if (evaluations.length === 0) {
-      const scanResult = runV8PipelineOnSeedData();
-      evaluations = scanResult.evaluations || [];
-    }
-
-    actionableSignals = evaluations.filter((e) => e.decision?.actionable);
+    actionableSignals = evaluations.filter((e) => e.signal_generated);
 
     // 4. Send Telegram Notification if configured
     const botToken =
