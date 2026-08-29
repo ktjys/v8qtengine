@@ -253,6 +253,12 @@ export interface BacktestSummary {
   avg_return_10d: number;
   avg_return_20d: number;
   median_return_20d: number;
+  /** positionSizePct(제안 비중)로 가중한 20d 평균 수익률. 사이징 적용 성과 */
+  weighted_avg_return_20d?: number;
+  /** 같은 시그널 셋의 등가중 20d 평균 수익률 (weighted와 비교용) */
+  equal_weight_avg_return_20d?: number;
+  /** 가중 지표 계산에 사용된 시그널 수 */
+  weighted_monitor_count?: number;
   max_drawdown: number;
   profit_factor: number;
   expectancy?: number;

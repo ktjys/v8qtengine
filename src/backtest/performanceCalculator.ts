@@ -1,6 +1,79 @@
 import { BacktestSummary, RiskLevel } from '../types/v8';
 import { SimulatedTradeSignal } from './backtestTypes';
 
+export interface BreakdownSignal {
+  return20d: number | null;
+  strategy: string;
+  riskLevel: RiskLevel;
+  opportunityScore: number;
+}
+
+export interface BreakdownGroup {
+  count: number;
+  win_rate_20d: number;
+  avg_return_20d: number;
+}
+
+const OPPORTUNITY_BUCKETS = [
+  { label: '65 - 74 (Moderate)', min: 65, max: 74.9 },
+  { label: '75 - 84 (High)', min: 75, max: 84.9 },
+  { label: '85+ (Exceptional)', min: 85, max: 100 },
+];
+
+function groupStats(
+  signals: BreakdownSignal[],
+  predicate: (s: BreakdownSignal) => boolean
+): BreakdownGroup | null {
+  const grp = signals.filter(predicate);
+  if (grp.length === 0) return null;
+  const wins = grp.filter((s) => (s.return20d ?? 0) > 0).length;
+  const avg = grp.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / grp.length;
+  return {
+    count: grp.length,
+    win_rate_20d: Math.round((wins / grp.length) * 1000) / 10,
+    avg_return_20d: Math.round(avg * 10) / 10,
+  };
+}
+
+export function computeBreakdowns(completed: BreakdownSignal[]): {
+  by_strategy: Record<string, BreakdownGroup>;
+  by_risk: Record<RiskLevel, BreakdownGroup>;
+  by_opportunity_bucket: Record<string, BreakdownGroup>;
+} {
+  const by_strategy: Record<string, BreakdownGroup> = {};
+  const strategyGroups: Record<string, BreakdownSignal[]> = {};
+  for (const s of completed) {
+    const strat = s.strategy || 'general_equity';
+    if (!strategyGroups[strat]) strategyGroups[strat] = [];
+    strategyGroups[strat].push(s);
+  }
+  for (const strat of Object.keys(strategyGroups)) {
+    const stats = groupStats(strategyGroups[strat], () => true);
+    if (stats) by_strategy[strat] = stats;
+  }
+
+  const by_risk: Record<RiskLevel, BreakdownGroup> = {
+    LOW: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+    MEDIUM: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+    HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
+  };
+  (['LOW', 'MEDIUM', 'HIGH'] as RiskLevel[]).forEach((lvl) => {
+    const stats = groupStats(completed, (s) => s.riskLevel === lvl);
+    if (stats) by_risk[lvl] = stats;
+  });
+
+  const by_opportunity_bucket: Record<string, BreakdownGroup> = {};
+  OPPORTUNITY_BUCKETS.forEach((b) => {
+    const stats = groupStats(
+      completed,
+      (s) => s.opportunityScore >= b.min && s.opportunityScore <= b.max
+    );
+    if (stats) by_opportunity_bucket[b.label] = stats;
+  });
+
+  return { by_strategy, by_risk, by_opportunity_bucket };
+}
+
 export function calculateReplayPerformance(
   signals: SimulatedTradeSignal[]
 ): BacktestSummary {
@@ -44,6 +117,25 @@ export function calculateReplayPerformance(
   const win20d = completed.filter((s) => (s.return20d ?? 0) > 0).length;
   const avg20d = completed.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / nCompleted;
 
+  // Portfolio 사이징 가중 성과: positionSizePct(제안 비중)로 가중한 20d 수익률.
+  // positionSizePct와 return20d가 모두 있는 completed 시그널만 대상.
+  // 사이징 적용 성과(weighted)를 동일 셋 등가중(equal_weight)과 비교해 검증한다.
+  const sizedSignals = completed.filter(
+    (s) => s.positionSizePct !== undefined && s.return20d !== null && s.return20d !== undefined
+  );
+  const sizedN = sizedSignals.length;
+  let weightedAvg20d: number | undefined;
+  let equalWeightAvg20d: number | undefined;
+  if (sizedN > 0) {
+    const totalWeight = sizedSignals.reduce((sum, s) => sum + (s.positionSizePct ?? 0), 0);
+    if (totalWeight > 0) {
+      weightedAvg20d =
+        sizedSignals.reduce((sum, s) => sum + (s.positionSizePct ?? 0) * (s.return20d ?? 0), 0) /
+        totalWeight;
+    }
+    equalWeightAvg20d = sizedSignals.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / sizedN;
+  }
+
   const sorted20d = completed.map((s) => s.return20d ?? 0).sort((a, b) => a - b);
   // 중앙값: 짝수 개면 중앙 두 값의 평균 (표준 정의)
   const mid = Math.floor(sorted20d.length / 2);
@@ -79,68 +171,14 @@ export function calculateReplayPerformance(
   const lossRate = 1 - winRate;
   const expectancy = Math.round((winRate * avgWin - lossRate * avgLoss) * 100) / 100;
 
-  // Breakdown by Strategy
-  const by_strategy: Record<string, { count: number; win_rate_20d: number; avg_return_20d: number }> = {};
-  const strategyGroups: Record<string, SimulatedTradeSignal[]> = {};
-  completed.forEach((s) => {
-    const strat = s.strategyType || 'general_equity';
-    if (!strategyGroups[strat]) strategyGroups[strat] = [];
-    strategyGroups[strat].push(s);
-  });
-
-  Object.keys(strategyGroups).forEach((strat) => {
-    const grp = strategyGroups[strat];
-    const grpWins = grp.filter((s) => (s.return20d ?? 0) > 0).length;
-    const grpAvg = grp.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / grp.length;
-    by_strategy[strat] = {
-      count: grp.length,
-      win_rate_20d: Math.round((grpWins / grp.length) * 1000) / 10,
-      avg_return_20d: Math.round(grpAvg * 10) / 10,
-    };
-  });
-
-  // Breakdown by Risk
-  const by_risk: Record<RiskLevel, { count: number; win_rate_20d: number; avg_return_20d: number }> = {
-    LOW: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
-    MEDIUM: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
-    HIGH: { count: 0, win_rate_20d: 0, avg_return_20d: 0 },
-  };
-
-  (['LOW', 'MEDIUM', 'HIGH'] as RiskLevel[]).forEach((lvl) => {
-    const grp = completed.filter((s) => s.riskLevel === lvl);
-    if (grp.length > 0) {
-      const wins = grp.filter((s) => (s.return20d ?? 0) > 0).length;
-      const avg = grp.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / grp.length;
-      by_risk[lvl] = {
-        count: grp.length,
-        win_rate_20d: Math.round((wins / grp.length) * 1000) / 10,
-        avg_return_20d: Math.round(avg * 10) / 10,
-      };
-    }
-  });
-
-  // Opportunity Buckets
-  const buckets = [
-    { label: '65 - 74 (Moderate)', min: 65, max: 74.9 },
-    { label: '75 - 84 (High)', min: 75, max: 84.9 },
-    { label: '85+ (Exceptional)', min: 85, max: 100 },
-  ];
-
-  const by_opportunity_bucket: Record<string, { count: number; win_rate_20d: number; avg_return_20d: number }> = {};
-  buckets.forEach((b) => {
-    const grp = completed.filter(
-      (s) => s.opportunityScore >= b.min && s.opportunityScore <= b.max
-    );
-    if (grp.length > 0) {
-      const wins = grp.filter((s) => (s.return20d ?? 0) > 0).length;
-      const avg = grp.reduce((sum, s) => sum + (s.return20d ?? 0), 0) / grp.length;
-      by_opportunity_bucket[b.label] = {
-        count: grp.length,
-        win_rate_20d: Math.round((wins / grp.length) * 1000) / 10,
-        avg_return_20d: Math.round(avg * 10) / 10,
-      };
-    }
-  });
+  const { by_strategy, by_risk, by_opportunity_bucket } = computeBreakdowns(
+    completed.map((s) => ({
+      return20d: s.return20d ?? null,
+      strategy: s.strategyType,
+      riskLevel: s.riskLevel,
+      opportunityScore: s.opportunityScore,
+    }))
+  );
 
   return {
     total_signals: total,
@@ -152,6 +190,11 @@ export function calculateReplayPerformance(
     avg_return_10d: Math.round(avg10d * 10) / 10,
     avg_return_20d: Math.round(avg20d * 10) / 10,
     median_return_20d: Math.round(median20d * 10) / 10,
+    weighted_avg_return_20d:
+      weightedAvg20d !== undefined ? Math.round(weightedAvg20d * 100) / 100 : undefined,
+    equal_weight_avg_return_20d:
+      equalWeightAvg20d !== undefined ? Math.round(equalWeightAvg20d * 100) / 100 : undefined,
+    weighted_monitor_count: sizedN > 0 ? sizedN : undefined,
     max_drawdown: Math.round(max_drawdown * 10) / 10,
     profit_factor,
     expectancy,
