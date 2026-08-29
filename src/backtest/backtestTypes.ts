@@ -15,6 +15,8 @@ export interface SimulatedTradeSignal {
   strategyType: StrategyType;
   riskLevel: RiskLevel;
   opportunityScore: number;
+  /** 리스크 기반 동적 제안 포지션 비중 (포트폴리오 대비 %) */
+  positionSizePct?: number;
   exitPrice5d?: number;
   return5d?: number;
   exitPrice10d?: number;

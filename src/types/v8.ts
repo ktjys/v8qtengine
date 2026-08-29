@@ -111,6 +111,12 @@ export interface DecisionEvaluation {
   reason: string;
   actionable: boolean;
   threshold_met: boolean;
+  /** 리스크 기반 동적 포지션 비중 (포트폴리오 대비 %, 0~10). 신호 시점의 제안 크기 */
+  position_size_pct?: number;
+  /** Kelly 지표 참조 (계산 세부값, 디버깅/텔레그램 표시용) */
+  kelly_fraction?: number;
+  win_probability?: number;
+  payoff_ratio?: number;
 }
 
 export interface OpportunityEvaluation {
@@ -178,6 +184,8 @@ export interface SignalSnapshot {
   decision: DecisionType;
   signal_confidence: number;
   classification_confidence: number;
+  /** 리스크 기반 동적 제안 포지션 비중 (포트폴리오 대비 %) */
+  position_size_pct?: number;
   technical_score: number;
   momentum_score: number;
   fundamental_score: number | null;

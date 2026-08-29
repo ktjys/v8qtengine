@@ -10,6 +10,7 @@ import { calculateOpportunity, RawMarketIndicators } from './opportunityEngine';
 import { calculateRisk, RawRiskInputs } from './riskEngine';
 import { makeDecision } from './decisionEngine';
 import { isSignalEligible, DataProvenance } from './dataQualityGate';
+import { calculatePositionSizing } from './positionSizing';
 
 /**
  * Point-in-Time 마켓 스냅샷.
@@ -106,7 +107,8 @@ export function evaluateV8(input: EvaluationInput): V8Evaluation {
   const isSignal =
     eligible && decision.actionable && opportunity.opportunity_score >= signalThreshold;
 
-  return {
+  // 리스크 기반 동적 포지션 사이징 (Kelly + 리스크 레벨)
+  const sizing = calculatePositionSizing({
     ticker,
     evaluationAt,
     engineVersion: ENGINE_VERSION,
@@ -114,6 +116,23 @@ export function evaluateV8(input: EvaluationInput): V8Evaluation {
     opportunity,
     risk,
     decision,
+    isSignal,
+  });
+
+  return {
+    ticker,
+    evaluationAt,
+    engineVersion: ENGINE_VERSION,
+    classification,
+    opportunity,
+    risk,
+    decision: {
+      ...decision,
+      position_size_pct: sizing.position_size_pct,
+      kelly_fraction: sizing.kelly_fraction,
+      win_probability: sizing.win_probability,
+      payoff_ratio: sizing.payoff_ratio,
+    },
     isSignal,
   };
 }

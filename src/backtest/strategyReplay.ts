@@ -92,6 +92,7 @@ export async function runHistoricalReplay(
             strategyType: evaluation.classification.strategy_type,
             riskLevel: evaluation.risk.risk_level,
             opportunityScore: evaluation.opportunity.opportunity_score,
+            positionSizePct: evaluation.decision.position_size_pct,
             return5d: outcomes.return5d ?? undefined,
             return10d: outcomes.return10d ?? undefined,
             return20d: outcomes.return20d ?? undefined,

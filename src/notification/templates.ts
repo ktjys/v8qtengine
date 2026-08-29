@@ -18,7 +18,11 @@ export function buildSignalTelegramMessage(snapshot: SignalSnapshot): string {
 • Opportunity Score: ${snapshot.opportunity_score} / 100
 • Risk Level: ${snapshot.risk_level} (Score: ${snapshot.risk_score})
 • Signal Confidence: ${(snapshot.signal_confidence * 100).toFixed(0)}%
-
+${
+  snapshot.position_size_pct !== undefined
+    ? `• Suggested Position: ${snapshot.position_size_pct}% of portfolio\n`
+    : ''
+}
 ⚙️ Multi-Factor Sub-Scores
 • Technical: ${snapshot.technical_score} pt (RSI14: ${snapshot.rsi.toFixed(1)}, DD: ${snapshot.drawdown.toFixed(1)}%)
 • Momentum: ${snapshot.momentum_score} pt

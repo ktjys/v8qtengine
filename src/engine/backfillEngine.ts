@@ -159,6 +159,7 @@ export async function runHistoricalBackfill(
               decision: evaluation.decision.decision,
               signal_confidence: evaluation.decision.confidence,
               classification_confidence: evaluation.classification.confidence,
+              position_size_pct: evaluation.decision.position_size_pct,
               technical_score: evaluation.opportunity.sub_scores.technical_score,
               momentum_score: evaluation.opportunity.sub_scores.momentum_score,
               fundamental_score: evaluation.opportunity.sub_scores.fundamental_score,
