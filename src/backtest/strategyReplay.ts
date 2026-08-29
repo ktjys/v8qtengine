@@ -7,7 +7,6 @@ import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { fundamentalsRepository } from '../db/repositories/fundamentalsRepository';
 import { assetRepository } from '../db/repositories/assetRepository';
 import { dbClient } from '../db/supabaseClient';
-import { extractFundamentalIndicators } from '../data/indicators/fundamentalIndicators';
 import { RawYahooMetadata } from '../engine/classificationEngine';
 
 export async function runHistoricalReplay(
@@ -34,6 +33,10 @@ export async function runHistoricalReplay(
     const manualOverride = dbClient.classifications.get(ticker);
     const isEtfHint = dbAsset?.asset_type === 'etf' || manualOverride?.asset_type === 'etf';
 
+    // PIT fundamentals를 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
+    const fundHistory = await fundamentalsRepository.getHistoryAsOf(ticker);
+    let fundHistoryIdx = 0;
+
     let lastSignalIndex = -999;
 
     // Start replay from index 50 (warmup) to bars.length - 1
@@ -47,23 +50,11 @@ export async function runHistoricalReplay(
         ? benchmarkBars.filter((b) => b.date <= barDate)
         : undefined;
 
-      const dbFund = await fundamentalsRepository.getAsOf(ticker, barDate);
-      const fundInd = dbFund
-        ? extractFundamentalIndicators({
-            ticker,
-            asOfDate: dbFund.as_of_date,
-            marketCap: dbFund.market_cap,
-            revenueGrowthYoy: dbFund.revenue_growth,
-            earningsGrowthYoy: dbFund.eps_growth,
-            operatingMargin: dbFund.operating_margin,
-            freeCashFlowMargin: dbFund.fcf_margin,
-            trailingPe: dbFund.trailing_pe,
-            forwardPe: dbFund.forward_pe,
-            psRatio: dbFund.ps_ratio,
-            pegRatio: dbFund.peg_ratio,
-            quoteType: isEtfHint ? 'ETF' : 'EQUITY',
-          }, isEtfHint)
-        : undefined;
+      // 최신 PIT fundamentals 선택 (as_of_date <= barDate)
+      while (fundHistoryIdx + 1 < fundHistory.length && fundHistory[fundHistoryIdx + 1].as_of_date <= barDate) {
+        fundHistoryIdx++;
+      }
+      const dbFund = fundHistory[fundHistoryIdx]?.as_of_date <= barDate ? fundHistory[fundHistoryIdx] : undefined;
 
       const classificationOverride: RawYahooMetadata = {
         quoteType: isEtfHint ? 'ETF' : 'EQUITY',
@@ -84,7 +75,7 @@ export async function runHistoricalReplay(
               isFallback: isSeedData,
             },
             undefined,
-            manualOverride ? { raw: classificationOverride, existing: manualOverride } : undefined,
+            { raw: classificationOverride, existing: manualOverride },
             dbFund,
             isEtfHint
           )

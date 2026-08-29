@@ -55,8 +55,14 @@ export function buildEvaluationInput(
   const lastBar = barsSlice[barsSlice.length - 1];
   const evaluationAt = lastBar?.date ? new Date(lastBar.date) : new Date();
 
+  // Classification override가 있으면 PIT marketCap/sector/industry를 반영하되,
+  // beta는 부재 시 이 PIT 슬라이스에서 계산한 모멘텀 beta로 보정한다.
   const classificationResult = classification?.raw
-    ? classifyAsset(ticker, classification.raw, classification.existing)
+    ? classifyAsset(
+        ticker,
+        { ...classification.raw, beta: classification.raw.beta ?? mom.beta },
+        classification.existing
+      )
     : classifyAsset(ticker, { beta: mom.beta, marketCap: 50_000_000_000 });
 
   const fundInd =
