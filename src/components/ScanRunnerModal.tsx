@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Zap,
   X,
+  Send,
 } from 'lucide-react';
 import { ScanRunLog, SignalSnapshot } from '../types/v8';
 
@@ -22,10 +23,12 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
 }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [simulateFailure, setSimulateFailure] = useState(false);
+  const [sendTelegramOption, setSendTelegramOption] = useState(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [completedLog, setCompletedLog] = useState<ScanRunLog | null>(null);
   const [newSignals, setNewSignals] = useState<SignalSnapshot[]>([]);
   const [actionableSignals, setActionableSignals] = useState<any[]>([]);
+  const [telegramStatus, setTelegramStatus] = useState<{ sent: boolean; message: string } | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
 
   const steps = [
@@ -41,6 +44,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     setCompletedLog(null);
     setNewSignals([]);
     setActionableSignals([]);
+    setTelegramStatus(null);
     setScanError(null);
 
     // Step-by-step visual animation
@@ -53,7 +57,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
       const res = await fetch('/api/v8/scan/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ simulate_partial_failure: simulateFailure }),
+        body: JSON.stringify({ simulate_partial_failure: simulateFailure, send_telegram: sendTelegramOption }),
       });
 
       if (!res.ok) {
@@ -76,6 +80,9 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
         setCompletedLog(data.scan_log);
         setNewSignals(data.new_signals || []);
         setActionableSignals(data.actionable_signals || data.new_signals || []);
+        if (data.telegram_status) {
+          setTelegramStatus(data.telegram_status);
+        }
         onScanCompleted(data);
       } else {
         throw new Error(data.error || '스캔 엔진 실행 중 오류가 발생했습니다.');
@@ -156,24 +163,39 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
             })}
           </div>
 
-          {/* Resilience Test Options */}
+          {/* Scan Options */}
           {!isRunning && !completedLog && (
-            <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1.5 sm:space-y-2 text-xs">
+            <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs">
               <div className="flex items-center justify-between">
                 <label className="flex items-center space-x-2 text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={simulateFailure}
-                    onChange={(e) => setSimulateFailure(e.target.checked)}
+                    checked={sendTelegramOption}
+                    onChange={(e) => setSendTelegramOption(e.target.checked)}
                     className="rounded border-slate-700 accent-cyan-500"
                   />
-                  <span className="text-[11px] sm:text-xs font-medium">부분 실패 허용 복원력 테스트</span>
+                  <span className="text-[11px] sm:text-xs font-medium">스캔 완료 시 텔레그램 리포트 즉시 발송</span>
                 </label>
-                <span className="text-[10px] text-slate-500 font-mono">장애 격리</span>
+                <span className="text-[10px] text-cyan-400 font-mono">선택 옵션</span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 leading-relaxed">
-                체크 시 1개 종목의 가상 네트워크 타임아웃을 유발하며, 시스템이 중단되지 않고 나머지 종목을 정상 완료하는지 검증합니다.
-              </p>
+
+              <div className="border-t border-slate-800/80 pt-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={simulateFailure}
+                      onChange={(e) => setSimulateFailure(e.target.checked)}
+                      className="rounded border-slate-700 accent-cyan-500"
+                    />
+                    <span className="text-[11px] sm:text-xs font-medium">부분 실패 허용 복원력 테스트</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-mono">장애 격리</span>
+                </div>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 leading-relaxed mt-1">
+                  체크 시 1개 종목의 가상 네트워크 타임아웃을 유발하여 시스템 장애 격리 기능을 검증합니다.
+                </p>
+              </div>
             </div>
           )}
 
@@ -219,6 +241,25 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Telegram Delivery Status */}
+              {telegramStatus && (
+                <div className={`p-2.5 rounded-xl border text-xs flex items-center justify-between font-mono ${
+                  telegramStatus.sent
+                    ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
+                    : 'bg-slate-900/80 border-slate-800 text-slate-400'
+                }`}>
+                  <div className="flex items-center space-x-2">
+                    <Send className={`w-3.5 h-3.5 ${telegramStatus.sent ? 'text-cyan-400' : 'text-slate-500'}`} />
+                    <span className="text-[11px] font-sans font-medium">
+                      텔레그램 브리핑 알림:
+                    </span>
+                  </div>
+                  <span className={`text-[11px] font-bold ${telegramStatus.sent ? 'text-cyan-300' : 'text-slate-400'}`}>
+                    {telegramStatus.sent ? '✅ 즉시 발송 완료' : telegramStatus.message}
+                  </span>
+                </div>
+              )}
 
               {completedLog.error_summary && (
                 <div className="text-[10px] sm:text-[11px] text-amber-400 bg-slate-900/90 p-2.5 rounded-xl border border-amber-500/20 font-mono">
