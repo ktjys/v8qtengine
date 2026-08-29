@@ -26,9 +26,10 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-// Seed 시계열의 고정 기준 종료일. 명시적 endDate가 없으면 이 날짜를 기준으로
-// 252개 일봉을 생성한다. (며칠 후 재실행/백테스트 재현성 보장 — P1-1)
-const SEED_END_DATE = '2026-08-19';
+function getDefaultSeedEndDate(): string {
+  const now = new Date();
+  return now.toISOString().split('T')[0];
+}
 
 export class SeedDataProvider implements MarketDataProvider {
   readonly name = 'seed';
@@ -68,7 +69,7 @@ export class SeedDataProvider implements MarketDataProvider {
     // 쓰지 않으므로 며칠 후 재실행해도 동일한 날짜의 Seed 시계열이 재현된다.
     const anchorMs = endDate
       ? new Date(`${endDate}T00:00:00Z`).getTime()
-      : new Date(`${SEED_END_DATE}T00:00:00Z`).getTime();
+      : new Date(`${getDefaultSeedEndDate()}T00:00:00Z`).getTime();
 
     // Generate 252 synthetic daily bars with realistic drift and volatility
     let current = basePrice * 0.85;

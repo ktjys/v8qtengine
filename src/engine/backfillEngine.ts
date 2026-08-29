@@ -265,7 +265,7 @@ export async function runHistoricalBackfill(
     avgReturn20d: Math.round(avg20d * 10) / 10,
     dateRange: {
       start: minDate !== '9999-99-99' ? minDate : '2025-01-01',
-      end: maxDate !== '0000-00-00' ? maxDate : '2026-08-19',
+      end: maxDate !== '0000-00-00' ? maxDate : new Date().toISOString().split('T')[0],
     },
     detailsByTicker,
   };
