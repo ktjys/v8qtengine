@@ -62,6 +62,7 @@ export function createSignalSnapshot(
     decision: decision.decision,
     signal_confidence: decision.confidence,
     classification_confidence: classification.confidence,
+    position_size_pct: decision.position_size_pct,
     technical_score: opp.sub_scores.technical_score,
     momentum_score: opp.sub_scores.momentum_score,
     fundamental_score: opp.sub_scores.fundamental_score,
@@ -79,34 +80,4 @@ export function createSignalSnapshot(
       decision_reason: decision.reason,
     },
   };
-}
-
-export function formatTelegramNotification(snapshot: SignalSnapshot): string {
-  const fundText =
-    snapshot.fundamental_score !== null ? `${snapshot.fundamental_score} pt` : 'N/A (ETF)';
-  const valText =
-    snapshot.valuation_score !== null ? `${snapshot.valuation_score} pt` : 'N/A';
-
-  return `🔔 [V8 Signal Generated]
-━━━━━━━━━━━━━━━━━━━━
-📌 ${snapshot.ticker} (${snapshot.name})
-• Strategy: ${snapshot.strategy_type}
-• Decision: 🎯 ${snapshot.decision}
-• Price: $${snapshot.signal_price.toFixed(2)}
-
-📊 Score Breakdown
-• Opportunity: ${snapshot.opportunity_score} / 100
-• Risk Level: ${snapshot.risk_level} (Score: ${snapshot.risk_score})
-• Confidence: ${(snapshot.signal_confidence * 100).toFixed(0)}%
-
-⚙️ Sub-Scores
-• Technical: ${snapshot.technical_score} pt (RSI: ${snapshot.rsi.toFixed(1)}, DD: ${snapshot.drawdown.toFixed(1)}%)
-• Momentum: ${snapshot.momentum_score} pt
-• Fundamental: ${fundText}
-• Valuation: ${valText}
-
-💡 Action Rationale
-"${snapshot.components.decision_reason}"
-━━━━━━━━━━━━━━━━━━━━
-Auto-monitored by V8 Quant Engine`;
 }

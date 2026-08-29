@@ -13,7 +13,8 @@ import { telegramRouter } from './src/api/telegramRoutes';
 import { executeCronScan } from './src/engine/cronScanEngine';
 import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
-import { createSignalSnapshot, formatTelegramNotification } from './src/engine/signalEngine';
+import { createSignalSnapshot } from './src/engine/signalEngine';
+import { buildSignalTelegramMessage } from './src/notification/templates';
 
 function createRateLimiter(windowMs: number, max: number) {
   const hits = new Map<string, number[]>();
@@ -166,7 +167,7 @@ async function startServer() {
         return res.status(404).json({ error: 'Ticker evaluation not found' });
       }
       const snapshot = createSignalSnapshot(evalItem);
-      const message = formatTelegramNotification(snapshot);
+      const message = buildSignalTelegramMessage(snapshot);
 
       res.json({
         success: true,

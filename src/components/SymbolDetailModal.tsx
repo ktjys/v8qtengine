@@ -33,8 +33,8 @@ import {
   SignalSnapshot,
   StrategyType,
 } from '../types/v8';
-import { formatTelegramNotification } from '../engine/signalEngine';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { buildSignalTelegramMessage } from '../notification/templates';
 import { SymbolDailyScoreChart } from './SymbolDailyScoreChart';
 
 interface SymbolDetailModalProps {
@@ -82,7 +82,7 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
     }
     return Array.from(map.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
   }, [historicalSignals, evaluation.ticker]);
-  const telegramMessage = formatTelegramNotification({
+  const telegramMessage = buildSignalTelegramMessage({
     id: `temp-${evaluation.ticker}`,
     signal_date: evaluation.evaluated_at.split('T')[0],
     ticker: evaluation.ticker,
@@ -96,6 +96,7 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
     decision: evaluation.decision.decision,
     signal_confidence: evaluation.decision.confidence,
     classification_confidence: evaluation.classification.confidence,
+    position_size_pct: evaluation.decision.position_size_pct,
     technical_score: evaluation.opportunity.sub_scores.technical_score,
     momentum_score: evaluation.opportunity.sub_scores.momentum_score,
     fundamental_score: evaluation.opportunity.sub_scores.fundamental_score,
