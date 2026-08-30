@@ -12,6 +12,15 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { AssetClassification, AssetType, FullTickerEvaluation, StrategyType } from '../types/v8';
+import { SortableHeader } from './SortableHeader';
+
+export type ClassificationSortField =
+  | 'ticker'
+  | 'asset_type'
+  | 'strategy_type'
+  | 'confidence'
+  | 'source'
+  | 'reason';
 
 interface ClassificationViewProps {
   evaluations: FullTickerEvaluation[];
@@ -35,6 +44,17 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSource, setFilterSource] = useState<'ALL' | 'auto' | 'manual'>('ALL');
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [sortField, setSortField] = useState<ClassificationSortField>('ticker');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: ClassificationSortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortField(field);
+      setSortOrder(field === 'confidence' ? 'desc' : 'asc');
+    }
+  };
 
   const manualCount = (evaluations || []).filter(
     (e) => e?.classification?.classification_source === 'manual'
@@ -55,6 +75,36 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
       return false;
     }
     return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let diff = 0;
+    const cA = a.classification || ({} as any);
+    const cB = b.classification || ({} as any);
+
+    switch (sortField) {
+      case 'ticker':
+        diff = (a.ticker || '').localeCompare(b.ticker || '');
+        break;
+      case 'asset_type':
+        diff = (cA.asset_type || '').localeCompare(cB.asset_type || '');
+        break;
+      case 'strategy_type':
+        diff = (cA.strategy_type || '').localeCompare(cB.strategy_type || '');
+        break;
+      case 'confidence':
+        diff = (cA.confidence ?? 0) - (cB.confidence ?? 0);
+        break;
+      case 'source':
+        diff = (cA.classification_source || '').localeCompare(cB.classification_source || '');
+        break;
+      case 'reason':
+        diff = (cA.reason || '').localeCompare(cB.reason || '');
+        break;
+      default:
+        diff = 0;
+    }
+    return sortOrder === 'desc' ? -diff : diff;
   });
 
   return (
@@ -123,19 +173,75 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-semibold">
-                <th className="py-3.5 px-4">
-                  <span className="text-slate-500 font-mono mr-1.5 text-[11px]">No.</span>종목코드 / 이름
+                <SortableHeader<ClassificationSortField>
+                  field="ticker"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-4"
+                >
+                  <span className="text-slate-500 font-mono mr-1.5 text-[11px]">No.</span>
+                  <span>종목코드 / 이름</span>
+                </SortableHeader>
+
+                <SortableHeader<ClassificationSortField>
+                  field="asset_type"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3"
+                >
+                  <span>자산 대분류</span>
+                </SortableHeader>
+
+                <SortableHeader<ClassificationSortField>
+                  field="strategy_type"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3"
+                >
+                  <span>전략 유형 (Strategy)</span>
+                </SortableHeader>
+
+                <SortableHeader<ClassificationSortField>
+                  field="confidence"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  align="center"
+                  className="py-3.5 px-3 text-center"
+                >
+                  <span>신뢰도 확신</span>
+                </SortableHeader>
+
+                <SortableHeader<ClassificationSortField>
+                  field="source"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3"
+                >
+                  <span>분류 출처</span>
+                </SortableHeader>
+
+                <SortableHeader<ClassificationSortField>
+                  field="reason"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-4"
+                >
+                  <span>분류 근거 (Reason)</span>
+                </SortableHeader>
+
+                <th className="py-3.5 px-4 text-right text-slate-400 font-semibold whitespace-nowrap">
+                  수동 편집
                 </th>
-                <th className="py-3.5 px-3">자산 대분류</th>
-                <th className="py-3.5 px-3">전략 유형 (Strategy)</th>
-                <th className="py-3.5 px-3 text-center">신뢰도 확신</th>
-                <th className="py-3.5 px-3">분류 출처</th>
-                <th className="py-3.5 px-4">분류 근거 (Reason)</th>
-                <th className="py-3.5 px-4 text-right">수동 편집</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {filtered.map((item, idx) => {
+              {sorted.map((item, idx) => {
                 const c = item.classification;
                 const isManual = c.classification_source === 'manual';
 

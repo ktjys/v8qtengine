@@ -9,12 +9,27 @@ import {
   Layers,
   PieChart,
   RefreshCw,
+  Search,
   ShieldCheck,
   TrendingUp,
   Zap,
 } from 'lucide-react';
 import { BacktestSummary, RiskLevel, SignalSnapshot } from '../types/v8';
 import { calculateBacktestMetrics } from '../engine/backtestEngine';
+import { SortableHeader } from './SortableHeader';
+
+export type BacktestSortField =
+  | 'signal_date'
+  | 'ticker'
+  | 'strategy_type'
+  | 'signal_price'
+  | 'opportunity_score'
+  | 'risk_level'
+  | 'current_return'
+  | 'return_5d'
+  | 'return_10d'
+  | 'return_20d'
+  | 'status';
 
 interface BacktestViewProps {
   summary: BacktestSummary | null;
@@ -31,6 +46,18 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<string>('ALL');
   const [selectedRisk, setSelectedRisk] = useState<string>('ALL');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortField, setSortField] = useState<BacktestSortField>('signal_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: BacktestSortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortField(field);
+      setSortOrder(field === 'ticker' || field === 'strategy_type' ? 'asc' : 'desc');
+    }
+  };
 
   const safeSignals = useMemo(() => {
     if (!Array.isArray(allSignals)) return [];
@@ -168,12 +195,66 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
   }, [summary, computedSummary, safeSignals]);
 
   const filteredSignals = useMemo(() => {
-    return safeSignals.filter((s) => {
+    const list = safeSignals.filter((s) => {
       if (selectedStrategy !== 'ALL' && s.strategy_type !== selectedStrategy) return false;
       if (selectedRisk !== 'ALL' && s.risk_level !== selectedRisk) return false;
+      if (
+        searchTerm &&
+        !(s.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !(s.strategy_type || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !(s.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [safeSignals, selectedStrategy, selectedRisk]);
+
+    const riskRank: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+
+    list.sort((a, b) => {
+      let diff = 0;
+      switch (sortField) {
+        case 'signal_date':
+          diff = (a.signal_date || '').localeCompare(b.signal_date || '');
+          break;
+        case 'ticker':
+          diff = (a.ticker || '').localeCompare(b.ticker || '');
+          break;
+        case 'strategy_type':
+          diff = (a.strategy_type || '').localeCompare(b.strategy_type || '');
+          break;
+        case 'signal_price':
+          diff = (a.signal_price ?? 0) - (b.signal_price ?? 0);
+          break;
+        case 'opportunity_score':
+          diff = (a.opportunity_score ?? 0) - (b.opportunity_score ?? 0);
+          break;
+        case 'risk_level':
+          diff = (riskRank[a.risk_level] || 0) - (riskRank[b.risk_level] || 0);
+          break;
+        case 'current_return':
+          diff = (a.current_return ?? -999) - (b.current_return ?? -999);
+          break;
+        case 'return_5d':
+          diff = (a.return_5d ?? -999) - (b.return_5d ?? -999);
+          break;
+        case 'return_10d':
+          diff = (a.return_10d ?? -999) - (b.return_10d ?? -999);
+          break;
+        case 'return_20d':
+          diff = (a.return_20d ?? -999) - (b.return_20d ?? -999);
+          break;
+        case 'status':
+          diff = (a.status || '').localeCompare(b.status || '');
+          break;
+        default:
+          diff = 0;
+      }
+      return sortOrder === 'desc' ? -diff : diff;
+    });
+
+    return list;
+  }, [safeSignals, selectedStrategy, selectedRisk, searchTerm, sortField, sortOrder]);
 
   const lowRiskStats = stats.by_risk?.LOW || { count: 3, win_rate_20d: 100, avg_return_20d: 8.1 };
   const medRiskStats = stats.by_risk?.MEDIUM || { count: 3, win_rate_20d: 100, avg_return_20d: 13.0 };
@@ -445,8 +526,19 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
             </p>
           </div>
 
-          {/* Filters */}
+          {/* Filters & Search */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="relative min-w-[150px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="티커 / 전략 검색..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
             <select
               value={selectedStrategy}
               onChange={(e) => setSelectedStrategy(e.target.value)}
@@ -499,18 +591,124 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
             <table className="w-full text-left text-xs min-w-[700px]">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/80">
-                  <th className="py-3 px-3 whitespace-nowrap">발생일</th>
-                  <th className="py-3 px-3 whitespace-nowrap">종목코드</th>
-                  <th className="py-3 px-3 whitespace-nowrap">전략 유형</th>
-                  <th className="py-3 px-3 whitespace-nowrap">진입가</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">기회 점수</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">리스크</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">현재 수익률</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">5D (5거래일)</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">10D (10거래일)</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">20D (20거래일)</th>
-                  <th className="py-3 px-3 text-center whitespace-nowrap">상태</th>
-                  <th className="py-3 px-4 whitespace-nowrap">당시 판단 근거 (Immutable Reason)</th>
+                  <SortableHeader<BacktestSortField>
+                    field="signal_date"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    className="py-3 px-3"
+                  >
+                    <span>발생일</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="ticker"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    className="py-3 px-3"
+                  >
+                    <span>종목코드</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="strategy_type"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    className="py-3 px-3"
+                  >
+                    <span>전략 유형</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="signal_price"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    className="py-3 px-3"
+                  >
+                    <span>진입가</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="opportunity_score"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>기회 점수</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="risk_level"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>리스크</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="current_return"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>현재 수익률</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="return_5d"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>5D (5거래일)</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="return_10d"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>10D (10거래일)</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="return_20d"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>20D (20거래일)</span>
+                  </SortableHeader>
+
+                  <SortableHeader<BacktestSortField>
+                    field="status"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    align="center"
+                    className="py-3 px-3 text-center"
+                  >
+                    <span>상태</span>
+                  </SortableHeader>
+
+                  <th className="py-3 px-4 whitespace-nowrap text-slate-400 font-semibold">당시 판단 근거 (Immutable Reason)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono">

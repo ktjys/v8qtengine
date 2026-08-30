@@ -21,6 +21,18 @@ import {
 } from 'lucide-react';
 import { BacktestSummary, FullTickerEvaluation, SignalSnapshot } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { SortableHeader } from './SortableHeader';
+
+export type DashboardSignalSortField =
+  | 'signal_date'
+  | 'ticker'
+  | 'strategy_type'
+  | 'signal_price'
+  | 'opportunity_score'
+  | 'risk_level'
+  | 'return_5d'
+  | 'return_10d'
+  | 'return_20d';
 
 interface DashboardViewProps {
   evaluations: FullTickerEvaluation[];
@@ -45,6 +57,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [showAllWatch, setShowAllWatch] = useState(false);
   const [showAllSignals, setShowAllSignals] = useState(false);
+  const [signalSortField, setSignalSortField] = useState<DashboardSignalSortField>('signal_date');
+  const [signalSortOrder, setSignalSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  const handleSignalSort = (field: DashboardSignalSortField) => {
+    if (signalSortField === field) {
+      setSignalSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSignalSortField(field);
+      setSignalSortOrder(field === 'ticker' || field === 'strategy_type' ? 'asc' : 'desc');
+    }
+  };
 
   // Categorize Today's Watch
   const opportunities = (evaluations || [])
@@ -75,8 +98,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         map.set(key, sig);
       }
     }
-    return Array.from(map.values()).sort((a, b) => b.signal_date.localeCompare(a.signal_date));
-  }, [recentSignals]);
+    const list = Array.from(map.values());
+
+    const riskRank: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+
+    list.sort((a, b) => {
+      let diff = 0;
+      switch (signalSortField) {
+        case 'signal_date':
+          diff = (a.signal_date || '').localeCompare(b.signal_date || '');
+          break;
+        case 'ticker':
+          diff = (a.ticker || '').localeCompare(b.ticker || '');
+          break;
+        case 'strategy_type':
+          diff = (a.strategy_type || '').localeCompare(b.strategy_type || '');
+          break;
+        case 'signal_price':
+          diff = (a.signal_price ?? 0) - (b.signal_price ?? 0);
+          break;
+        case 'opportunity_score':
+          diff = (a.opportunity_score ?? 0) - (b.opportunity_score ?? 0);
+          break;
+        case 'risk_level':
+          diff = (riskRank[a.risk_level] || 0) - (riskRank[b.risk_level] || 0);
+          break;
+        case 'return_5d':
+          diff = (a.return_5d ?? -999) - (b.return_5d ?? -999);
+          break;
+        case 'return_10d':
+          diff = (a.return_10d ?? -999) - (b.return_10d ?? -999);
+          break;
+        case 'return_20d':
+          diff = (a.return_20d ?? -999) - (b.return_20d ?? -999);
+          break;
+        default:
+          diff = 0;
+      }
+      return signalSortOrder === 'desc' ? -diff : diff;
+    });
+
+    return list;
+  }, [recentSignals, signalSortField, signalSortOrder]);
 
   const displayedWatchItems = showAllWatch ? watchListItems : watchListItems.slice(0, 10);
   const displayedSignals = showAllSignals ? uniqueRecentSignals : uniqueRecentSignals.slice(0, 10);
@@ -464,18 +527,103 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 font-medium">
-                <th className="pb-3 font-semibold">발생일</th>
-                <th className="pb-3 font-semibold">
-                  <span className="text-slate-500 font-mono mr-1.5">No.</span>종목코드 / 이름
-                </th>
-                <th className="pb-3 font-semibold">전략 유형</th>
-                <th className="pb-3 font-semibold">진입가</th>
-                <th className="pb-3 font-semibold text-center">기회 점수</th>
-                <th className="pb-3 font-semibold text-center">리스크</th>
-                <th className="pb-3 font-semibold text-center">5D 수익률</th>
-                <th className="pb-3 font-semibold text-center">10D 수익률</th>
-                <th className="pb-3 font-semibold text-center">20D 수익률</th>
-                <th className="pb-3 font-semibold text-right">텔레그램</th>
+                <SortableHeader<DashboardSignalSortField>
+                  field="signal_date"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  className="pb-3 font-semibold"
+                >
+                  <span>발생일</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="ticker"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  className="pb-3 font-semibold"
+                >
+                  <span className="text-slate-500 font-mono mr-1.5">No.</span>
+                  <span>종목코드 / 이름</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="strategy_type"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  className="pb-3 font-semibold"
+                >
+                  <span>전략 유형</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="signal_price"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  className="pb-3 font-semibold"
+                >
+                  <span>진입가</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="opportunity_score"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  align="center"
+                  className="pb-3 font-semibold text-center"
+                >
+                  <span>기회 점수</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="risk_level"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  align="center"
+                  className="pb-3 font-semibold text-center"
+                >
+                  <span>리스크</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="return_5d"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  align="center"
+                  className="pb-3 font-semibold text-center"
+                >
+                  <span>5D 수익률</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="return_10d"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  align="center"
+                  className="pb-3 font-semibold text-center"
+                >
+                  <span>10D 수익률</span>
+                </SortableHeader>
+
+                <SortableHeader<DashboardSignalSortField>
+                  field="return_20d"
+                  currentField={signalSortField}
+                  currentOrder={signalSortOrder}
+                  onSort={handleSignalSort}
+                  align="center"
+                  className="pb-3 font-semibold text-center"
+                >
+                  <span>20D 수익률</span>
+                </SortableHeader>
+
+                <th className="pb-3 font-semibold text-right text-slate-400">텔레그램</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">

@@ -27,6 +27,21 @@ import {
   StrategyType,
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { SortableHeader } from './SortableHeader';
+
+export type WatchlistSortField =
+  | 'ticker'
+  | 'name'
+  | 'strategy'
+  | 'asset_type'
+  | 'price'
+  | 'change'
+  | 'opp'
+  | 'tech'
+  | 'mom'
+  | 'risk'
+  | 'decision'
+  | 'signal';
 
 interface WatchlistViewProps {
   evaluations: FullTickerEvaluation[];
@@ -55,7 +70,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [filterRisk, setFilterRisk] = useState<string>('ALL');
   const [filterDecision, setFilterDecision] = useState<string>('ALL');
   const [signalsOnly, setSignalsOnly] = useState(false);
-  const [sortField, setSortField] = useState<'opp' | 'risk' | 'ticker' | 'change'>('opp');
+  const [sortField, setSortField] = useState<WatchlistSortField>('opp');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Add Ticker Modal State
@@ -63,6 +78,19 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [newTicker, setNewTicker] = useState('');
   const [newName, setNewName] = useState('');
   const [newMemo, setNewMemo] = useState('');
+
+  const handleSort = (field: WatchlistSortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortField(field);
+      setSortOrder(
+        field === 'ticker' || field === 'name' || field === 'strategy' || field === 'asset_type'
+          ? 'asc'
+          : 'desc'
+      );
+    }
+  };
 
   // Filtering
   const filtered = (evaluations || []).filter((item) => {
@@ -102,17 +130,61 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     return true;
   });
 
+  const decisionRank: Record<string, number> = {
+    STRONG_OPPORTUNITY: 4,
+    OPPORTUNITY: 3,
+    WATCH: 2,
+    PASS: 1,
+  };
+
   // Sorting
   const sorted = [...filtered].sort((a, b) => {
     let diff = 0;
-    if (sortField === 'opp') {
-      diff = (a.opportunity?.opportunity_score ?? 0) - (b.opportunity?.opportunity_score ?? 0);
-    } else if (sortField === 'risk') {
-      diff = (a.risk?.risk_score ?? 0) - (b.risk?.risk_score ?? 0);
-    } else if (sortField === 'ticker') {
-      diff = (a.ticker || '').localeCompare(b.ticker || '');
-    } else if (sortField === 'change') {
-      diff = (a.change1d ?? 0) - (b.change1d ?? 0);
+    switch (sortField) {
+      case 'ticker':
+        diff = (a.ticker || '').localeCompare(b.ticker || '');
+        break;
+      case 'name':
+        diff = (a.name || '').localeCompare(b.name || '');
+        break;
+      case 'strategy':
+        diff = (a.classification?.strategy_type || '').localeCompare(b.classification?.strategy_type || '');
+        break;
+      case 'asset_type':
+        diff = (a.classification?.asset_type || '').localeCompare(b.classification?.asset_type || '');
+        break;
+      case 'price':
+        diff = (a.price ?? 0) - (b.price ?? 0);
+        break;
+      case 'change':
+        diff = (a.change1d ?? 0) - (b.change1d ?? 0);
+        break;
+      case 'opp':
+        diff = (a.opportunity?.opportunity_score ?? 0) - (b.opportunity?.opportunity_score ?? 0);
+        break;
+      case 'tech':
+        diff = (a.opportunity?.sub_scores?.technical_score ?? 0) - (b.opportunity?.sub_scores?.technical_score ?? 0);
+        break;
+      case 'mom':
+        diff = (a.opportunity?.sub_scores?.momentum_score ?? 0) - (b.opportunity?.sub_scores?.momentum_score ?? 0);
+        break;
+      case 'risk':
+        diff = (a.risk?.risk_score ?? 0) - (b.risk?.risk_score ?? 0);
+        break;
+      case 'decision': {
+        const rankA = decisionRank[a.decision?.decision || ''] || 0;
+        const rankB = decisionRank[b.decision?.decision || ''] || 0;
+        diff = rankA - rankB;
+        break;
+      }
+      case 'signal': {
+        const sigA = a.decision?.actionable || a.signal_generated ? 1 : 0;
+        const sigB = b.decision?.actionable || b.signal_generated ? 1 : 0;
+        diff = sigA - sigB;
+        break;
+      }
+      default:
+        diff = 0;
     }
     return sortOrder === 'desc' ? -diff : diff;
   });
@@ -319,59 +391,81 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400">
-                <th
-                  onClick={() => {
-                    setSortField('ticker');
-                    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-                  }}
-                  className="py-3.5 px-4 font-semibold cursor-pointer hover:text-slate-200"
+                <SortableHeader<WatchlistSortField>
+                  field="ticker"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-4 font-semibold"
                 >
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-slate-400 font-mono text-[11px]">No.</span>
-                    <span>종목코드 / 이름</span>
-                    <ArrowDownUp className="w-3 h-3 text-slate-500" />
-                  </div>
-                </th>
-                <th className="py-3.5 px-3 font-semibold">자산 정체성 / 전략</th>
-                <th
-                  onClick={() => {
-                    setSortField('change');
-                    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-                  }}
-                  className="py-3.5 px-3 font-semibold cursor-pointer hover:text-slate-200"
+                  <span className="text-slate-400 font-mono text-[11px] mr-1.5">No.</span>
+                  <span>종목코드 / 이름</span>
+                </SortableHeader>
+
+                <SortableHeader<WatchlistSortField>
+                  field="strategy"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3 font-semibold"
                 >
-                  <div className="flex items-center space-x-1">
-                    <span>현재가 (1D)</span>
-                    <ArrowDownUp className="w-3 h-3" />
-                  </div>
-                </th>
-                <th
-                  onClick={() => {
-                    setSortField('opp');
-                    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-                  }}
-                  className="py-3.5 px-4 font-semibold cursor-pointer hover:text-slate-200"
+                  <span>자산 정체성 / 전략</span>
+                </SortableHeader>
+
+                <SortableHeader<WatchlistSortField>
+                  field="change"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3 font-semibold"
                 >
-                  <div className="flex items-center space-x-1">
-                    <span>기회 점수 (4대 서브 스코어)</span>
-                    <ArrowDownUp className="w-3 h-3" />
-                  </div>
-                </th>
-                <th
-                  onClick={() => {
-                    setSortField('risk');
-                    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-                  }}
-                  className="py-3.5 px-3 font-semibold cursor-pointer hover:text-slate-200"
+                  <span>현재가 (1D)</span>
+                </SortableHeader>
+
+                <SortableHeader<WatchlistSortField>
+                  field="opp"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-4 font-semibold"
                 >
-                  <div className="flex items-center space-x-1">
-                    <span>독립 리스크 제약</span>
-                    <ArrowDownUp className="w-3 h-3" />
-                  </div>
+                  <span>기회 점수 (4대 서브 스코어)</span>
+                </SortableHeader>
+
+                <SortableHeader<WatchlistSortField>
+                  field="risk"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3 font-semibold"
+                >
+                  <span>독립 리스크 제약</span>
+                </SortableHeader>
+
+                <SortableHeader<WatchlistSortField>
+                  field="decision"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  className="py-3.5 px-3 font-semibold"
+                >
+                  <span>최종 의사결정 (Decision)</span>
+                </SortableHeader>
+
+                <SortableHeader<WatchlistSortField>
+                  field="signal"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  align="center"
+                  className="py-3.5 px-3 font-semibold text-center"
+                >
+                  <span>시그널</span>
+                </SortableHeader>
+
+                <th className="py-3.5 px-4 font-semibold text-right text-slate-400 whitespace-nowrap">
+                  진단 / 알림
                 </th>
-                <th className="py-3.5 px-3 font-semibold">최종 의사결정 (Decision)</th>
-                <th className="py-3.5 px-3 font-semibold text-center">시그널</th>
-                <th className="py-3.5 px-4 font-semibold text-right">진단 / 알림</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
