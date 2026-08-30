@@ -25,9 +25,9 @@ export class ScanService {
     let tickers = watchlist.map((w) => w.ticker);
     if (tickers.length === 0) {
       tickers = [
-        'VOO', 'SCHD', 'NVDA', 'MSFT', 'AAPL', 'JNJ', 'SMH', 'OKLO',
-        'PLTR', 'QQQ', 'SPY', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD',
-        'V', 'ORCL',
+        'AAPL', 'AMD', 'AMZN', 'GOOGL', 'HOOD', 'JNJ', 'META', 'MSFT',
+        'NVDA', 'OKLO', 'ORCL', 'PLTR', 'QQQ', 'SCHD', 'SMH', 'SPCX',
+        'SPY', 'TSLA', 'V', 'VOO',
       ];
     }
 

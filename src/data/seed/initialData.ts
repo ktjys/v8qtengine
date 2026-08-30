@@ -812,6 +812,92 @@ export const INITIAL_WATCHLIST_RAW: SeedTickerInfo[] = [
       "rsi14": 56.1,
       "priceBelowMa200": true
     }
+  },
+  {
+    "ticker": "HOOD",
+    "name": "Robinhood Markets, Inc.",
+    "price": 32.85,
+    "change1d": 3.45,
+    "memo": "모바일 리테일 금융 플랫폼 및 암호화폐 거래 고성장주",
+    "metadata": {
+      "quoteType": "EQUITY",
+      "longName": "Robinhood Markets, Inc.",
+      "sector": "Financial Services",
+      "industry": "Capital Markets",
+      "beta": 1.68,
+      "marketCap": 28500000000,
+      "revenueGrowth": 0.35,
+      "earningsGrowth": 0.85,
+      "trailingPE": 42.5,
+      "forwardPE": 28.0
+    },
+    "indicators": {
+      "price": 32.85,
+      "ma20": 31.2,
+      "ma50": 28.5,
+      "ma200": 23.4,
+      "rsi14": 62.4,
+      "drawdownFromHigh": -0.085,
+      "macdHistogramPositive": true,
+      "return1M": 0.095,
+      "return3M": 0.285,
+      "return6M": 0.450,
+      "relativeStrengthVsSpy": 1.35,
+      "marketCapBillions": 28.5,
+      "forwardPe": 28.0,
+      "trailingPe": 42.5,
+      "pegRatio": 1.2,
+      "revenueGrowthYoy": 0.35,
+      "earningsGrowthYoy": 0.85,
+      "operatingMargin": 0.22,
+      "freeCashFlowMargin": 0.18
+    },
+    "riskInputs": {
+      "beta": 1.68,
+      "volatility20dAnnualized": 0.38,
+      "maxDrawdown52w": -0.085,
+      "rsi14": 62.4,
+      "priceBelowMa200": false
+    }
+  },
+  {
+    "ticker": "SPCX",
+    "name": "CrossingBridge Pre-Merger SPAC ETF",
+    "price": 21.15,
+    "change1d": 0.05,
+    "memo": "SPAC 상장 전 차익 거래 및 자본 보존형 저변동성 액티브 ETF",
+    "metadata": {
+      "quoteType": "ETF",
+      "longName": "CrossingBridge Pre-Merger SPAC ETF",
+      "beta": 0.05,
+      "marketCap": 150000000,
+      "trailingPE": 18.5,
+      "forwardPE": 17.0
+    },
+    "indicators": {
+      "price": 21.15,
+      "ma20": 21.08,
+      "ma50": 20.95,
+      "ma200": 20.65,
+      "rsi14": 54.2,
+      "drawdownFromHigh": -0.005,
+      "macdHistogramPositive": true,
+      "return1M": 0.008,
+      "return3M": 0.021,
+      "return6M": 0.038,
+      "relativeStrengthVsSpy": 0.95,
+      "marketCapBillions": 0.15,
+      "forwardPe": null,
+      "trailingPe": null,
+      "pegRatio": null
+    },
+    "riskInputs": {
+      "beta": 0.05,
+      "volatility20dAnnualized": 0.035,
+      "maxDrawdown52w": -0.005,
+      "rsi14": 54.2,
+      "priceBelowMa200": false
+    }
   }
 ];
 
@@ -1062,20 +1148,20 @@ export const INITIAL_SCAN_RUNS: ScanRunLog[] = [
     run_id: 'run-20260819-060000',
     started_at: '2026-08-19T06:00:00.000Z',
     finished_at: '2026-08-19T06:00:04.250Z',
-    watchlist_count: 18,
-    evaluated_count: 18,
+    watchlist_count: 20,
+    evaluated_count: 20,
     signal_count: 4,
     failure_count: 0,
     failed_tickers: [],
     status: 'SUCCESS',
-    error_summary: '정규장 마감 18개 전종목 무결성 평가 완료 (4건 진입 기회 포착)',
+    error_summary: '정규장 마감 20개 전종목 무결성 평가 완료 (4건 진입 기회 포착)',
   },
   {
     run_id: 'run-20260818-180000',
     started_at: '2026-08-18T18:00:00.000Z',
     finished_at: '2026-08-18T18:00:05.100Z',
-    watchlist_count: 18,
-    evaluated_count: 17,
+    watchlist_count: 20,
+    evaluated_count: 19,
     signal_count: 3,
     failure_count: 1,
     failed_tickers: [
@@ -1085,7 +1171,7 @@ export const INITIAL_SCAN_RUNS: ScanRunLog[] = [
       },
     ],
     status: 'PARTIAL_SUCCESS',
-    error_summary: '1건 API 실패 발생했으나 17개 종목 평가 지속 완료',
+    error_summary: '1건 API 실패 발생했으나 19개 종목 평가 지속 완료',
   },
 ];
 

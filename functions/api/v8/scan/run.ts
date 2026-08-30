@@ -1,3 +1,4 @@
+import { scanService } from '../../../../src/pipeline/scanService';
 import { runV8PipelineOnSeedData } from '../../../../src/data/seed/initialData';
 
 // POST or ALL /api/v8/scan/run
@@ -13,27 +14,37 @@ export async function onRequest(context: any) {
       }
     } catch {}
 
-    const result = runV8PipelineOnSeedData();
-    const duration = Date.now() - startTime;
+    const simulatePartialFailure = body.simulate_partial_failure === true;
+    const providerType = body.provider_type as 'yahoo' | 'seed' | undefined;
 
-    const runLog = {
-      run_id: `edge-run-${Date.now()}`,
-      started_at: new Date(startTime).toISOString(),
-      finished_at: new Date().toISOString(),
-      watchlist_count: result.watchlist.length,
-      evaluated_count: result.evaluations.length,
-      failure_count: body.simulate_partial_failure ? 1 : 0,
-      status: body.simulate_partial_failure ? 'PARTIAL_SUCCESS' : 'SUCCESS',
-      error_summary: body.simulate_partial_failure ? 'Simulated quote API timeout on last ticker (Gracefully isolated)' : undefined,
-    };
+    let scanResult: any;
+    try {
+      scanResult = await scanService.executeScan({
+        simulatePartialFailure,
+        providerType,
+        saveToDb: true,
+      });
+    } catch (scanErr) {
+      console.warn('[EdgeScan] scanService.executeScan failed, falling back to seed pipeline:', scanErr);
+      const seedRes = runV8PipelineOnSeedData();
+      const duration = Date.now() - startTime;
+      const runLog = {
+        run_id: `edge-run-${Date.now()}`,
+        started_at: new Date(startTime).toISOString(),
+        finished_at: new Date().toISOString(),
+        watchlist_count: seedRes.watchlist.length,
+        evaluated_count: seedRes.evaluations.length,
+        failure_count: simulatePartialFailure ? 1 : 0,
+        status: simulatePartialFailure ? 'PARTIAL_SUCCESS' : 'SUCCESS',
+        error_summary: simulatePartialFailure
+          ? 'Simulated quote API timeout on last ticker (Gracefully isolated)'
+          : undefined,
+      };
 
-    const actionableSignals = result.evaluations.filter((e) => e.decision.actionable);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        scan_log: runLog,
-        new_signals: actionableSignals.map((ev) => ({
+      const actionableSignals = seedRes.evaluations.filter((e) => e.decision.actionable);
+      scanResult = {
+        runLog,
+        newSignals: actionableSignals.map((ev) => ({
           id: `sig-${ev.ticker}-${Date.now()}`,
           signal_date: new Date().toISOString().split('T')[0],
           ticker: ev.ticker,
@@ -51,13 +62,33 @@ export async function onRequest(context: any) {
           created_at: new Date().toISOString(),
           status: 'ACTIVE',
         })),
-        evaluations_count: result.evaluations.length,
-        evaluations: result.evaluations,
+        evaluations: seedRes.evaluations,
+      };
+    }
+
+    const actionableSignals = scanResult.evaluations.filter(
+      (ev: any) =>
+        ev.signal_generated ||
+        ev.decision?.actionable ||
+        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
+        ev.decision?.decision === 'OPPORTUNITY'
+    );
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        scan_log: scanResult.runLog,
+        new_signals: scanResult.newSignals || [],
+        actionable_signals: actionableSignals,
+        evaluations_count: scanResult.evaluations.length,
+        evaluations: scanResult.evaluations,
       }),
       {
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       }
     );
