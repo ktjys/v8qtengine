@@ -18,6 +18,11 @@ export function isSignalEligible(
   provenance: DataProvenance,
   dataQuality?: DataQualityReport | null
 ): boolean {
+  // Hard gate: Block fallback (seed/etc) data regardless of quality score
+  if (provenance.isFallback) {
+    return false;
+  }
+
   // Block if data quality score is below the minimum threshold (70)
   if (dataQuality && dataQuality.data_quality_score < MIN_SIGNAL_DATA_QUALITY) {
     return false;

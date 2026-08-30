@@ -124,6 +124,13 @@ export function buildEvaluationInput(
     riskInputs,
   };
 
+  // Hard gate: if benchmark bars are from seed, mark provenance as fallback
+  // so that isSignalEligible() blocks the signal (P0-2 fix).
+  const hasSeedBenchmark =
+    benchmarkSlice && benchmarkSlice.length > 0
+      ? benchmarkSlice.some((b) => b.source === 'seed')
+      : false;
+
   return {
     ticker,
     evaluationAt,
@@ -133,7 +140,7 @@ export function buildEvaluationInput(
     provenance:
       provenance || {
         source: 'backtest',
-        isFallback: false,
+        isFallback: hasSeedBenchmark,
         marketDataSource: 'database',
         fundamentalDataSource: fundamentals ? 'database' : 'unknown',
         classificationSource: classificationResult.classification_source,
