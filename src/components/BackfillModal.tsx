@@ -133,7 +133,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center space-x-2">
-                <span>과거 1년 데이터 백필 (Backfill Engine)</span>
+                <span>과거 데이터 백필 (Backfill Engine)</span>
               </h2>
               <p className="text-[10px] sm:text-xs text-slate-400 hidden sm:block">
                 과거 OHLCV 일봉 수집 → Point-in-Time 롤링 시뮬레이션 → 20D 실현 수익률 DB 적재
@@ -240,7 +240,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                   <Loader2 className="w-6 h-6 text-cyan-400 animate-spin mx-auto" />
                   <div className="text-xs font-semibold text-cyan-300">{currentStep}</div>
                   <p className="text-[10px] text-slate-500">
-                    야후 파이낸스 1년치 일봉 수집 및 252개 롤링 윈도우 시뮬레이션이 진행 중입니다...
+                    야후 파이낸스 과거 {lookbackRange}치 일봉 수집 및 롤링 윈도우 시뮬레이션이 진행 중입니다...
                   </p>
                 </div>
               )}
@@ -371,7 +371,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4" />
-                    <span>1년 백필 시작</span>
+                    <span>{lookbackRange === '6m' ? '6개월' : lookbackRange === '2y' ? '2년' : lookbackRange === '5y' ? '5년' : '1년'} 백필 시작</span>
                   </>
                 )}
               </button>

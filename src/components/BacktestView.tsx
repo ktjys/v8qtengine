@@ -288,7 +288,7 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
                 className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/30 transition-all active:scale-95"
               >
                 <Database className="w-4 h-4" />
-                <span>과거 1년 데이터 백필</span>
+                <span>데이터 백필 (6M/1Y/2Y)</span>
               </button>
             )}
           </div>

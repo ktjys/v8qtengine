@@ -71,10 +71,17 @@ export class SeedDataProvider implements MarketDataProvider {
       ? new Date(`${endDate}T00:00:00Z`).getTime()
       : new Date(`${getDefaultSeedEndDate()}T00:00:00Z`).getTime();
 
-    // Generate 252 synthetic daily bars with realistic drift and volatility
+    // Generate synthetic daily bars with realistic drift and volatility
+    // 6m: ~126 bars, 1y: ~252 bars, 2y: ~504 bars, 5y: ~1260 bars
+    let targetBarsCount = 252;
+    if (range === '6m') targetBarsCount = 126;
+    else if (range === '2y') targetBarsCount = 504;
+    else if (range === '5y') targetBarsCount = 1260;
+    else if (range === '1y') targetBarsCount = 252;
+
     let current = basePrice * 0.85;
 
-    for (let i = 252; i >= 0; i--) {
+    for (let i = targetBarsCount; i >= 0; i--) {
       const d = new Date(anchorMs - i * 24 * 60 * 60 * 1000);
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       if (isWeekend) continue;

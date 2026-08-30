@@ -273,7 +273,11 @@ export class YahooFinanceProvider implements MarketDataProvider {
           }
         }
         if (bars.length > 0) {
-          const sliced = bars.slice(-252);
+          let limit = 252;
+          if (range === '6m') limit = 126;
+          else if (range === '2y') limit = 504;
+          else if (range === '5y') limit = 1260;
+          const sliced = bars.slice(-limit);
           this.setCache(cacheKey, sliced);
           return sliced;
         }
