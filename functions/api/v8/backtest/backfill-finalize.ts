@@ -14,7 +14,7 @@ export async function onRequest(context: any) {
       body.targetTickers || [],
       body.range || '1y',
       body.totalBarsIngested || 0,
-      body.allSignals || [],
+      body.allSignals,
       body.detailsByTicker || {},
       body.minDate || '2024-01-01',
       body.maxDate || new Date().toISOString().split('T')[0]

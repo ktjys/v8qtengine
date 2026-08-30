@@ -100,7 +100,7 @@ backtestRouter.post('/backfill-finalize', async (req, res) => {
       targetTickers || [],
       range || '1y',
       totalBarsIngested || 0,
-      allSignals || [],
+      allSignals,
       detailsByTicker || {},
       minDate || '',
       maxDate || ''

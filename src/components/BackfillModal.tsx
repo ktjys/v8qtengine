@@ -38,6 +38,13 @@ interface BackfillResult {
       signalsCount: number;
       winRate20d: number;
       avgReturn20d: number;
+      win5d?: number;
+      total5d?: number;
+      win10d?: number;
+      total10d?: number;
+      win20d?: number;
+      completed20d?: number;
+      sumReturn20d?: number;
     }
   >;
 }
@@ -177,7 +184,6 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
       setProgress({ current: 0, total: totalCount, percent: 0 });
 
       let totalBarsIngested = benchmarkBarsCount;
-      const allSignals: any[] = [];
       const detailsByTicker: BackfillResult['detailsByTicker'] = {};
       let minDate = '9999-99-99';
       let maxDate = '0000-00-00';
@@ -207,15 +213,19 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
           const tData = tickerJson.data;
 
           totalBarsIngested += tData.barsCount;
-          if (tData.signals && tData.signals.length > 0) {
-            allSignals.push(...tData.signals);
-          }
 
           detailsByTicker[ticker] = {
             barsCount: tData.barsCount,
             signalsCount: tData.signalsCount,
             winRate20d: tData.winRate20d,
             avgReturn20d: tData.avgReturn20d,
+            win5d: tData.win5d,
+            total5d: tData.total5d,
+            win10d: tData.win10d,
+            total10d: tData.total10d,
+            win20d: tData.win20d,
+            completed20d: tData.completed20d,
+            sumReturn20d: tData.sumReturn20d,
           };
 
           if (tData.minDate && tData.minDate < minDate) minDate = tData.minDate;
@@ -245,7 +255,6 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
           targetTickers,
           range: lookbackRange,
           totalBarsIngested,
-          allSignals,
           detailsByTicker,
           minDate,
           maxDate,

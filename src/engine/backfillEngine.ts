@@ -41,6 +41,13 @@ export interface BackfillResult {
       signalsCount: number;
       winRate20d: number;
       avgReturn20d: number;
+      win5d?: number;
+      total5d?: number;
+      win10d?: number;
+      total10d?: number;
+      win20d?: number;
+      completed20d?: number;
+      sumReturn20d?: number;
     }
   >;
 }
@@ -51,7 +58,14 @@ export interface TickerBackfillResult {
   signalsCount: number;
   winRate20d: number;
   avgReturn20d: number;
-  signals: SignalSnapshot[];
+  win5d?: number;
+  total5d?: number;
+  win10d?: number;
+  total10d?: number;
+  win20d?: number;
+  completed20d?: number;
+  sumReturn20d?: number;
+  signals?: SignalSnapshot[];
   minDate: string;
   maxDate: string;
   source: 'yahoo' | 'stooq' | 'seed';
@@ -230,12 +244,14 @@ export async function backfillSingleTicker(
   }
 
   const completedTickerSignals = tickerSignals.filter((s) => s.return_20d !== null);
-  const wins = completedTickerSignals.filter((s) => (s.return_20d ?? 0) > 0).length;
-  const avgRet =
-    completedTickerSignals.length > 0
-      ? completedTickerSignals.reduce((sum, s) => sum + (s.return_20d ?? 0), 0) /
-        completedTickerSignals.length
-      : 0;
+  const win20d = completedTickerSignals.filter((s) => (s.return_20d ?? 0) > 0).length;
+  const sumReturn20d = completedTickerSignals.reduce((sum, s) => sum + (s.return_20d ?? 0), 0);
+  const avgRet = completedTickerSignals.length > 0 ? sumReturn20d / completedTickerSignals.length : 0;
+
+  const win5d = tickerSignals.filter((s) => s.return_5d !== null && (s.return_5d ?? 0) > 0).length;
+  const total5d = tickerSignals.filter((s) => s.return_5d !== null).length;
+  const win10d = tickerSignals.filter((s) => s.return_10d !== null && (s.return_10d ?? 0) > 0).length;
+  const total10d = tickerSignals.filter((s) => s.return_10d !== null).length;
 
   return {
     ticker: clean,
@@ -243,9 +259,16 @@ export async function backfillSingleTicker(
     signalsCount: tickerSignals.length,
     winRate20d:
       completedTickerSignals.length > 0
-        ? Math.round((wins / completedTickerSignals.length) * 1000) / 10
+        ? Math.round((win20d / completedTickerSignals.length) * 1000) / 10
         : 0,
     avgReturn20d: Math.round(avgRet * 10) / 10,
+    win5d,
+    total5d,
+    win10d,
+    total10d,
+    win20d,
+    completed20d: completedTickerSignals.length,
+    sumReturn20d,
     signals: tickerSignals,
     minDate: minDate !== '9999-99-99' ? minDate : '',
     maxDate: maxDate !== '0000-00-00' ? maxDate : '',
@@ -257,22 +280,49 @@ export async function finalizeBackfill(
   targetTickers: string[],
   range: string,
   totalBarsIngested: number,
-  allSignals: SignalSnapshot[],
+  allSignals: SignalSnapshot[] | undefined,
   detailsByTicker: BackfillResult['detailsByTicker'],
   minDate: string,
   maxDate: string
 ): Promise<BackfillResult> {
-  const completedSignals = allSignals.filter((s) => s.return_20d !== null);
-  const nCompleted = completedSignals.length || 1;
+  let totalSignalsGenerated = 0;
+  let totalCompletedSignals = 0;
+  let win5dCount = 0;
+  let total5dCount = 0;
+  let win10dCount = 0;
+  let total10dCount = 0;
+  let win20dCount = 0;
+  let sumReturn20dTotal = 0;
 
-  const win5d = allSignals.filter((s) => s.return_5d !== null && (s.return_5d ?? 0) > 0).length;
-  const total5d = allSignals.filter((s) => s.return_5d !== null).length || 1;
+  if (allSignals && allSignals.length > 0) {
+    totalSignalsGenerated = allSignals.length;
+    const completed = allSignals.filter((s) => s.return_20d !== null);
+    totalCompletedSignals = completed.length;
+    win5dCount = allSignals.filter((s) => s.return_5d !== null && (s.return_5d ?? 0) > 0).length;
+    total5dCount = allSignals.filter((s) => s.return_5d !== null).length;
+    win10dCount = allSignals.filter((s) => s.return_10d !== null && (s.return_10d ?? 0) > 0).length;
+    total10dCount = allSignals.filter((s) => s.return_10d !== null).length;
+    win20dCount = completed.filter((s) => (s.return_20d ?? 0) > 0).length;
+    sumReturn20dTotal = completed.reduce((sum, s) => sum + (s.return_20d ?? 0), 0);
+  } else {
+    // Calculate lightweight aggregation from detailsByTicker
+    for (const item of Object.values(detailsByTicker || {})) {
+      totalSignalsGenerated += item.signalsCount || 0;
+      const completed = item.completed20d ?? item.signalsCount ?? 0;
+      totalCompletedSignals += completed;
+      win5dCount += item.win5d ?? 0;
+      total5dCount += item.total5d ?? item.signalsCount ?? 0;
+      win10dCount += item.win10d ?? 0;
+      total10dCount += item.total10d ?? item.signalsCount ?? 0;
+      win20dCount += item.win20d ?? (completed > 0 ? Math.round((item.winRate20d || 0) * completed / 100) : 0);
+      sumReturn20dTotal += item.sumReturn20d ?? ((item.avgReturn20d || 0) * completed);
+    }
+  }
 
-  const win10d = allSignals.filter((s) => s.return_10d !== null && (s.return_10d ?? 0) > 0).length;
-  const total10d = allSignals.filter((s) => s.return_10d !== null).length || 1;
-
-  const win20d = completedSignals.filter((s) => (s.return_20d ?? 0) > 0).length;
-  const avg20d = completedSignals.reduce((sum, s) => sum + (s.return_20d ?? 0), 0) / nCompleted;
+  const nCompleted = totalCompletedSignals || 1;
+  const n5d = total5dCount || 1;
+  const n10d = total10dCount || 1;
+  const avg20d = sumReturn20dTotal / nCompleted;
 
   const runLog: ScanRunLog = {
     run_id: `run-backfill-${Date.now()}`,
@@ -281,10 +331,10 @@ export async function finalizeBackfill(
     finished_at: new Date().toISOString(),
     watchlist_count: targetTickers.length,
     evaluated_count: targetTickers.length,
-    signal_count: allSignals.length,
+    signal_count: totalSignalsGenerated,
     failure_count: 0,
     failed_tickers: [],
-    error_summary: `과거 ${range} 일별 백필 및 사후 수익률 인제스천 완료 (${allSignals.length}개 시그널 생성, 20D 승률 ${(win20d / nCompleted * 100).toFixed(1)}%)`,
+    error_summary: `과거 ${range} 일별 백필 및 사후 수익률 인제스천 완료 (${totalSignalsGenerated}개 시그널 생성, 20D 승률 ${(win20dCount / nCompleted * 100).toFixed(1)}%)`,
   };
 
   await scanRunRepository.save(runLog);
@@ -293,11 +343,11 @@ export async function finalizeBackfill(
     success: true,
     totalTickers: targetTickers.length,
     totalBarsIngested,
-    totalSignalsGenerated: allSignals.length,
-    completedSignals: completedSignals.length,
-    winRate5d: Math.round((win5d / total5d) * 1000) / 10,
-    winRate10d: Math.round((win10d / total10d) * 1000) / 10,
-    winRate20d: Math.round((win20d / nCompleted) * 1000) / 10,
+    totalSignalsGenerated,
+    completedSignals: totalCompletedSignals,
+    winRate5d: Math.round((win5dCount / n5d) * 1000) / 10,
+    winRate10d: Math.round((win10dCount / n10d) * 1000) / 10,
+    winRate20d: Math.round((win20dCount / nCompleted) * 1000) / 10,
     avgReturn20d: Math.round(avg20d * 10) / 10,
     dateRange: {
       start: minDate && minDate !== '9999-99-99' ? minDate : '2024-01-01',
@@ -324,12 +374,19 @@ export async function runHistoricalBackfill(
     try {
       const res = await backfillSingleTicker(ticker, options);
       totalBarsIngested += res.barsCount;
-      allSignals.push(...res.signals);
+      if (res.signals) allSignals.push(...res.signals);
       detailsByTicker[ticker] = {
         barsCount: res.barsCount,
         signalsCount: res.signalsCount,
         winRate20d: res.winRate20d,
         avgReturn20d: res.avgReturn20d,
+        win5d: res.win5d,
+        total5d: res.total5d,
+        win10d: res.win10d,
+        total10d: res.total10d,
+        win20d: res.win20d,
+        completed20d: res.completed20d,
+        sumReturn20d: res.sumReturn20d,
       };
       if (res.minDate && res.minDate < minDate) minDate = res.minDate;
       if (res.maxDate && res.maxDate > maxDate) maxDate = res.maxDate;

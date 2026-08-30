@@ -46,7 +46,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   app.use(createRateLimiter(60_000, 120));
   app.use('/api/v8/system', createRateLimiter(60_000, 30));
   app.use('/api/v8/scan', createRateLimiter(60_000, 10));
