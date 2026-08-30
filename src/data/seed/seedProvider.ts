@@ -58,11 +58,8 @@ export class SeedDataProvider implements MarketDataProvider {
     const clean = ticker.toUpperCase();
     const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === clean);
     const basePrice = seed ? seed.price : 100;
-    const bars: OHLCVBar[] = [];
+    const change1d = seed?.change1d ?? 0;
 
-    // Generate synthetic daily bars with realistic drift and volatility
-    // Generate a long master series (5y: ~1260 bars) deterministically seeded by ticker + interval.
-    // This guarantees that 6m, 1y, 2y, and 5y all share the exact same price history and anchor.
     const maxMasterBars = 1260;
     let targetBarsCount = 252;
     if (range === '1m') targetBarsCount = 22;
@@ -72,53 +69,76 @@ export class SeedDataProvider implements MarketDataProvider {
     else if (range === '2y') targetBarsCount = 504;
     else if (range === '5y' || range === 'all') targetBarsCount = 1260;
 
-    // Use ticker + interval as seed so 6m, 1y, 2y, all ranges have identical underlying trajectory
+    // Use ticker + interval as seed so all ranges have identical underlying trajectory
     const rng = mulberry32(hashString(`${clean}:master_history:${interval}`));
 
-    // 날짜 anchor를 고정한다. endDate(예: backtest의 요청 종료일)가 주어지면
-    // 이를 기준으로 삼고, 없으면 SEED_END_DATE 상수를 사용한다. new Date()를
-    // 쓰지 않으므로 며칠 후 재실행해도 동일한 날짜의 Seed 시계열이 재현된다.
     const anchorMs = endDate
       ? new Date(`${endDate}T00:00:00Z`).getTime()
       : new Date(`${getDefaultSeedEndDate()}T00:00:00Z`).getTime();
 
-    let current = basePrice * 0.70;
+    // 1. Generate valid trading day dates (excluding weekends) going backward from anchorMs
+    const tradingDates: string[] = [];
+    let dayOffset = 0;
+    while (tradingDates.length < maxMasterBars) {
+      const d = new Date(anchorMs - dayOffset * 24 * 60 * 60 * 1000);
+      const dayOfWeek = d.getUTCDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        tradingDates.push(d.toISOString().split('T')[0]);
+      }
+      dayOffset++;
+    }
+    // Reverse so tradingDates[0] is oldest, tradingDates[maxMasterBars-1] is latest (today)
+    tradingDates.reverse();
 
-    for (let i = maxMasterBars; i >= 0; i--) {
-      const d = new Date(anchorMs - i * 24 * 60 * 60 * 1000);
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      if (isWeekend) continue;
+    // 2. Generate prices backward from basePrice to guarantee smooth continuity and 0% discontinuity
+    const closes = new Array<number>(maxMasterBars);
+    const latestIdx = maxMasterBars - 1;
+    closes[latestIdx] = basePrice;
 
-      const randomShock = (rng() - 0.485) * 0.022;
-      current = current * (1 + randomShock);
-      const open = current * (1 + (rng() - 0.5) * 0.005);
-      const high = Math.max(open, current) * (1 + rng() * 0.008);
-      const low = Math.min(open, current) * (1 - rng() * 0.008);
-      const close = current;
+    // Set yesterday's close according to known 1d change
+    if (latestIdx >= 1) {
+      const denom = 1 + (change1d / 100);
+      closes[latestIdx - 1] = denom > 0 ? basePrice / denom : basePrice * 0.99;
+    }
+
+    // Step backward from latestIdx - 2 down to 0
+    for (let i = latestIdx - 2; i >= 0; i--) {
+      const randomShock = (rng() - 0.49) * 0.022;
+      const prevClose = closes[i + 1] / (1 + randomShock);
+      closes[i] = Math.max(0.5, prevClose);
+    }
+
+    // 3. Build OHLCV bars
+    const masterBars: OHLCVBar[] = [];
+    for (let i = 0; i < maxMasterBars; i++) {
+      const date = tradingDates[i];
+      const close = Math.round(closes[i] * 100) / 100;
+      const prevC = i > 0 ? closes[i - 1] : close;
+      
+      const openRaw = i === latestIdx && prevC > 0 
+        ? prevC * (1 + (rng() - 0.5) * 0.004)
+        : close * (1 + (rng() - 0.5) * 0.008);
+      const open = Math.round(openRaw * 100) / 100;
+
+      const upper = Math.max(open, close);
+      const lower = Math.min(open, close);
+      const high = Math.round(upper * (1 + Math.abs(rng()) * 0.01) * 100) / 100;
+      const low = Math.round(lower * (1 - Math.abs(rng()) * 0.01) * 100) / 100;
       const volume = Math.floor(1000000 + rng() * 5000000);
 
-      bars.push({
-        date: d.toISOString().split('T')[0],
-        open: Math.round(open * 100) / 100,
-        high: Math.round(high * 100) / 100,
-        low: Math.round(low * 100) / 100,
-        close: Math.round(close * 100) / 100,
-        adjClose: Math.round(close * 100) / 100,
+      masterBars.push({
+        date,
+        open,
+        high: Math.max(high, open, close),
+        low: Math.min(low, open, close),
+        close,
+        adjClose: close,
         volume,
+        source: 'seed',
       });
     }
 
-    if (bars.length > 0) {
-      // Anchor the latest bar to the seeded price while preserving OHLC
-      // invariants (high >= max(open, close), low <= min(open, close)).
-      const last = bars[bars.length - 1];
-      last.close = basePrice;
-      last.adjClose = basePrice;
-      last.high = Math.max(last.high, last.open, last.close);
-      last.low = Math.min(last.low, last.open, last.close);
-    }
-
-    return bars.slice(-targetBarsCount);
+    return masterBars.slice(-targetBarsCount);
   }
 
   async getFundamentals(ticker: string): Promise<FundamentalData> {

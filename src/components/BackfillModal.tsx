@@ -110,8 +110,8 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
     setCurrentStep('벤치마크(SPY) 일봉 수집 및 대상 종목 파싱 중...');
 
     try {
-      // 1. Step 1: Initialize Session & SPY Benchmark
-      const initRes = await fetch('/api/v8/backtest/backfill-init', {
+      // 1. Step 1: Try Chunked API Initialization (/api/v8/backtest/backfill-init)
+      let initRes = await fetch('/api/v8/backtest/backfill-init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,8 +120,43 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
         }),
       });
 
+      // Fallback to monolithic backfill if chunked endpoint is 404 (e.g. legacy/static cloudflare deployment)
+      if (initRes.status === 404) {
+        appendLog('ℹ️ [엔드포인트 전환] 분할 API 대신 통합 배치 백필 파이프라인(/api/v8/backtest/backfill)으로 실행합니다...', 'warn');
+        setCurrentStep('전체 종목 통합 백필 및 롤링 시뮬레이션 일괄 실행 중...');
+        
+        const fallbackRes = await fetch('/api/v8/backtest/backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lookbackRange,
+            opportunityThreshold: threshold,
+            replaceExisting,
+          }),
+        });
+
+        if (!fallbackRes.ok) {
+          const errData = await fallbackRes.json().catch(() => ({}));
+          throw new Error(errData.error || `통합 백필 실행 실패 (${fallbackRes.status})`);
+        }
+
+        const fallbackJson = await fallbackRes.json();
+        const finalResult: BackfillResult = fallbackJson.result;
+
+        appendLog(
+          `🎉 [백필 완료] 총 ${finalResult.totalBarsIngested.toLocaleString()}개 일봉, ${finalResult.totalSignalsGenerated}개 시그널 적재 완료! (20D 승률: ${finalResult.winRate20d}%)`,
+          'accent'
+        );
+
+        setResult(finalResult);
+        onShowToast(`과거 ${lookbackRange} 백필 완료: ${finalResult.totalSignalsGenerated}개 시그널 적재`);
+        await onBackfillSuccess();
+        return;
+      }
+
       if (!initRes.ok) {
-        throw new Error(`초기화 실패 (${initRes.status})`);
+        const errJson = await initRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `초기화 실패 (${initRes.status})`);
       }
 
       const initJson = await initRes.json();
