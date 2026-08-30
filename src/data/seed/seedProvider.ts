@@ -60,9 +60,20 @@ export class SeedDataProvider implements MarketDataProvider {
     const basePrice = seed ? seed.price : 100;
     const bars: OHLCVBar[] = [];
 
-    // Seed the PRNG deterministically from the ticker + range so repeated calls
-    // yield an identical synthetic series (backtest reproducibility).
-    const rng = mulberry32(hashString(`${clean}:${range}:${interval}`));
+    // Generate synthetic daily bars with realistic drift and volatility
+    // Generate a long master series (5y: ~1260 bars) deterministically seeded by ticker + interval.
+    // This guarantees that 6m, 1y, 2y, and 5y all share the exact same price history and anchor.
+    const maxMasterBars = 1260;
+    let targetBarsCount = 252;
+    if (range === '1m') targetBarsCount = 22;
+    else if (range === '3m') targetBarsCount = 63;
+    else if (range === '6m') targetBarsCount = 126;
+    else if (range === '1y') targetBarsCount = 252;
+    else if (range === '2y') targetBarsCount = 504;
+    else if (range === '5y' || range === 'all') targetBarsCount = 1260;
+
+    // Use ticker + interval as seed so 6m, 1y, 2y, all ranges have identical underlying trajectory
+    const rng = mulberry32(hashString(`${clean}:master_history:${interval}`));
 
     // 날짜 anchor를 고정한다. endDate(예: backtest의 요청 종료일)가 주어지면
     // 이를 기준으로 삼고, 없으면 SEED_END_DATE 상수를 사용한다. new Date()를
@@ -71,22 +82,14 @@ export class SeedDataProvider implements MarketDataProvider {
       ? new Date(`${endDate}T00:00:00Z`).getTime()
       : new Date(`${getDefaultSeedEndDate()}T00:00:00Z`).getTime();
 
-    // Generate synthetic daily bars with realistic drift and volatility
-    // 6m: ~126 bars, 1y: ~252 bars, 2y: ~504 bars, 5y: ~1260 bars
-    let targetBarsCount = 252;
-    if (range === '6m') targetBarsCount = 126;
-    else if (range === '2y') targetBarsCount = 504;
-    else if (range === '5y') targetBarsCount = 1260;
-    else if (range === '1y') targetBarsCount = 252;
+    let current = basePrice * 0.70;
 
-    let current = basePrice * 0.85;
-
-    for (let i = targetBarsCount; i >= 0; i--) {
+    for (let i = maxMasterBars; i >= 0; i--) {
       const d = new Date(anchorMs - i * 24 * 60 * 60 * 1000);
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       if (isWeekend) continue;
 
-      const randomShock = (rng() - 0.48) * 0.025;
+      const randomShock = (rng() - 0.485) * 0.022;
       current = current * (1 + randomShock);
       const open = current * (1 + (rng() - 0.5) * 0.005);
       const high = Math.max(open, current) * (1 + rng() * 0.008);
@@ -115,7 +118,7 @@ export class SeedDataProvider implements MarketDataProvider {
       last.low = Math.min(last.low, last.open, last.close);
     }
 
-    return bars;
+    return bars.slice(-targetBarsCount);
   }
 
   async getFundamentals(ticker: string): Promise<FundamentalData> {

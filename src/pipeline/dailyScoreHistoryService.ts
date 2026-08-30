@@ -81,25 +81,33 @@ export class DailyScoreHistoryService {
 
     const isEtfHint = dbAsset?.asset_type === 'etf' || currentOverride?.asset_type === 'etf';
 
-    // 3. Determine start date based on range
-    const now = new Date();
+    // 3. Determine start date based on the latest available bar date (anchor)
+    const latestBarDateStr = bars[bars.length - 1].date;
+    const latestDate = new Date(`${latestBarDateStr}T00:00:00Z`);
+
     let filterStartDate = '1970-01-01';
     if (range === '1m') {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - 1);
+      const d = new Date(latestDate);
+      d.setUTCMonth(d.getUTCMonth() - 1);
       filterStartDate = d.toISOString().split('T')[0];
     } else if (range === '3m') {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - 3);
+      const d = new Date(latestDate);
+      d.setUTCMonth(d.getUTCMonth() - 3);
       filterStartDate = d.toISOString().split('T')[0];
     } else if (range === '6m') {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - 6);
+      const d = new Date(latestDate);
+      d.setUTCMonth(d.getUTCMonth() - 6);
       filterStartDate = d.toISOString().split('T')[0];
     } else if (range === '1y') {
-      const d = new Date(now);
-      d.setFullYear(d.getFullYear() - 1);
+      const d = new Date(latestDate);
+      d.setUTCFullYear(d.getUTCFullYear() - 1);
       filterStartDate = d.toISOString().split('T')[0];
+    } else if (range === '2y') {
+      const d = new Date(latestDate);
+      d.setUTCFullYear(d.getUTCFullYear() - 2);
+      filterStartDate = d.toISOString().split('T')[0];
+    } else if (range === 'all') {
+      filterStartDate = '1970-01-01';
     }
 
     // 4. Calculate day by day Point-in-Time metrics

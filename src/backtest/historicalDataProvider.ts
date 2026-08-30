@@ -23,9 +23,22 @@ export class HistoricalDataProvider {
     // 현재 조회의 폴백 상태를 초기화
     this.lastUsedSeed = false;
 
-    // 1. Try DB first
-    const dbBars = await marketDataRepository.getBars(clean, 600);
-    if (dbBars && dbBars.length >= 200) {
+    // Determine minimum bars needed for requested range
+    let minBarsNeeded = 50;
+    let dbFetchLimit = 600;
+    if (range === '6m') minBarsNeeded = 100;
+    else if (range === '1y') minBarsNeeded = 200;
+    else if (range === '2y') {
+      minBarsNeeded = 400;
+      dbFetchLimit = 700;
+    } else if (range === '5y' || range === 'all') {
+      minBarsNeeded = 900;
+      dbFetchLimit = 1500;
+    }
+
+    // 1. Try DB first (only if DB has enough bars for the requested range)
+    const dbBars = await marketDataRepository.getBars(clean, dbFetchLimit);
+    if (dbBars && dbBars.length >= minBarsNeeded) {
       // Seed 데이터가 DB에 영속화되어 있으면 이후 조회에서도 seed로 인식한다
       // (provenance 보존: getBars가 각 bar의 원본 source를 유지하므로 모두 seed인지 판별 가능)
       const hasSeedBar = dbBars.some((b) => b.source === 'seed');

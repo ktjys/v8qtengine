@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -13,6 +13,8 @@ import {
   TrendingUp,
   X,
   Zap,
+  Terminal,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface BackfillResult {
@@ -47,74 +49,192 @@ interface BackfillModalProps {
   onShowToast: (msg: string) => void;
 }
 
+interface LogEntry {
+  id: string;
+  time: string;
+  type: 'info' | 'success' | 'warn' | 'error' | 'accent';
+  message: string;
+}
+
 export const BackfillModal: React.FC<BackfillModalProps> = ({
   isOpen,
   onClose,
   onBackfillSuccess,
   onShowToast,
 }) => {
-  const [lookbackRange, setLookbackRange] = useState<'6m' | '1y' | '2y'>('1y');
+  const [lookbackRange, setLookbackRange] = useState<'6m' | '1y' | '2y'>('2y');
   const [threshold, setThreshold] = useState<number>(70);
   const [replaceExisting, setReplaceExisting] = useState<boolean>(true);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [result, setResult] = useState<BackfillResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<string>('');
+  const [progress, setProgress] = useState<{ current: number; total: number; percent: number }>({
+    current: 0,
+    total: 0,
+    percent: 0,
+  });
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const terminalBottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (terminalBottomRef.current) {
+      terminalBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs]);
 
   if (!isOpen) return null;
+
+  const appendLog = (message: string, type: LogEntry['type'] = 'info') => {
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0];
+    setLogs((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        time: timeStr,
+        type,
+        message,
+      },
+    ]);
+  };
 
   const handleRunBackfill = async () => {
     setIsRunning(true);
     setError(null);
     setResult(null);
-    setCurrentStep('벤치마크(SPY) 및 워치리스트 1년치 일봉 데이터 수집 중...');
+    setLogs([]);
+    setProgress({ current: 0, total: 0, percent: 0 });
 
-    const stepTimer1 = setTimeout(() => {
-      setCurrentStep('Point-in-Time 롤링 시그널 시뮬레이션 및 5D/10D/20D 사후 수익률 계산 중...');
-    }, 800);
-
-    const stepTimer2 = setTimeout(() => {
-      setCurrentStep('데이터베이스 및 시그널 원장 일괄 인제스천 중...');
-    }, 1600);
+    appendLog(`🚀 [시작] 과거 ${lookbackRange === '6m' ? '6개월' : lookbackRange === '2y' ? '2년' : '1년'} 시계열 백필 파이프라인 초기화...`, 'accent');
+    setCurrentStep('벤치마크(SPY) 일봉 수집 및 대상 종목 파싱 중...');
 
     try {
-      const res = await fetch('/api/v8/backtest/backfill', {
+      // 1. Step 1: Initialize Session & SPY Benchmark
+      const initRes = await fetch('/api/v8/backtest/backfill-init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lookbackRange,
-          opportunityThreshold: threshold,
           replaceExisting,
         }),
       });
 
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
-
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => '');
-        throw new Error(`서버 오류 (${res.status}): ${errorText || '백필 요청에 실패했습니다.'}`);
+      if (!initRes.ok) {
+        throw new Error(`초기화 실패 (${initRes.status})`);
       }
 
-      const text = await res.text();
-      if (!text || !text.trim().startsWith('{')) {
-        throw new Error('서버로부터 유효하지 않은 응답을 받았습니다.');
+      const initJson = await initRes.json();
+      const initData = initJson.data;
+      const targetTickers: string[] = initData.targetTickers || [];
+      const benchmarkBarsCount = initData.benchmarkBarsCount || 0;
+
+      appendLog(
+        `📊 [SPY 벤치마크] ${benchmarkBarsCount}개 일봉 DB 적재 완료 (출처: ${initData.benchmarkSource})`,
+        'info'
+      );
+      appendLog(
+        `📋 대상 워치리스트: 총 ${targetTickers.length}개 종목 (${targetTickers.join(', ')})`,
+        'info'
+      );
+
+      const totalCount = targetTickers.length;
+      setProgress({ current: 0, total: totalCount, percent: 0 });
+
+      let totalBarsIngested = benchmarkBarsCount;
+      const allSignals: any[] = [];
+      const detailsByTicker: BackfillResult['detailsByTicker'] = {};
+      let minDate = '9999-99-99';
+      let maxDate = '0000-00-00';
+
+      // 2. Step 2: Sequential Ticker Chunking (Cloudflare Function Timeout-Proof)
+      for (let i = 0; i < targetTickers.length; i++) {
+        const ticker = targetTickers[i];
+        const stepNum = i + 1;
+        setCurrentStep(`[${stepNum}/${totalCount}] ${ticker} 과거 일봉 수집 및 롤링 윈도우 시뮬레이션 중...`);
+
+        try {
+          const tickerRes = await fetch('/api/v8/backtest/backfill-ticker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ticker,
+              lookbackRange,
+              opportunityThreshold: threshold,
+            }),
+          });
+
+          if (!tickerRes.ok) {
+            throw new Error(`HTTP ${tickerRes.status}`);
+          }
+
+          const tickerJson = await tickerRes.json();
+          const tData = tickerJson.data;
+
+          totalBarsIngested += tData.barsCount;
+          if (tData.signals && tData.signals.length > 0) {
+            allSignals.push(...tData.signals);
+          }
+
+          detailsByTicker[ticker] = {
+            barsCount: tData.barsCount,
+            signalsCount: tData.signalsCount,
+            winRate20d: tData.winRate20d,
+            avgReturn20d: tData.avgReturn20d,
+          };
+
+          if (tData.minDate && tData.minDate < minDate) minDate = tData.minDate;
+          if (tData.maxDate && tData.maxDate > maxDate) maxDate = tData.maxDate;
+
+          const sign = tData.avgReturn20d >= 0 ? '+' : '';
+          appendLog(
+            `[${stepNum}/${totalCount}] ${ticker}: 일봉 ${tData.barsCount}개 → 시그널 ${tData.signalsCount}개 생성 (20D 승률 ${tData.winRate20d}%, 평균 ${sign}${tData.avgReturn20d}%)`,
+            'success'
+          );
+        } catch (symErr: any) {
+          appendLog(`⚠️ [${stepNum}/${totalCount}] ${ticker} 처리 오류 (건너뜀): ${symErr.message}`, 'warn');
+        }
+
+        const pct = Math.round(((i + 1) / totalCount) * 100);
+        setProgress({ current: i + 1, total: totalCount, percent: pct });
       }
 
-      const data = JSON.parse(text);
-      if (!data.success || !data.result) {
-        throw new Error(data.message || '백필 실행 중 유효한 결과를 생성하지 못했습니다.');
+      // 3. Step 3: Finalize Backfill Summary & Record Scan Log
+      setCurrentStep('백필 성과 통계 집계 및 DB 스캔 로그 작성 중...');
+      appendLog('📦 전체 백필 결과 집계 및 signal_outcomes 동기화 중...', 'info');
+
+      const finalizeRes = await fetch('/api/v8/backtest/backfill-finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetTickers,
+          range: lookbackRange,
+          totalBarsIngested,
+          allSignals,
+          detailsByTicker,
+          minDate,
+          maxDate,
+        }),
+      });
+
+      if (!finalizeRes.ok) {
+        throw new Error(`집계 저장 실패 (${finalizeRes.status})`);
       }
 
-      const finalResult: BackfillResult = data.result;
+      const finalizeJson = await finalizeRes.json();
+      const finalResult: BackfillResult = finalizeJson.result;
+
+      appendLog(
+        `🎉 [백필 완료] 총 ${finalResult.totalBarsIngested.toLocaleString()}개 일봉, ${finalResult.totalSignalsGenerated}개 시그널 적재 완료! (20D 승률: ${finalResult.winRate20d}%)`,
+        'accent'
+      );
 
       setResult(finalResult);
-      onShowToast(`과거 ${lookbackRange} 백필 완료: ${finalResult.totalSignalsGenerated}개 시그널 생성`);
+      onShowToast(`과거 ${lookbackRange} 백필 완료: ${finalResult.totalSignalsGenerated}개 시그널 적재`);
       await onBackfillSuccess();
     } catch (err: any) {
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
       console.error('Backfill error:', err);
+      appendLog(`🚨 백필 중단 오류: ${err.message || '알 수 없는 에러'}`, 'error');
       setError(err?.message || '백필 실행 중 예기치 않은 오류가 발생했습니다.');
     } finally {
       setIsRunning(false);
@@ -124,7 +244,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2.5 sm:p-4 animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <div className="flex items-center space-x-2.5 sm:space-x-3">
@@ -133,7 +253,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center space-x-2">
-                <span>과거 데이터 백필 (Backfill Engine)</span>
+                <span>과거 데이터 백필 엔진 (Backfill Engine)</span>
               </h2>
               <p className="text-[10px] sm:text-xs text-slate-400 hidden sm:block">
                 과거 OHLCV 일봉 수집 → Point-in-Time 롤링 시뮬레이션 → 20D 실현 수익률 DB 적재
@@ -141,31 +261,36 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
             </div>
           </div>
           <button
-            id="close-backfill-modal-btn"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all shrink-0 ml-2"
+            disabled={isRunning}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all disabled:opacity-30"
           >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
+        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1">
           {!result && (
             <>
               {/* Info Callout */}
-              <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 text-xs text-cyan-200/90 space-y-2">
-                <div className="flex items-center space-x-2 font-bold text-cyan-300">
-                  <Zap className="w-4 h-4 text-cyan-400" />
-                  <span>Lookahead Bias & Point-in-Time 무결성 보장</span>
+              <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 text-xs text-cyan-200/90 space-y-2">
+                <div className="flex items-center justify-between font-bold text-cyan-300">
+                  <span className="flex items-center space-x-1.5">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    <span>클라우드플레어 펑션 타임아웃 방지 &amp; 스트리밍 분할 실행</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-cyan-400/80 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">
+                    Chunked Step-by-Step
+                  </span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-slate-300">
-                  각 과거 시점(T)의 일봉 및 지표만 참조하여 시그널을 생성하며, T+5일, T+10일, T+20일 후의 실현 가격을 추적하여 승률 및 수익률을 <code className="text-cyan-300">signal_outcomes</code> 테이블에 저장합니다.
+                  각 종목별 1~2초 단위로 분할 요청을 수행하여 Cloudflare 30초 타임아웃을 완전 방지하며, 과거 시점(T)의 일봉만 참조하는 <strong>Point-in-Time 무결성</strong>과 5D/10D/20D 실현 수익률을 <code className="text-cyan-300">signals</code> 및 <code className="text-cyan-300">signal_outcomes</code> DB에 즉시 적재합니다.
                 </p>
               </div>
 
               {/* Options Form */}
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 {/* 1. Lookback Range */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center space-x-1.5">
@@ -175,18 +300,19 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { id: '6m', label: '최근 6개월', desc: '~126 거래일' },
-                      { id: '1y', label: '과거 1년 (권장)', desc: '~252 거래일' },
-                      { id: '2y', label: '과거 2년', desc: '~504 거래일' },
+                      { id: '1y', label: '과거 1년', desc: '~252 거래일' },
+                      { id: '2y', label: '과거 2년 (심층)', desc: '~504 거래일' },
                     ].map((opt) => (
                       <button
                         key={opt.id}
                         type="button"
+                        disabled={isRunning}
                         onClick={() => setLookbackRange(opt.id as any)}
                         className={`p-3 rounded-xl border text-left transition-all ${
                           lookbackRange === opt.id
                             ? 'bg-cyan-500/15 border-cyan-500/50 text-cyan-300 shadow-md'
                             : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
-                        }`}
+                        } disabled:opacity-50`}
                       >
                         <div className="text-xs font-bold">{opt.label}</div>
                         <div className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</div>
@@ -210,8 +336,9 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                     max="85"
                     step="5"
                     value={threshold}
+                    disabled={isRunning}
                     onChange={(e) => setThreshold(Number(e.target.value))}
-                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500 disabled:opacity-50"
                   />
                   <div className="flex justify-between text-[10px] text-slate-500 font-mono">
                     <span>60점 (많은 시그널)</span>
@@ -226,22 +353,74 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                     <input
                       type="checkbox"
                       checked={replaceExisting}
+                      disabled={isRunning}
                       onChange={(e) => setReplaceExisting(e.target.checked)}
-                      className="rounded bg-slate-950 border-slate-700 text-cyan-500 focus:ring-cyan-500/20"
+                      className="rounded bg-slate-950 border-slate-700 text-cyan-500 focus:ring-cyan-500/20 disabled:opacity-50"
                     />
                     <span>기존 백테스트 시그널 데이터를 초기화하고 새로 적재 (권장)</span>
                   </label>
                 </div>
               </div>
 
-              {/* Running Status */}
-              {isRunning && (
-                <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/40 text-center space-y-3 animate-pulse">
-                  <Loader2 className="w-6 h-6 text-cyan-400 animate-spin mx-auto" />
-                  <div className="text-xs font-semibold text-cyan-300">{currentStep}</div>
-                  <p className="text-[10px] text-slate-500">
-                    야후 파이낸스 과거 {lookbackRange}치 일봉 수집 및 롤링 윈도우 시뮬레이션이 진행 중입니다...
-                  </p>
+              {/* Progress & Live Terminal Output */}
+              {(isRunning || logs.length > 0) && (
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  {/* Progress Bar */}
+                  {isRunning && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-cyan-300 flex items-center space-x-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                          <span>{currentStep}</span>
+                        </span>
+                        <span className="font-mono font-bold text-cyan-400">
+                          {progress.current} / {progress.total} 종목 ({progress.percent}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                        <div
+                          className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 transition-all duration-300"
+                          style={{ width: `${progress.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Terminal Log Console */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/90 overflow-hidden font-mono text-[11px] shadow-inner">
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/90 border-b border-slate-800/80 text-slate-400">
+                      <div className="flex items-center space-x-1.5 text-xs text-slate-300">
+                        <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>실시간 백필 실행 콘솔 로그 (Live Stream)</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500">
+                        {logs.length}줄 기록됨
+                      </span>
+                    </div>
+                    <div className="p-3 max-h-48 overflow-y-auto space-y-1 select-text">
+                      {logs.map((log) => (
+                        <div key={log.id} className="flex items-start space-x-2 leading-relaxed">
+                          <span className="text-slate-600 shrink-0 select-none">[{log.time}]</span>
+                          <span
+                            className={
+                              log.type === 'accent'
+                                ? 'text-cyan-300 font-bold'
+                                : log.type === 'success'
+                                ? 'text-emerald-400'
+                                : log.type === 'warn'
+                                ? 'text-amber-400'
+                                : log.type === 'error'
+                                ? 'text-rose-400 font-bold'
+                                : 'text-slate-300'
+                            }
+                          >
+                            {log.message}
+                          </span>
+                        </div>
+                      ))}
+                      <div ref={terminalBottomRef} />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -265,7 +444,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                     <span>과거 {lookbackRange} 백필 및 DB 인제스천 완료!</span>
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Supabase &amp; DB 동기화 완료
+                    DB 동기화 완료
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
@@ -298,9 +477,9 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
               {/* Ticker Breakdown Table */}
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-slate-300">종목별 백필 결과 요약</div>
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/80 text-xs font-mono">
+                <div className="max-h-44 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/80 text-xs font-mono">
                   <table className="w-full text-left">
-                    <thead className="bg-slate-900 text-slate-400 text-[11px] border-b border-slate-800">
+                    <thead className="bg-slate-900 text-slate-400 text-[11px] border-b border-slate-800 sticky top-0">
                       <tr>
                         <th className="p-2.5">티커</th>
                         <th className="p-2.5 text-right">일봉 수</th>
@@ -366,12 +545,12 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                 {isRunning ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>백필 실행 중...</span>
+                    <span>백필 실행 중... ({progress.percent}%)</span>
                   </>
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4" />
-                    <span>{lookbackRange === '6m' ? '6개월' : lookbackRange === '2y' ? '2년' : lookbackRange === '5y' ? '5년' : '1년'} 백필 시작</span>
+                    <span>{lookbackRange === '6m' ? '6개월' : lookbackRange === '2y' ? '2년' : '1년'} 백필 시작</span>
                   </>
                 )}
               </button>
