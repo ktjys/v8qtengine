@@ -290,11 +290,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 id="btn-dashboard-recalculate"
                 onClick={onRecalculate}
                 disabled={isRecalculating}
-                className="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/50 transition-all active:scale-95 disabled:opacity-50"
+                title="스캔 실행 시 DB는 자동 동기화됩니다. 이 버튼은 서버 전체 자산의 퀀트 평가를 수동으로 강제 재계산할 때 사용합니다."
+                className="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-700 hover:border-cyan-500/40 transition-all active:scale-95 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">{isRecalculating ? 'DB 퀀트 재계산 중...' : 'DB 데이터 새로고침 / 퀀트 재평가'}</span>
-                <span className="sm:hidden">{isRecalculating ? '재계산 중...' : 'DB 새로고침'}</span>
+                <span className="hidden sm:inline">{isRecalculating ? '전체 재계산 중...' : '서버 데이터 강제 동기화'}</span>
+                <span className="sm:hidden">{isRecalculating ? '동기화 중...' : '강제 동기화'}</span>
               </button>
             )}
             <span className="text-[11px] sm:text-xs text-slate-400 font-mono">

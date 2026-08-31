@@ -14,15 +14,18 @@ export class ScanService {
   ): Promise<PipelineScanResult> {
     const startTime = new Date();
     const runId = `run-${Date.now()}`;
-    let watchlist = [];
+    let watchlist: any[] = [];
     try {
-      watchlist = await watchlistRepository.getActive();
+      watchlist = await watchlistRepository.getAll();
+      // Filter to active items, but if all are marked inactive, fall back to all items
+      const activeOnly = watchlist.filter((w) => w.is_active !== false);
+      watchlist = activeOnly.length > 0 ? activeOnly : watchlist;
     } catch (wErr) {
-      console.warn('[ScanService] Failed to load active watchlist from repo:', wErr);
+      console.warn('[ScanService] Failed to load watchlist from repo:', wErr);
     }
 
     // If empty, fall back to initial standard watchlist tickers
-    let tickers = watchlist.map((w) => w.ticker);
+    let tickers = watchlist.map((w) => w.ticker.toUpperCase().trim());
     if (tickers.length === 0) {
       tickers = [
         'AAPL', 'AMD', 'AMZN', 'GOOGL', 'HOOD', 'JNJ', 'META', 'MSFT',
@@ -30,6 +33,8 @@ export class ScanService {
         'SPY', 'TSLA', 'V', 'VOO',
       ];
     }
+    // Remove duplicates
+    tickers = Array.from(new Set(tickers));
 
     if (options.providerType) {
       evaluationService.setProvider(options.providerType);

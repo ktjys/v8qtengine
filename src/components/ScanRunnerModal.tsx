@@ -15,11 +15,13 @@ import { ScanRunLog, SignalSnapshot } from '../types/v8';
 interface ScanRunnerModalProps {
   onClose: () => void;
   onScanCompleted: (result: { scan_log: ScanRunLog; new_signals: SignalSnapshot[] }) => void;
+  totalWatchlistCount?: number;
 }
 
 export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   onClose,
   onScanCompleted,
+  totalWatchlistCount,
 }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [simulateFailure, setSimulateFailure] = useState(false);
@@ -105,7 +107,14 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               <RefreshCw className={`w-4 h-4 ${isRunning ? 'animate-spin' : ''}`} />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-100">퀀트 스캐너 실행</h3>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm sm:text-base font-bold text-slate-100">퀀트 스캐너 실행</h3>
+                {totalWatchlistCount !== undefined && totalWatchlistCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    워치리스트 {totalWatchlistCount}개
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] sm:text-xs text-slate-400 font-mono">워치리스트 전종목 일괄 평가 파이프라인</p>
             </div>
           </div>

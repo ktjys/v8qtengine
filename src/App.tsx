@@ -239,7 +239,13 @@ export default function App() {
     }
   };
 
-  const handleScanCompleted = async () => {
+  const handleScanCompleted = async (scanResult?: any) => {
+    if (scanResult?.evaluations && Array.isArray(scanResult.evaluations) && scanResult.evaluations.length > 0) {
+      setEvaluations(scanResult.evaluations);
+      try {
+        localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(scanResult.evaluations));
+      } catch (e) {}
+    }
     showToast('전체 워치리스트 퀀트 파이프라인 평가 및 스냅샷 저장이 완료되었습니다.');
     await loadAllData();
   };
@@ -329,6 +335,7 @@ export default function App() {
         <ScanRunnerModal
           onClose={() => setIsScanModalOpen(false)}
           onScanCompleted={handleScanCompleted}
+          totalWatchlistCount={watchlist.length}
         />
       )}
 
