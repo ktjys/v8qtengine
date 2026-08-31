@@ -90,6 +90,10 @@ export class MarketDataService {
       }
     }
 
+    if (dbBars.length > 252) {
+      dbBars = dbBars.slice(-252);
+    }
+
     this.benchmarkBarsCache = dbBars;
     this.benchmarkLastFetched = now;
     return dbBars;
@@ -144,6 +148,13 @@ export class MarketDataService {
           });
         }
       }
+    }
+
+    // Ensure array length is strictly deterministic (exactly 252 bars) 
+    // before calculating technical indicators. Yahoo API '1y' range can 
+    // return 251~254 bars depending on the time of day, causing EMA/RSI to fluctuate.
+    if (dbBars.length > 252) {
+      dbBars = dbBars.slice(-252);
     }
 
     // 4. Fetch fundamentals from DB or provider
