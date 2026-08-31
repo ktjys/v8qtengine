@@ -32,6 +32,7 @@ async function sendTelegramMessage(token: string, chatId: string, text: string) 
         text,
         parse_mode: 'HTML',
       }),
+      signal: AbortSignal.timeout(5000),
     });
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, data };

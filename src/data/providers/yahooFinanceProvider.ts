@@ -57,6 +57,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             Accept: 'application/json',
           },
+          signal: AbortSignal.timeout(3500),
         });
 
         if (res.ok) {
@@ -104,6 +105,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             Accept: 'application/json',
           },
+          signal: AbortSignal.timeout(3500),
         });
 
         if (res.ok) {
@@ -140,7 +142,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     // 3. Try Stooq quote fallback
     try {
       const stooqUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&f=sd2t2ohlcv&h&e=csv`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(3500) });
       if (sRes.ok) {
         const csvText = await sRes.text();
         const lines = csvText.trim().split('\n');
@@ -197,6 +199,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             Accept: 'application/json',
           },
+          signal: AbortSignal.timeout(4000),
         });
 
         if (res.ok) {
@@ -244,7 +247,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     // Try Stooq historical daily CSV fallback
     try {
       const stooqUrl = `https://stooq.com/q/d/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&i=d`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
       if (sRes.ok) {
         const csvText = await sRes.text();
         const lines = csvText.trim().split('\n');

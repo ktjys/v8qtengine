@@ -39,51 +39,78 @@ export class ScanService {
     const evaluations: FullTickerEvaluation[] = [];
     const failedList: { ticker: string; error: string }[] = [];
 
-    for (let i = 0; i < tickers.length; i++) {
-      const ticker = tickers[i];
-      const itemStart = new Date();
+    // Pre-warm benchmark SPY bars once upfront so all tickers share the cache instantly
+    try {
+      await evaluationService.getLiveQuote('SPY').catch(() => null);
+    } catch {}
 
-      // Check simulated partial failure on last ticker if requested
-      if (options.simulatePartialFailure && i === tickers.length - 1) {
-        const errorMsg = 'Simulated quote API timeout (Gracefully logged and skipped)';
-        failedList.push({ ticker, error: errorMsg });
-        items.push({
-          scan_run_id: runId,
-          ticker,
-          status: 'FAILED',
-          error_code: 'TIMEOUT',
-          error_message: errorMsg,
-          started_at: itemStart.toISOString(),
-          finished_at: new Date().toISOString(),
-        });
-        continue;
-      }
+    // Process tickers concurrently in chunks of 5 for ultra-fast, timeout-free scanning
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const chunk = tickers.slice(i, i + BATCH_SIZE);
+      const promises = chunk.map(async (ticker, chunkIdx) => {
+        const globalIndex = i + chunkIdx;
+        const itemStart = new Date();
 
-      try {
-        const evalResult = await evaluationService.evaluateTicker(ticker, manualOverrides[ticker]);
-        evaluations.push(evalResult);
+        // Check simulated partial failure on last ticker if requested
+        if (options.simulatePartialFailure && globalIndex === tickers.length - 1) {
+          const errorMsg = 'Simulated quote API timeout (Gracefully logged and skipped)';
+          return {
+            failed: { ticker, error: errorMsg },
+            item: {
+              scan_run_id: runId,
+              ticker,
+              status: 'FAILED' as const,
+              error_code: 'TIMEOUT',
+              error_message: errorMsg,
+              started_at: itemStart.toISOString(),
+              finished_at: new Date().toISOString(),
+            },
+          };
+        }
 
-        items.push({
-          scan_run_id: runId,
-          ticker,
-          status: 'SUCCESS',
-          started_at: itemStart.toISOString(),
-          finished_at: new Date().toISOString(),
-          opportunity_score: evalResult.opportunity.opportunity_score,
-          decision: evalResult.decision.decision,
-        });
-      } catch (err) {
-        const errorMsg = (err as Error).message || 'Evaluation failed';
-        failedList.push({ ticker, error: errorMsg });
-        items.push({
-          scan_run_id: runId,
-          ticker,
-          status: 'FAILED',
-          error_code: 'EVAL_ERROR',
-          error_message: errorMsg,
-          started_at: itemStart.toISOString(),
-          finished_at: new Date().toISOString(),
-        });
+        try {
+          const evalResult = await evaluationService.evaluateTicker(ticker, manualOverrides[ticker]);
+          return {
+            evaluation: evalResult,
+            item: {
+              scan_run_id: runId,
+              ticker,
+              status: 'SUCCESS' as const,
+              started_at: itemStart.toISOString(),
+              finished_at: new Date().toISOString(),
+              opportunity_score: evalResult.opportunity.opportunity_score,
+              decision: evalResult.decision.decision,
+            },
+          };
+        } catch (err) {
+          const errorMsg = (err as Error).message || 'Evaluation failed';
+          return {
+            failed: { ticker, error: errorMsg },
+            item: {
+              scan_run_id: runId,
+              ticker,
+              status: 'FAILED' as const,
+              error_code: 'EVAL_ERROR',
+              error_message: errorMsg,
+              started_at: itemStart.toISOString(),
+              finished_at: new Date().toISOString(),
+            },
+          };
+        }
+      });
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        if (res.evaluation) {
+          evaluations.push(res.evaluation);
+        }
+        if (res.failed) {
+          failedList.push(res.failed);
+        }
+        if (res.item) {
+          items.push(res.item);
+        }
       }
     }
 

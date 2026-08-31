@@ -102,15 +102,32 @@ export class EvaluationService {
     const evaluations: FullTickerEvaluation[] = [];
     const failed: { ticker: string; error: string }[] = [];
 
-    for (const t of tickers) {
-      try {
-        const result = await this.evaluateTicker(t, manualOverrides[t.toUpperCase()]);
-        evaluations.push(result);
-      } catch (err) {
-        failed.push({
-          ticker: t.toUpperCase(),
-          error: (err as Error).message || 'Evaluation process failed',
-        });
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const chunk = tickers.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        chunk.map(async (t) => {
+          try {
+            const result = await this.evaluateTicker(t, manualOverrides[t.toUpperCase()]);
+            return { evaluation: result };
+          } catch (err) {
+            return {
+              failed: {
+                ticker: t.toUpperCase(),
+                error: (err as Error).message || 'Evaluation process failed',
+              },
+            };
+          }
+        })
+      );
+
+      for (const res of results) {
+        if (res.evaluation) {
+          evaluations.push(res.evaluation);
+        }
+        if (res.failed) {
+          failed.push(res.failed);
+        }
       }
     }
 

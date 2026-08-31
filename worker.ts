@@ -746,6 +746,7 @@ export default {
                 text: reportText,
                 parse_mode: 'HTML',
               }),
+              signal: AbortSignal.timeout(5000),
             });
 
             const tgData = await tgRes.json().catch(() => ({}));
