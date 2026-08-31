@@ -5,6 +5,8 @@ import { assetRepository } from './assetRepository';
 export interface FundamentalsRecord {
   ticker: string;
   as_of_date: string;
+  published_at?: string;
+  period_end_date?: string;
   revenue?: number;
   revenue_growth?: number;
   eps?: number;
@@ -31,6 +33,8 @@ export class FundamentalsRepository {
     const record: FundamentalsRecord = {
       ticker: clean,
       as_of_date: asOfDate,
+      published_at: asOfDate,
+      period_end_date: asOfDate,
       revenue_growth: data.revenueGrowthYoy,
       eps_growth: data.earningsGrowthYoy,
       operating_margin: data.operatingMargin,
@@ -64,6 +68,8 @@ export class FundamentalsRepository {
         const payload = {
           ticker: clean,
           as_of_date: asOfDate,
+          published_at: asOfDate,
+          period_end_date: asOfDate,
           revenue_growth: data.revenueGrowthYoy,
           eps_growth: data.earningsGrowthYoy,
           operating_margin: data.operatingMargin,
@@ -106,24 +112,7 @@ export class FundamentalsRepository {
         if (error) {
           dbClient.handleDbError('fundamentals', 'getLatest', error);
         } else if (data) {
-          const rec: FundamentalsRecord = {
-            ticker: data.ticker,
-            as_of_date: data.as_of_date,
-            revenue: data.revenue,
-            revenue_growth: data.revenue_growth,
-            eps: data.eps,
-            eps_growth: data.eps_growth,
-            operating_margin: data.operating_margin,
-            free_cash_flow: data.free_cash_flow,
-            fcf_margin: data.fcf_margin,
-            market_cap: Number(data.market_cap),
-            trailing_pe: data.trailing_pe,
-            forward_pe: data.forward_pe,
-            ps_ratio: data.ps_ratio,
-            peg_ratio: data.peg_ratio,
-            source: data.source || 'supabase',
-            fetched_at: data.fetched_at,
-          };
+          const rec = toRecord(data);
           dbClient.fundamentals.set(`${clean}_${rec.as_of_date}`, rec);
           return rec;
         }
@@ -144,7 +133,8 @@ export class FundamentalsRepository {
   }
 
   /**
-   * Point-in-Time 조회: 평가 기준일(evaluationDate) 이전의 가장 최신 fundamentals 를 반환한다.
+   * Point-in-Time 조회: 평가 기준일(evaluationDate) 이전에 공시된(published_at <= evaluationDate)
+   * 가장 최신 fundamentals 를 반환한다.
    * 과거 스코어 히스토리/백테스트에서 미래 재무 데이터 참조(look-ahead bias)를 방지한다.
    */
   async getAsOf(ticker: string, evaluationDate: string): Promise<FundamentalsRecord | null> {
@@ -153,6 +143,7 @@ export class FundamentalsRepository {
 
     if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
       try {
+        // First try filtering by published_at if populated, otherwise as_of_date
         const { data, error } = await dbClient.supabase
           .from('fundamentals')
           .select('*')
@@ -174,16 +165,17 @@ export class FundamentalsRepository {
 
     const matching: FundamentalsRecord[] = [];
     for (const [k, v] of dbClient.fundamentals.entries()) {
-      if (k.startsWith(`${clean}_`) && v.as_of_date <= asOfDate) {
+      const pubDate = v.published_at || v.as_of_date;
+      if (k.startsWith(`${clean}_`) && pubDate <= asOfDate) {
         matching.push(v);
       }
     }
     if (matching.length === 0) return null;
-    matching.sort((a, b) => b.as_of_date.localeCompare(a.as_of_date));
+    matching.sort((a, b) => (b.published_at || b.as_of_date).localeCompare(a.published_at || a.as_of_date));
     return matching[0];
   }
 
-  /** PIT 히스토리 전체 조회 (모든 as_of_date <= evaluationDate) */
+  /** PIT 히스토리 전체 조회 (모든 published_at/as_of_date <= evaluationDate) */
   async getHistoryAsOf(ticker: string, evaluationDate?: string): Promise<FundamentalsRecord[]> {
     const clean = ticker.toUpperCase().trim();
     const asOfDate = evaluationDate ? evaluationDate.split('T')[0] : undefined;
@@ -208,11 +200,12 @@ export class FundamentalsRepository {
 
     const result: FundamentalsRecord[] = [];
     for (const [k, v] of dbClient.fundamentals.entries()) {
-      if (k.startsWith(`${clean}_`) && (!asOfDate || v.as_of_date <= asOfDate)) {
+      const pubDate = v.published_at || v.as_of_date;
+      if (k.startsWith(`${clean}_`) && (!asOfDate || pubDate <= asOfDate)) {
         result.push(v);
       }
     }
-    result.sort((a, b) => a.as_of_date.localeCompare(b.as_of_date));
+    result.sort((a, b) => (a.published_at || a.as_of_date).localeCompare(b.published_at || b.as_of_date));
     return result;
   }
 }
@@ -221,6 +214,8 @@ function toRecord(data: any): FundamentalsRecord {
   return {
     ticker: data.ticker,
     as_of_date: data.as_of_date,
+    published_at: data.published_at || data.as_of_date,
+    period_end_date: data.period_end_date || data.as_of_date,
     revenue: data.revenue,
     revenue_growth: data.revenue_growth,
     eps: data.eps,

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { sigsMap } = vi.hoisted(() => ({ sigsMap: new Map<string, any>() }));
+const { sigsMap, assetsMap } = vi.hoisted(() => ({
+  sigsMap: new Map<string, any>(),
+  assetsMap: new Map<string, any>(),
+}));
 
 vi.mock('../supabaseClient', () => ({
   dbClient: {
@@ -11,6 +14,7 @@ vi.mock('../supabaseClient', () => ({
     handleDbError: () => {},
     seedInMemoryState: () => {},
     signals: sigsMap,
+    assets: assetsMap,
   },
 }));
 

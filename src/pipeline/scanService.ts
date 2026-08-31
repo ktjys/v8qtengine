@@ -96,14 +96,8 @@ export class ScanService {
       }
     }
 
-    // Check newly generated signals (signal_generated == evaluateV8().isSignal or actionable decision)
-    const actionableList = evaluations.filter(
-      (ev) =>
-        ev.signal_generated ||
-        ev.decision?.actionable ||
-        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
-        ev.decision?.decision === 'OPPORTUNITY'
-    );
+    // Check newly generated signals (strictly signal_generated == evaluateV8().isSignal)
+    const actionableList = evaluations.filter((ev) => ev.signal_generated);
     let existingSignals: SignalSnapshot[] = [];
     try {
       existingSignals = await signalRepository.getAll();
@@ -112,13 +106,7 @@ export class ScanService {
     const newSignals: SignalSnapshot[] = [];
 
     for (const ev of evaluations) {
-      const isActionable =
-        ev.signal_generated ||
-        ev.decision?.actionable ||
-        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
-        ev.decision?.decision === 'OPPORTUNITY';
-
-      if (isActionable) {
+      if (ev.signal_generated) {
         if (shouldGenerateSignal(ev, existingSignals) || !existingSignals.some((s) => s.ticker === ev.ticker)) {
           const snap = createSignalSnapshot(ev);
           newSignals.push(snap);
@@ -173,6 +161,7 @@ export class ScanService {
       runLog: scanLog,
       evaluations,
       newSignals,
+      actionableSignals: actionableList,
       allSignals,
       watchlist: currentWatchlist,
     };

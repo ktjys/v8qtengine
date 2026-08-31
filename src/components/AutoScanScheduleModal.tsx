@@ -198,7 +198,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           if (res.ok) {
             const raw = await res.json();
             if (raw.success && raw.evaluations) {
-              const actionable = raw.evaluations.filter((e: any) => e.decision?.actionable);
+              const actionable = raw.evaluations.filter((e: any) => e.signal_generated);
               finalData = {
                 success: true,
                 slot: slotName,
@@ -230,7 +230,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       if (!finalData || !finalData.success) {
         const localResult = runV8PipelineOnSeedData();
         const evaluations = localResult.evaluations || [];
-        const actionable = evaluations.filter((e) => e.decision?.actionable);
+        const actionable = evaluations.filter((e) => e.signal_generated);
         finalData = {
           success: true,
           slot: slotName,
@@ -262,7 +262,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       // Even if unknown error occurs, fallback to local pipeline
       const localResult = runV8PipelineOnSeedData();
       const evaluations = localResult.evaluations || [];
-      const actionable = evaluations.filter((e) => e.decision?.actionable);
+      const actionable = evaluations.filter((e) => e.signal_generated);
       const fallbackData = {
         success: true,
         slot: slotName,

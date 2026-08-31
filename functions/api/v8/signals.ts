@@ -10,7 +10,7 @@ export async function onRequest(context: any) {
 
     const todayStr = new Date().toISOString().split('T')[0];
     const liveSignals = evals
-      .filter((e) => e.decision?.actionable)
+      .filter((e) => e.signal_generated)
       .map((ev) => ({
         id: `sig-${ev.ticker}-${todayStr}`,
         signal_date: todayStr,

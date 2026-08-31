@@ -11,6 +11,7 @@ export interface PipelineScanResult {
   runLog: ScanRunLog;
   evaluations: FullTickerEvaluation[];
   newSignals: SignalSnapshot[];
+  actionableSignals?: FullTickerEvaluation[];
   allSignals: SignalSnapshot[];
   watchlist: WatchlistItem[];
 }

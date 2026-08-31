@@ -4,6 +4,7 @@ import { assetRepository } from './src/db/repositories/assetRepository';
 import { signalRepository } from './src/db/repositories/signalRepository';
 import { scanRunRepository } from './src/db/repositories/scanRunRepository';
 import { evaluationService } from './src/pipeline/evaluationService';
+import { scanService } from './src/pipeline/scanService';
 import { dbClient } from './src/db/supabaseClient';
 import { createSignalSnapshot } from './src/engine/signalEngine';
 import { calculateBacktestMetrics } from './src/engine/backtestEngine';
@@ -267,7 +268,7 @@ export default {
       const savedSignals = await signalRepository.getAll();
       const evals = await evaluationRepository.getAll();
       const liveSignals: SignalSnapshot[] = evals
-        .filter((e) => e.decision?.actionable)
+        .filter((e) => e.signal_generated)
         .map((ev) => createSignalSnapshot(ev));
 
       const signalMap = new Map<string, any>();
@@ -385,45 +386,42 @@ export default {
           body = await request.json();
         } catch {}
 
-        const result = runV8PipelineOnSeedData();
-        const duration = Date.now() - startTime;
+        let result: any;
+        let isFallback = false;
+        try {
+          result = await scanService.executeScan({
+            simulatePartialFailure: body.simulate_partial_failure === true,
+            providerType: body.provider_type,
+            saveToDb: true,
+          });
+        } catch (scanErr) {
+          console.warn('[WorkerScan] scanService failed, falling back to seed simulation:', scanErr);
+          result = runV8PipelineOnSeedData();
+          isFallback = true;
+        }
 
-        const runLog = {
+        const runLog = result.runLog || {
           run_id: `edge-run-${Date.now()}`,
           started_at: new Date(startTime).toISOString(),
           finished_at: new Date().toISOString(),
-          watchlist_count: result.watchlist.length,
-          evaluated_count: result.evaluations.length,
+          watchlist_count: result.watchlist?.length || result.evaluations?.length || 0,
+          evaluated_count: result.evaluations?.length || 0,
           failure_count: body.simulate_partial_failure ? 1 : 0,
           status: (body.simulate_partial_failure ? 'PARTIAL_SUCCESS' : 'SUCCESS') as 'PARTIAL_SUCCESS' | 'SUCCESS',
-          error_summary: body.simulate_partial_failure
+          error_summary: isFallback
+            ? 'Fallback evaluation (seed simulation)'
+            : body.simulate_partial_failure
             ? 'Simulated quote API timeout on last ticker (Gracefully isolated)'
             : undefined,
         };
 
-        const actionableSignals = result.evaluations.filter((e) => e.decision.actionable);
+        const actionableSignals = result.evaluations.filter((e: any) => e.signal_generated);
 
         return jsonResponse({
           success: true,
           scan_log: runLog,
-          new_signals: actionableSignals.map((ev) => ({
-            id: `sig-${ev.ticker}-${Date.now()}`,
-            signal_date: new Date().toISOString().split('T')[0],
-            ticker: ev.ticker,
-            name: ev.name,
-            signal_price: ev.price,
-            strategy_type: ev.classification.strategy_type,
-            asset_type: ev.classification.asset_type,
-            opportunity_score: ev.opportunity.opportunity_score,
-            risk_score: ev.risk.risk_score,
-            risk_level: ev.risk.risk_level,
-            decision: ev.decision.decision,
-            signal_confidence: ev.decision.confidence,
-            classification_confidence: ev.classification.confidence,
-            primary_reason: ev.decision.reason,
-            created_at: new Date().toISOString(),
-            status: 'ACTIVE',
-          })),
+          new_signals: result.newSignals || actionableSignals.map((ev: any) => createSignalSnapshot(ev)),
+          actionable_signals: actionableSignals,
           evaluations_count: result.evaluations.length,
           evaluations: result.evaluations,
         });
@@ -622,10 +620,24 @@ export default {
           slotName = '🌙 [3회차] 장중 급변 & 모멘텀 브레이크아웃 감시';
         }
 
-        // Run Pipeline
-        const seed = runV8PipelineOnSeedData();
-        const evaluations = seed.evaluations || [];
-        const actionableSignals = evaluations.filter((e) => e.decision?.actionable);
+        // Run Pipeline with live scanService
+        let evaluations: any[] = [];
+        let isFallback = false;
+        try {
+          const scanRes = await scanService.executeScan({ saveToDb: true });
+          evaluations = scanRes.evaluations || [];
+        } catch (err) {
+          console.warn('[worker-cron] scanService failed, falling back to cached DB evals or seed:', err);
+          const cached = await evaluationRepository.getAll();
+          if (cached && cached.length > 0) {
+            evaluations = cached;
+          } else {
+            const seed = runV8PipelineOnSeedData();
+            evaluations = seed.evaluations || [];
+            isFallback = true;
+          }
+        }
+        const actionableSignals = evaluations.filter((e) => e.signal_generated);
 
         // Record Scan Run
         try {
@@ -639,7 +651,7 @@ export default {
             failure_count: 0,
             failed_tickers: [],
             status: 'SUCCESS',
-            error_summary: `${slotName} 파이프라인 무결성 평가 완료`,
+            error_summary: `${slotName} 파이프라인 무결성 평가 완료${isFallback ? ' (시드 시뮬레이션 모드)' : ''}`,
           });
         } catch (e) {
           console.warn('[worker] Failed to save scan run:', e);

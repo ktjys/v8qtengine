@@ -142,7 +142,9 @@ export class AssetRepository {
         created_at: a.created_at || now,
         updated_at: now,
       };
-      dbClient.assets.set(ticker, rec);
+      if (dbClient.assets) {
+        dbClient.assets.set(ticker, rec);
+      }
       if (!this.syncedTickers.has(ticker)) {
         cleanList.push(rec);
       }

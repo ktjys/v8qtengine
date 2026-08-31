@@ -54,6 +54,7 @@ export class EvaluationRepository {
           risk_level: ev.risk?.risk_level ?? 'MEDIUM',
           decision: ev.decision?.decision ?? 'HOLD',
           confidence: ev.decision?.confidence ?? 0.8,
+          signal_generated: ev.signal_generated === true,
           reason_json: {
             name: ev.name,
             price: ev.price,
@@ -63,7 +64,7 @@ export class EvaluationRepository {
             risk: ev.risk,
             decision: ev.decision,
             data_quality: ev.data_quality,
-            signal_generated: ev.signal_generated,
+            signal_generated: ev.signal_generated === true,
             provenance: ev.provenance,
           },
         };
@@ -158,9 +159,11 @@ export class EvaluationRepository {
                 summary: `DB 레코드 로드 (결정: ${decision})`,
               },
               signal_generated:
-                typeof r.signal_generated === 'boolean'
+                typeof row.signal_generated === 'boolean'
+                  ? row.signal_generated
+                  : typeof r.signal_generated === 'boolean'
                   ? r.signal_generated
-                  : decision.includes('OPPORTUNITY'),
+                  : false,
               data_quality: r.data_quality || { isFresh: true, isComplete: true, qualityScore: 100, warnings: [] },
               provenance: r.provenance || {
                 source: 'unknown',

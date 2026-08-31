@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS market_data_daily (
 CREATE TABLE IF NOT EXISTS fundamentals (
   ticker VARCHAR(20) NOT NULL REFERENCES assets(ticker) ON DELETE CASCADE,
   as_of_date DATE NOT NULL,
+  published_at DATE,
+  period_end_date DATE,
   revenue NUMERIC(16, 2),
   revenue_growth NUMERIC(8, 4),
   eps NUMERIC(8, 4),
@@ -110,6 +112,7 @@ CREATE TABLE IF NOT EXISTS evaluations (
   risk_level VARCHAR(20) NOT NULL,
   decision VARCHAR(50) NOT NULL,
   confidence NUMERIC(4, 2) NOT NULL,
+  signal_generated BOOLEAN NOT NULL DEFAULT FALSE,
   reason_json JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

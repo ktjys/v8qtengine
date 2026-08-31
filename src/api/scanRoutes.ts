@@ -24,11 +24,7 @@ scanRouter.post('/run', async (req, res) => {
     );
 
     const actionableSignals = result.evaluations.filter(
-      (ev) =>
-        ev.signal_generated ||
-        ev.decision?.actionable ||
-        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
-        ev.decision?.decision === 'OPPORTUNITY'
+      (ev) => ev.signal_generated
     );
 
     // 텔레그램 알림 발송 (텔레그램 설정이 되어있는 경우)

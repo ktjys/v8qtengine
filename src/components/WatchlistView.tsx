@@ -123,7 +123,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     }
 
     // Signals Only
-    if (signalsOnly && !item.decision?.actionable) {
+    if (signalsOnly && !item.signal_generated) {
       return false;
     }
 
@@ -178,8 +178,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         break;
       }
       case 'signal': {
-        const sigA = a.decision?.actionable || a.signal_generated ? 1 : 0;
-        const sigB = b.decision?.actionable || b.signal_generated ? 1 : 0;
+        const sigA = a.signal_generated ? 1 : 0;
+        const sigB = b.signal_generated ? 1 : 0;
         diff = sigA - sigB;
         break;
       }
@@ -471,7 +471,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <tbody className="divide-y divide-slate-800/60 font-mono">
               {sorted.map((item, idx) => {
                 const sub = item.opportunity.sub_scores;
-                const isSignal = item.decision.actionable;
+                const isSignal = item.signal_generated;
 
                 return (
                   <tr

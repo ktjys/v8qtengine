@@ -519,7 +519,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h3>
           </div>
           <span className="text-xs text-slate-400 font-mono">
-            총 {recentSignals.length}건 기록
+            총 {uniqueRecentSignals.length}건 기록
           </span>
         </div>
 

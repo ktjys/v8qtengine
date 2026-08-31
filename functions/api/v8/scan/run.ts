@@ -41,9 +41,12 @@ export async function onRequest(context: any) {
           : undefined,
       };
 
-      const actionableSignals = seedRes.evaluations.filter((e) => e.decision.actionable);
+      const actionableSignals = seedRes.evaluations.filter((e) => e.signal_generated);
       scanResult = {
-        runLog,
+        runLog: {
+          ...runLog,
+          error_summary: runLog.error_summary || 'Fallback evaluation (seed simulation)',
+        },
         newSignals: actionableSignals.map((ev) => ({
           id: `sig-${ev.ticker}-${Date.now()}`,
           signal_date: new Date().toISOString().split('T')[0],
@@ -67,11 +70,7 @@ export async function onRequest(context: any) {
     }
 
     const actionableSignals = scanResult.evaluations.filter(
-      (ev: any) =>
-        ev.signal_generated ||
-        ev.decision?.actionable ||
-        ev.decision?.decision === 'STRONG_OPPORTUNITY' ||
-        ev.decision?.decision === 'OPPORTUNITY'
+      (ev: any) => ev.signal_generated
     );
 
     return new Response(
