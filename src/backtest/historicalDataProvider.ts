@@ -36,19 +36,10 @@ export class HistoricalDataProvider {
       dbFetchLimit = 1500;
     }
 
-    // 1. Try DB first (only if DB has enough bars for the requested range)
+    // 1. Try DB first (only if DB has genuine non-seed bars with enough length)
     const dbBars = await marketDataRepository.getBars(clean, dbFetchLimit);
-    if (dbBars && dbBars.length >= minBarsNeeded) {
-      // Seed 데이터가 DB에 영속화되어 있으면 이후 조회에서도 seed로 인식한다
-      // (provenance 보존: getBars가 각 bar의 원본 source를 유지하므로 모두 seed인지 판별 가능)
-      const hasSeedBar = dbBars.some((b) => b.source === 'seed');
-      const allSeed = dbBars.every((b) => b.source === 'seed');
-      if (hasSeedBar) {
-        this.lastUsedSeed = true;
-        console.warn(
-          `[HistoricalDataProvider] ${clean} bars loaded from DB are seed-sourced (all=${allSeed}). Signals from seed data will be blocked.`
-        );
-      }
+    const hasSeedBar = dbBars?.some((b) => b.source === 'seed');
+    if (dbBars && dbBars.length >= minBarsNeeded && !hasSeedBar) {
       return dbBars;
     }
 
@@ -59,13 +50,12 @@ export class HistoricalDataProvider {
       }
       const bars = await this.yahooProvider.getHistorical(clean, range, '1d');
       const usedFallback = !!this.yahooProvider.getHadFallback?.();
-      if (bars.length >= 50) {
-        if (usedFallback) {
-          // Yahoo 내부에서 seed로 폴백됐다면, DB 저장을 건너뛰고 seed 사용을 정직하게 기록한다
-          this.lastUsedSeed = true;
-        } else {
-          await marketDataRepository.saveBars(clean, bars);
-        }
+      if (bars.length >= 50 && !usedFallback) {
+        await marketDataRepository.saveBars(clean, bars, 'yahoo');
+        return bars;
+      }
+      if (bars.length >= 50 && usedFallback) {
+        this.lastUsedSeed = true;
         return bars;
       }
     } catch (err) {

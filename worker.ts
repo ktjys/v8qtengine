@@ -5,6 +5,7 @@ import { signalRepository } from './src/db/repositories/signalRepository';
 import { scanRunRepository } from './src/db/repositories/scanRunRepository';
 import { evaluationService } from './src/pipeline/evaluationService';
 import { scanService } from './src/pipeline/scanService';
+import { dailyScoreHistoryService } from './src/pipeline/dailyScoreHistoryService';
 import { dbClient } from './src/db/supabaseClient';
 import { createSignalSnapshot } from './src/engine/signalEngine';
 import { calculateBacktestMetrics } from './src/engine/backtestEngine';
@@ -136,6 +137,44 @@ export default {
           evaluations: [],
           error: err.message,
         }, 500);
+      }
+    }
+
+    // Evaluation & Price History for Stock Charts (e.g. /api/v8/evaluations/history/:ticker or /:ticker/history)
+    if (
+      (path.startsWith('/api/v8/evaluations/history/') ||
+        (path.startsWith('/api/v8/evaluations/') && path.endsWith('/history'))) &&
+      method === 'GET'
+    ) {
+      try {
+        let ticker = '';
+        if (path.startsWith('/api/v8/evaluations/history/')) {
+          ticker = path.replace('/api/v8/evaluations/history/', '').split('?')[0].split('/')[0].toUpperCase().trim();
+        } else {
+          const parts = path.split('/');
+          ticker = (parts[parts.length - 2] || '').toUpperCase().trim();
+        }
+
+        if (!ticker) {
+          return jsonResponse({ success: false, error: 'Ticker is required' }, 400);
+        }
+
+        const range = url.searchParams.get('range') || '6m';
+        const data = await dailyScoreHistoryService.getDailyScoreHistory(ticker, range);
+
+        return jsonResponse({
+          success: true,
+          data,
+        });
+      } catch (err: any) {
+        console.error('[Worker] Daily score history error for ' + path + ':', err);
+        return jsonResponse(
+          {
+            success: false,
+            error: err.message || 'Failed to fetch historical chart data',
+          },
+          500
+        );
       }
     }
 
