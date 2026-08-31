@@ -106,14 +106,17 @@ export class ScanService {
     const newSignals: SignalSnapshot[] = [];
 
     for (const ev of evaluations) {
-      if (ev.signal_generated) {
-        if (shouldGenerateSignal(ev, existingSignals) || !existingSignals.some((s) => s.ticker === ev.ticker)) {
-          const snap = createSignalSnapshot(ev);
-          newSignals.push(snap);
-          if (options.saveToDb !== false) {
-            try {
-              await signalRepository.save(snap);
-            } catch {}
+      if (!ev.signal_generated) {
+        continue;
+      }
+      if (shouldGenerateSignal(ev, existingSignals)) {
+        const snap = createSignalSnapshot(ev);
+        newSignals.push(snap);
+        if (options.saveToDb !== false) {
+          try {
+            await signalRepository.save(snap);
+          } catch (err) {
+            console.warn('[ScanService] signalRepository.save warning:', err);
           }
         }
       }

@@ -380,53 +380,34 @@ export default {
     // ========== Scan Run ==========
     if (path === '/api/v8/scan/run' && method === 'POST') {
       try {
-        const startTime = Date.now();
         let body: any = {};
         try {
           body = await request.json();
         } catch {}
 
-        let result: any;
-        let isFallback = false;
-        try {
-          result = await scanService.executeScan({
-            simulatePartialFailure: body.simulate_partial_failure === true,
-            providerType: body.provider_type,
-            saveToDb: true,
-          });
-        } catch (scanErr) {
-          console.warn('[WorkerScan] scanService failed, falling back to seed simulation:', scanErr);
-          result = runV8PipelineOnSeedData();
-          isFallback = true;
-        }
+        const result = await scanService.executeScan({
+          simulatePartialFailure: body.simulate_partial_failure === true,
+          providerType: body.provider_type || 'yahoo',
+          saveToDb: true,
+        });
 
-        const runLog = result.runLog || {
-          run_id: `edge-run-${Date.now()}`,
-          started_at: new Date(startTime).toISOString(),
-          finished_at: new Date().toISOString(),
-          watchlist_count: result.watchlist?.length || result.evaluations?.length || 0,
-          evaluated_count: result.evaluations?.length || 0,
-          failure_count: body.simulate_partial_failure ? 1 : 0,
-          status: (body.simulate_partial_failure ? 'PARTIAL_SUCCESS' : 'SUCCESS') as 'PARTIAL_SUCCESS' | 'SUCCESS',
-          error_summary: isFallback
-            ? 'Fallback evaluation (seed simulation)'
-            : body.simulate_partial_failure
-            ? 'Simulated quote API timeout on last ticker (Gracefully isolated)'
-            : undefined,
-        };
-
-        const actionableSignals = result.evaluations.filter((e: any) => e.signal_generated);
+        const runLog = result.runLog;
+        const actionableSignals = (result.evaluations || []).filter((e: any) => e.signal_generated);
 
         return jsonResponse({
           success: true,
           scan_log: runLog,
-          new_signals: result.newSignals || actionableSignals.map((ev: any) => createSignalSnapshot(ev)),
+          new_signals: result.newSignals || [],
           actionable_signals: actionableSignals,
-          evaluations_count: result.evaluations.length,
-          evaluations: result.evaluations,
+          evaluations_count: (result.evaluations || []).length,
+          evaluations: result.evaluations || [],
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err.message || 'Scan failed' }, 500);
+        console.error('[WorkerScan] scan execution error:', err);
+        return jsonResponse({
+          success: false,
+          error: err.message || 'Scan execution failed',
+        }, 500);
       }
     }
 
@@ -578,6 +559,28 @@ export default {
         const startTime = Date.now();
         const runId = `CRON_${Date.now()}`;
 
+        // 1. Cron Secret Token Check (Security Gate)
+        const secretToken = env?.CRON_SECRET_TOKEN || env?.V8_CRON_SECRET || process.env.CRON_SECRET_TOKEN;
+        if (secretToken) {
+          const authHeader = request.headers.get('authorization') || '';
+          const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : null;
+          const providedToken =
+            url.searchParams.get('cron_token') ||
+            url.searchParams.get('token') ||
+            url.searchParams.get('secret') ||
+            url.searchParams.get('key') ||
+            request.headers.get('x-cron-token') ||
+            bearerToken;
+
+          if (!providedToken || providedToken !== secretToken) {
+            return jsonResponse({
+              success: false,
+              error: 'Unauthorized: Invalid or missing cron secret token',
+              timestamp: new Date().toISOString(),
+            }, 401);
+          }
+        }
+
         // Parse optional query params or body
         let bodyData: any = {};
         if (method === 'POST') {
@@ -587,21 +590,21 @@ export default {
         }
 
         const botToken = (
+          env?.TELEGRAM_BOT_TOKEN ||
+          process.env.TELEGRAM_BOT_TOKEN ||
           url.searchParams.get('bot_token') ||
           url.searchParams.get('token') ||
           bodyData.botToken ||
           request.headers.get('x-telegram-token') ||
-          env?.TELEGRAM_BOT_TOKEN ||
-          process.env.TELEGRAM_BOT_TOKEN ||
           ''
         ).trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
 
         const chatId = (
+          env?.TELEGRAM_CHAT_ID ||
+          process.env.TELEGRAM_CHAT_ID ||
           url.searchParams.get('chat_id') ||
           bodyData.chatId ||
           request.headers.get('x-telegram-chat-id') ||
-          env?.TELEGRAM_CHAT_ID ||
-          process.env.TELEGRAM_CHAT_ID ||
           ''
         ).trim().replace(/^['"]|['"]$/g, '');
 
@@ -622,21 +625,23 @@ export default {
 
         // Run Pipeline with live scanService
         let evaluations: any[] = [];
-        let isFallback = false;
+        let scanStatus: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' = 'SUCCESS';
+        let scanErrorMessage: string | undefined = undefined;
+
         try {
-          const scanRes = await scanService.executeScan({ saveToDb: true });
+          const scanRes = await scanService.executeScan({ providerType: 'yahoo', saveToDb: true });
           evaluations = scanRes.evaluations || [];
-        } catch (err) {
-          console.warn('[worker-cron] scanService failed, falling back to cached DB evals or seed:', err);
-          const cached = await evaluationRepository.getAll();
-          if (cached && cached.length > 0) {
-            evaluations = cached;
-          } else {
-            const seed = runV8PipelineOnSeedData();
-            evaluations = seed.evaluations || [];
-            isFallback = true;
+          if (scanRes.runLog?.status === 'PARTIAL_SUCCESS') {
+            scanStatus = 'PARTIAL_SUCCESS';
+            scanErrorMessage = scanRes.runLog.error_summary;
           }
+        } catch (err: any) {
+          console.error('[worker-cron] scanService live execution failed:', err);
+          scanStatus = 'FAILED';
+          scanErrorMessage = err.message || 'Live market scan failed';
+          evaluations = [];
         }
+
         const actionableSignals = evaluations.filter((e) => e.signal_generated);
 
         // Record Scan Run
@@ -648,16 +653,16 @@ export default {
             watchlist_count: evaluations.length,
             evaluated_count: evaluations.length,
             signal_count: actionableSignals.length,
-            failure_count: 0,
+            failure_count: scanStatus === 'FAILED' ? 1 : 0,
             failed_tickers: [],
-            status: 'SUCCESS',
-            error_summary: `${slotName} 파이프라인 무결성 평가 완료${isFallback ? ' (시드 시뮬레이션 모드)' : ''}`,
+            status: scanStatus,
+            error_summary: scanErrorMessage || `${slotName} 파이프라인 정규 스캔 완료`,
           });
         } catch (e) {
           console.warn('[worker] Failed to save scan run:', e);
         }
 
-        // Send Telegram if credentials exist
+        // Send Telegram only if scan succeeded/partially succeeded and credentials exist
         let telegramStatus = {
           configured: Boolean(botToken && chatId),
           sent: false,
@@ -668,7 +673,7 @@ export default {
             : '텔레그램 봇 토큰/챗ID 미등록 (시뮬레이션 모드)',
         };
 
-        if (botToken && chatId) {
+        if (botToken && chatId && scanStatus !== 'FAILED') {
           try {
             let reportText = `<b>📊 퀀트 엔진 자동 스캔 리포트</b>\n`;
             reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${slotName})\n`;
@@ -683,7 +688,7 @@ export default {
                 const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
                 const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
                 reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
-                reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+                reportText += `   - 현재가: ${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
                 reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
                 reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 모멘텀 지속'}\n\n`;
               });
@@ -726,7 +731,9 @@ export default {
         }
 
         return jsonResponse({
-          success: true,
+          success: scanStatus !== 'FAILED',
+          status: scanStatus,
+          error: scanErrorMessage,
           timestamp: new Date().toISOString(),
           slot: slotName,
           kst_time: kstTimeStr,

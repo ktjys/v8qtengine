@@ -15,7 +15,6 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { runV8PipelineOnSeedData } from '../data/seed/initialData';
 
 interface AutoScanScheduleModalProps {
   isOpen: boolean;
@@ -162,129 +161,68 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       if (cleanToken) headers['x-telegram-token'] = cleanToken;
       if (cleanChat) headers['x-telegram-chat-id'] = cleanChat;
 
-      // 1. Try POST /api/v8/cron-scan
-      try {
-        const res = await fetch('/api/v8/cron-scan', {
+      // Execute live scan via /api/v8/cron-scan or /api/v8/scan/run
+      let res = await fetch('/api/v8/cron-scan', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          botToken: cleanToken || undefined,
+          chatId: cleanChat || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        res = await fetch('/api/v8/scan/run', {
           method: 'POST',
-          headers,
-          body: JSON.stringify({
-            botToken: cleanToken || undefined,
-            chatId: cleanChat || undefined,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider_type: 'yahoo' }),
         });
-        if (res.ok) {
-          finalData = await res.json();
-        }
-      } catch {}
-
-      // 2. If not succeeded, try GET /api/v8/cron-scan
-      if (!finalData || !finalData.success) {
-        try {
-          const res = await fetch('/api/v8/cron-scan', { method: 'GET' });
-          if (res.ok) {
-            finalData = await res.json();
-          }
-        } catch {}
       }
 
-      // 3. If not succeeded, try POST /api/v8/scan/run
-      if (!finalData || !finalData.success) {
-        try {
-          const res = await fetch('/api/v8/scan/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          if (res.ok) {
-            const raw = await res.json();
-            if (raw.success && raw.evaluations) {
-              const actionable = raw.evaluations.filter((e: any) => e.signal_generated);
-              finalData = {
-                success: true,
-                slot: slotName,
-                kst_time: kstTimeStr,
-                duration_ms: Date.now() - startTime,
-                evaluated_count: raw.evaluations.length,
-                actionable_signals_count: actionable.length,
-                actionable_signals: actionable.map((s: any) => ({
-                  ticker: s.ticker,
-                  name: s.name,
-                  decision: s.decision?.decision || 'BUY',
-                  opportunity_score: s.opportunity?.opportunity_score ?? 50,
-                  risk_level: s.risk?.risk_level || 'MODERATE',
-                  price: s.price ?? 0,
-                })),
-                telegram_status: {
-                  configured: Boolean(telegramStatus?.botTokenConfigured),
-                  message: telegramStatus?.botTokenConfigured
-                    ? '텔레그램 연동 완료'
-                    : '텔레그램 미연동 (화면 브리핑 진행)',
-                },
-              };
-            }
-          }
-        } catch {}
-      }
-
-      // 4. Reliable Client-Side Pipeline Fallback (Always guaranteed to succeed)
-      if (!finalData || !finalData.success) {
-        const localResult = runV8PipelineOnSeedData();
-        const evaluations = localResult.evaluations || [];
-        const actionable = evaluations.filter((e) => e.signal_generated);
-        finalData = {
+      const data = await res.json();
+      if (data && data.success) {
+        const actionable = (data.evaluations || data.actionable_signals || []).filter((e: any) => e.signal_generated !== false);
+        const finalData = {
           success: true,
-          slot: slotName,
-          kst_time: kstTimeStr,
-          duration_ms: Date.now() - startTime,
-          evaluated_count: evaluations.length,
-          actionable_signals_count: actionable.length,
-          actionable_signals: actionable.map((s) => ({
+          slot: data.slot || slotName,
+          kst_time: data.kst_time || kstTimeStr,
+          duration_ms: data.duration_ms ?? (Date.now() - startTime),
+          evaluated_count: data.evaluated_count ?? (data.evaluations?.length || 0),
+          actionable_signals_count: data.actionable_signals_count ?? actionable.length,
+          actionable_signals: (data.actionable_signals || actionable).map((s: any) => ({
             ticker: s.ticker,
             name: s.name,
-            decision: s.decision?.decision || 'BUY',
-            opportunity_score: s.opportunity?.opportunity_score ?? 50,
-            risk_level: s.risk?.risk_level || 'MODERATE',
+            decision: s.decision?.decision || s.decision || 'BUY',
+            opportunity_score: s.opportunity?.opportunity_score ?? s.opportunity_score ?? 50,
+            risk_level: s.risk?.risk_level ?? s.risk_level ?? 'MODERATE',
             price: s.price ?? 0,
           })),
-          telegram_status: {
-            configured: Boolean(telegramStatus?.botTokenConfigured),
-            message: telegramStatus?.botTokenConfigured
+          telegram_status: data.telegram_status || {
+            configured: Boolean(telegramStatus?.botTokenConfigured || cleanToken),
+            message: telegramStatus?.botTokenConfigured || cleanToken
               ? '텔레그램 연동 완료'
-              : '텔레그램 미설정 상태 (정상 브리핑 완료)',
+              : '텔레그램 미연동 (화면 브리핑 완료)',
           },
         };
+        setScanResult(finalData);
+        onShowToast(`스캔 완료: ${finalData.actionable_signals_count}개 시그널 도출`);
+      } else {
+        const errorMsg = data?.error || '스캔 서버에서 오류가 발생했습니다.';
+        setScanResult({
+          success: false,
+          error: errorMsg,
+          duration_ms: Date.now() - startTime,
+        });
+        onShowToast(`스캔 실패: ${errorMsg}`);
       }
-
-      setScanResult(finalData);
-      onShowToast(`스캔 완료: ${finalData.actionable_signals_count ?? 0}개 시그널 도출`);
     } catch (err: any) {
       console.error('Auto scan run failed', err);
-      // Even if unknown error occurs, fallback to local pipeline
-      const localResult = runV8PipelineOnSeedData();
-      const evaluations = localResult.evaluations || [];
-      const actionable = evaluations.filter((e) => e.signal_generated);
-      const fallbackData = {
-        success: true,
-        slot: slotName,
-        kst_time: kstTimeStr,
+      setScanResult({
+        success: false,
+        error: err.message || '스캔 요청 중 통신 오류가 발생했습니다.',
         duration_ms: Date.now() - startTime,
-        evaluated_count: evaluations.length,
-        actionable_signals_count: actionable.length,
-        actionable_signals: actionable.map((s) => ({
-          ticker: s.ticker,
-          name: s.name,
-          decision: s.decision?.decision || 'BUY',
-          opportunity_score: s.opportunity?.opportunity_score ?? 50,
-          risk_level: s.risk?.risk_level || 'MODERATE',
-          price: s.price ?? 0,
-        })),
-        telegram_status: {
-          configured: false,
-          message: '텔레그램 미설정 (화면 브리핑 완료)',
-        },
-      };
-      setScanResult(fallbackData);
-      onShowToast(`스캔 완료: ${actionable.length}개 시그널 도출`);
+      });
+      onShowToast(`스캔 요청 오류: ${err.message}`);
     } finally {
       setIsRunning(false);
     }

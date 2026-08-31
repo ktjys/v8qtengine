@@ -26,18 +26,20 @@ telegramRouter.get('/status', (req, res) => {
 // POST /api/v8/telegram/config
 telegramRouter.post('/config', (req, res) => {
   const { botToken, chatId } = req.body || {};
-  if (botToken) process.env.TELEGRAM_BOT_TOKEN = botToken.trim();
-  if (chatId) process.env.TELEGRAM_CHAT_ID = chatId.trim();
-
   telegramNotifier.setConfig(botToken, chatId);
+
+  const cfg = telegramNotifier.getConfig();
+  const envToken = process.env.TELEGRAM_BOT_TOKEN;
+  const envChatId = process.env.TELEGRAM_CHAT_ID;
 
   res.json({
     success: true,
-    message: '텔레그램 봇 연동 정보가 설정되었습니다.',
+    message: '텔레그램 봇 연동 정보가 서버 세션에 안전하게 설정되었습니다.',
     status: {
       configured: telegramNotifier.isConfigured(),
-      botTokenConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN),
-      chatIdConfigured: Boolean(process.env.TELEGRAM_CHAT_ID),
+      botTokenConfigured: Boolean(cfg.botToken || envToken),
+      chatIdConfigured: Boolean(cfg.chatId || envChatId),
+      targetChatIdMasked: (cfg.chatId || envChatId) ? `${(cfg.chatId || envChatId)!.slice(0, 3)}****` : null,
     },
   });
 });

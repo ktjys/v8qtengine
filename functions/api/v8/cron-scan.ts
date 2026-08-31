@@ -77,11 +77,11 @@ export async function onRequest(context: any) {
         request?.headers?.get('x-cron-token') ||
         bearerToken;
 
-      if (providedToken && providedToken !== secretToken) {
+      if (!providedToken || providedToken !== secretToken) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: 'Unauthorized: Invalid cron secret token provided',
+            error: 'Unauthorized: Invalid or missing cron secret token',
             timestamp: new Date().toISOString(),
           }),
           { status: 401, headers: corsHeaders }
@@ -107,12 +107,14 @@ export async function onRequest(context: any) {
     // 3. Execute Quant Pipeline Evaluation with Live Market Data
     let evaluations: any[] = [];
     let actionableSignals: any[] = [];
+    let scanError: string | null = null;
 
     try {
-      const scanResult = await scanService.executeScan({ saveToDb: false });
+      const scanResult = await scanService.executeScan({ saveToDb: true, providerType: 'yahoo' });
       evaluations = scanResult.evaluations || [];
-    } catch (scanErr) {
+    } catch (scanErr: any) {
       console.warn('[CronScan Worker] scanService failed:', scanErr);
+      scanError = scanErr.message || 'Live market scan failed';
     }
 
     actionableSignals = evaluations.filter((e) => e.signal_generated);

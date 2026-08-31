@@ -153,7 +153,7 @@ export class EvaluationRepository {
               decision: r.decision || {
                 decision,
                 confidence: Number(row.confidence ?? 0.8),
-                actionable: decision.includes('OPPORTUNITY'),
+                actionable: row.signal_generated === true || r.signal_generated === true,
                 strategy_type: strategyType,
                 reasons: [],
                 summary: `DB 레코드 로드 (결정: ${decision})`,
