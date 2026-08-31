@@ -86,7 +86,17 @@ export default function App() {
 
   const safeFetchJson = async (url: string) => {
     try {
-      const res = await fetch(url);
+      // Add cache buster and no-store to prevent aggressive browser caching of API results
+      const separator = url.includes('?') ? '&' : '?';
+      const noCacheUrl = `${url}${separator}_t=${Date.now()}`;
+      
+      const res = await fetch(noCacheUrl, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+        cache: 'no-store',
+      });
       if (!res.ok) {
         return null;
       }

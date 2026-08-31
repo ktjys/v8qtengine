@@ -80,7 +80,12 @@ export const SymbolDailyScoreChart: React.FC<SymbolDailyScoreChartProps> = ({
 
       // 1. Try API endpoint first
       try {
-        const res = await fetch(`/api/v8/evaluations/history/${ticker}?range=${selectedRange}`);
+        const url = `/api/v8/evaluations/history/${ticker}?range=${selectedRange}`;
+        const noCacheUrl = `${url}&_t=${Date.now()}`;
+        const res = await fetch(noCacheUrl, {
+          headers: { 'Cache-Control': 'no-cache' },
+          cache: 'no-store'
+        });
         if (res.ok) {
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
