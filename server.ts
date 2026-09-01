@@ -103,14 +103,21 @@ async function startServer() {
 
       const sourceUrl = `${req.protocol}://${req.get('host')}`;
 
-      const result = await executeCronScan({
+      // Fire and forget to prevent Webhook timeout (HTTP 202 Accepted)
+      executeCronScan({
         botToken,
         chatId,
         triggeredBy: (headers['user-agent'] as string) || 'CronWebhook',
         sourceUrl,
+      }).catch(err => {
+        console.error('[server] Background cron scan error:', err);
       });
 
-      res.status(result.success ? 200 : 500).json(result);
+      res.status(202).json({
+        success: true,
+        message: 'Cron scan started in background. Check Telegram for the final report.',
+        timestamp: new Date().toISOString()
+      });
     } catch (err: any) {
       console.error('[server] Cron scan endpoint error:', err);
       res.status(500).json({
