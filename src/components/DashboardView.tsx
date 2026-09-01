@@ -83,11 +83,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .sort((a, b) => (b.risk?.risk_score ?? 0) - (a.risk?.risk_score ?? 0));
 
   const actionableSignalsToday = (evaluations || []).filter(
-    (e) =>
-      e?.signal_generated ||
-      e?.decision?.actionable ||
-      e?.decision?.decision === 'STRONG_OPPORTUNITY' ||
-      e?.decision?.decision === 'OPPORTUNITY'
+    (e) => e?.signal_generated === true
   );
 
   const uniqueRecentSignals = useMemo(() => {
