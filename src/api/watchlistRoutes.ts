@@ -23,6 +23,40 @@ watchlistRouter.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Ticker is required' });
     }
     const cleanTicker = ticker.toUpperCase().trim();
+
+    // 1. Ticker Validation with Yahoo Finance Search API
+    try {
+      const searchRes = await fetch(
+        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanTicker)}&quotesCount=1&newsCount=0`,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          }
+        }
+      );
+      if (searchRes.ok) {
+        const data = await searchRes.json();
+        const quotes = data.quotes || [];
+        
+        if (quotes.length === 0) {
+          return res.status(400).json({ success: false, error: `'${cleanTicker}'은(는) 존재하지 않는 종목 코드입니다.` });
+        }
+        
+        const topMatch = quotes[0];
+        const foundSymbol = topMatch.symbol.toUpperCase();
+        
+        if (foundSymbol !== cleanTicker) {
+          const assetName = topMatch.shortname || topMatch.longname || '해당 기업/자산';
+          return res.status(400).json({ 
+            success: false, 
+            error: `잘못된 종목 코드입니다. 혹시 [${assetName}]의 올바른 티커인 '${foundSymbol}'을(를) 찾으시나요?` 
+          });
+        }
+      }
+    } catch (searchErr) {
+      console.warn('[WatchlistRouter] Ticker validation request failed, proceeding anyway:', searchErr);
+    }
+
     // 새 종목은 항상 is_active: true로 생성
     const item = await watchlistRepository.add({ ticker: cleanTicker, name, memo, is_active: true });
 

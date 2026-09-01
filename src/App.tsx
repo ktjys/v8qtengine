@@ -206,11 +206,17 @@ export default function App() {
         localStorage.removeItem('quant_db_cleared_v8');
       }
 
-      await fetch('/api/v8/watchlist', {
+      const res = await fetch('/api/v8/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker: cleanTicker, name, memo, is_active: true }),
       });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(`추가 실패: ${data.error || '알 수 없는 오류가 발생했습니다.'}`);
+        return;
+      }
 
       showToast(`${cleanTicker} 종목이 워치리스트에 추가되고 즉시 퀀트 평가가 완료되었습니다.`);
       await loadAllData();
