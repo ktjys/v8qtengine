@@ -49,8 +49,8 @@ export class ScanService {
       await evaluationService.getLiveQuote('SPY').catch(() => null);
     } catch {}
 
-    // Process tickers concurrently in chunks of 5 for ultra-fast, timeout-free scanning
-    const BATCH_SIZE = 5;
+    // Process tickers concurrently in chunks of 10 to balance speed and rate limits
+    const BATCH_SIZE = 10;
     for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
       const chunk = tickers.slice(i, i + BATCH_SIZE);
       const promises = chunk.map(async (ticker, chunkIdx) => {
