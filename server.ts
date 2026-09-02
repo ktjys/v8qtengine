@@ -11,6 +11,7 @@ import { runRouter } from './src/api/runRoutes';
 import { systemRouter } from './src/api/systemRoutes';
 import { telegramRouter } from './src/api/telegramRoutes';
 import { executeCronScan } from './src/engine/cronScanEngine';
+import { internalScheduler } from './src/services/internalScheduler';
 import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
 import { createSignalSnapshot } from './src/engine/signalEngine';
@@ -123,7 +124,23 @@ async function startServer() {
 
   app.all(['/api/v8/cron-scan', '/api/cron-scan', '/api/v8/cron', '/api/cron', '/cron-scan'], cronHandler);
 
-  // Schedule information endpoint
+  // Schedule information and internal scheduler endpoints
+  app.get('/api/v8/schedule/status', (req, res) => {
+    res.json({
+      success: true,
+      ...internalScheduler.getStatus(),
+    });
+  });
+
+  app.post('/api/v8/schedule/trigger', async (req, res) => {
+    try {
+      const result = await internalScheduler.triggerManual();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.get('/api/v8/schedule/info', (req, res) => {
     res.json({
       success: true,
@@ -198,6 +215,8 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Quant Decision Engine Server running on http://localhost:${PORT}`);
+    // Start automated internal cron scheduler
+    internalScheduler.start();
     // Bootstrap initial evaluation state asynchronously after server is up
     getInitialOrLatestEvaluations().catch((err) => {
       console.error('[Bootstrap Error] Failed to initialize evaluations:', err);

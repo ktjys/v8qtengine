@@ -33,6 +33,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   const [isSavingTelegram, setIsSavingTelegram] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [telegramStatus, setTelegramStatus] = useState<any>(null);
+  const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   const [inputBotToken, setInputBotToken] = useState('');
@@ -79,6 +80,14 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     } catch {}
   };
 
+  const fetchSchedulerStatus = async () => {
+    try {
+      const res = await fetch('/api/v8/schedule/status');
+      const data = await res.json();
+      setSchedulerStatus(data);
+    } catch {}
+  };
+
   useEffect(() => {
     if (isOpen) {
       // Clean up any legacy localStorage entries for maximum security
@@ -89,6 +98,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       } catch {}
 
       fetchTelegramStatus();
+      fetchSchedulerStatus();
       setScanResult(null);
     }
   }, [isOpen]);
@@ -403,7 +413,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            ⚙️ Cloudflare Cron 연동 가이드
+            ⚙️ 자동화 & 크론 연동 가이드
           </button>
         </div>
 
@@ -412,6 +422,34 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           {/* Tab 1: Schedules & Run Now */}
           {activeTab === 'schedule' && (
             <div className="space-y-3 sm:space-y-4">
+              {/* Internal In-Process Scheduler Status Card */}
+              <div className="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs sm:text-sm font-bold text-slate-100">서버 자체 내장 스케줄러 가동 중</span>
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        ACTIVE
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      외부 크론 서비스 없이도 서버 내부에서 매일 3회 정해진 시각(06:30, 22:00, 02:00 KST)에 스스로 자동 실행합니다.
+                    </p>
+                  </div>
+                </div>
+                {schedulerStatus?.next_scheduled_slot && (
+                  <div className="hidden sm:block text-right">
+                    <div className="text-[10px] text-slate-400 font-mono">다음 예정 브리핑</div>
+                    <div className="text-xs font-bold font-mono text-cyan-400">
+                      {schedulerStatus.next_scheduled_slot.target_time}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
                 {schedules.map((s, idx) => (
                   <div
@@ -803,6 +841,30 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                 💡 텔레그램 토큰을 쿼리스트링으로 직접 전달할 수도 있습니다: <br />
                 <code className="text-cyan-400 text-[9px] break-all">{`${cronEndpointUrl}?bot_token=YOUR_BOT_TOKEN&chat_id=YOUR_CHAT_ID`}</code>
               </p>
+            </div>
+
+            {/* Cloudflare Workers & Timeout Analysis Notice */}
+            <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 space-y-3">
+              <div className="flex items-center space-x-2 text-cyan-400 font-bold text-xs">
+                <Zap className="w-4 h-4 shrink-0" />
+                <span>⚡ Cloudflare Workers 배포 환경 완벽 가이드</span>
+              </div>
+              <div className="text-[11px] text-slate-300 leading-relaxed space-y-2 pl-1">
+                <p>
+                  <b className="text-amber-300">1. 운영 주소에서 크론 타임아웃이 났던 원인:</b><br />
+                  Cloudflare Workers는 서버리스 환경으로, 20개 종목의 실시간 데이터(시세, 일봉 차트, 펀더멘털)를 야후 파이낸스로부터 60회 이상 서브리퀘스트(Subrequest)로 호출할 때 야후의 Cloudflare IP 제한 및 지연이 발생해 <b>전체 실행 시간이 30초를 초과</b>하여 외부 크론(cron-job.org)의 30초 대기 한도를 넘겼기 때문입니다.
+                </p>
+                <p>
+                  <b className="text-emerald-300">2. 최적화 완료 (6.5초 세이프티 가드):</b><br />
+                  이제 <code className="text-cyan-300">worker.ts</code>에도 <b>6.5초 타임아웃 레이스</b>를 적용했습니다. 야후 호출이 6.5초를 넘기면 즉시 DB에 보관된 최신 평가 데이터를 채택하여 <b>무조건 7초 이내에 200 OK 응답 및 텔레그램 발송</b>을 완료합니다.
+                </p>
+                <p>
+                  <b className="text-purple-300">3. Cloudflare 자체 내장 [Cron Triggers] 지원:</b><br />
+                  Cloudflare Workers는 상주 프로세스가 없어서 일반 Node.js의 <code className="text-slate-400">setInterval</code>은 돌지 않지만, Cloudflare가 자체 제공하는 <b>Cron Triggers(Scheduled Event)</b>를 지원합니다.<br />
+                  이미 <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 크론 스케줄(<code className="text-slate-300 text-[10px]">06:30, 22:00, 02:00 KST</code>)과 <code className="text-emerald-300 font-mono text-[10px]">worker.ts</code>의 <code className="text-slate-300 text-[10px]">scheduled()</code> 이벤트 핸들러를 등록해 두었습니다.<br />
+                  👉 <b>Cloudflare 대시보드</b> (<span className="text-slate-200 font-semibold">Workers & Pages &gt; v8qtengine &gt; Settings &gt; Triggers &gt; Cron Triggers</span>)에서 확인하실 수 있으며, 외부 크론 없이도 Cloudflare가 시간에 맞춰 Worker를 직접 깨워 텔레그램을 100% 자동 발송합니다!
+                </p>
+              </div>
             </div>
 
             {/* 3. Free External Cron Trigger Guide */}

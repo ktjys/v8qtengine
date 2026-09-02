@@ -12,3 +12,10 @@ not_found_handling = "single-page-application"
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
 
+[triggers]
+crons = [
+  "30 21 * * 1-5",
+  "0 13 * * 1-5",
+  "0 17 * * 1-5"
+]
+

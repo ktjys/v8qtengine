@@ -44,105 +44,109 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const cached = this.getCached<QuoteData>(cacheKey, 30 * 1000);
     if (cached) return cached;
 
-    // 1. Try Yahoo Finance Chart API (query1 & query2)
+    // 1. Race Yahoo Chart API (query1 & query2 simultaneously for instant response)
     const chartUrls = [
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
     ];
 
-    for (const url of chartUrls) {
-      try {
-        const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            Accept: 'application/json',
-          },
-          signal: AbortSignal.timeout(3500),
-        });
+    const fetchChartQuote = async (url: string): Promise<QuoteData> => {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(2000),
+      });
 
-        if (res.ok) {
-          const json = await res.json();
-          const meta = json?.chart?.result?.[0]?.meta;
-          if (meta && typeof (meta.regularMarketPrice ?? meta.previousClose) === 'number') {
-            const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
-            const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
-            const change = currentPrice - prevClose;
-            const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
-
-            const quote: QuoteData = {
-              ticker: clean,
-              price: Math.round(currentPrice * 100) / 100,
-              change: Math.round(change * 100) / 100,
-              changePercent: Math.round(changePercent * 100) / 100,
-              currency: meta.currency || 'USD',
-              exchange: meta.exchangeName || 'US',
-              shortName: meta.shortName || meta.symbol || clean,
-              longName: meta.longName || meta.shortName || clean,
-              fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-              fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-              timestamp: new Date().toISOString(),
-            };
-
-            this.setCache(cacheKey, quote);
-            return quote;
-          }
-        }
-      } catch (e) {
-        // try next url
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (!meta || typeof (meta.regularMarketPrice ?? meta.previousClose) !== 'number') {
+        throw new Error('Invalid meta');
       }
+
+      const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
+      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
+      const change = currentPrice - prevClose;
+      const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+      return {
+        ticker: clean,
+        price: Math.round(currentPrice * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        changePercent: Math.round(changePercent * 100) / 100,
+        currency: meta.currency || 'USD',
+        exchange: meta.exchangeName || 'US',
+        shortName: meta.shortName || meta.symbol || clean,
+        longName: meta.longName || meta.shortName || clean,
+        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+        timestamp: new Date().toISOString(),
+      };
+    };
+
+    try {
+      const quote = await Promise.any(chartUrls.map(fetchChartQuote));
+      this.setCache(cacheKey, quote);
+      return quote;
+    } catch {
+      // Proceed to fallback
     }
 
-    // 2. Try Yahoo Finance Quote API v7 (query1 & query2)
+    // 2. Race Yahoo Quote API v7 (query1 & query2)
     const quoteUrls = [
       `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
       `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
     ];
 
-    for (const url of quoteUrls) {
-      try {
-        const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            Accept: 'application/json',
-          },
-          signal: AbortSignal.timeout(3500),
-        });
+    const fetchQuoteV7 = async (url: string): Promise<QuoteData> => {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(2000),
+      });
 
-        if (res.ok) {
-          const json = await res.json();
-          const qRes = json?.quoteResponse?.result?.[0];
-          if (qRes && typeof (qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice) === 'number') {
-            const currentPrice = qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice;
-            const change = qRes.regularMarketChange ?? 0;
-            const changePercent = qRes.regularMarketChangePercent ?? 0;
-
-            const quote: QuoteData = {
-              ticker: clean,
-              price: Math.round(currentPrice * 100) / 100,
-              change: Math.round(change * 100) / 100,
-              changePercent: Math.round(changePercent * 100) / 100,
-              currency: qRes.currency || 'USD',
-              exchange: qRes.fullExchangeName || 'US',
-              shortName: qRes.shortName || clean,
-              longName: qRes.longName || qRes.shortName || clean,
-              fiftyTwoWeekHigh: qRes.fiftyTwoWeekHigh,
-              fiftyTwoWeekLow: qRes.fiftyTwoWeekLow,
-              timestamp: new Date().toISOString(),
-            };
-
-            this.setCache(cacheKey, quote);
-            return quote;
-          }
-        }
-      } catch (e) {
-        // try next
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const qRes = json?.quoteResponse?.result?.[0];
+      if (!qRes || typeof (qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice) !== 'number') {
+        throw new Error('Invalid quote response');
       }
+
+      const currentPrice = qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice;
+      const change = qRes.regularMarketChange ?? 0;
+      const changePercent = qRes.regularMarketChangePercent ?? 0;
+
+      return {
+        ticker: clean,
+        price: Math.round(currentPrice * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        changePercent: Math.round(changePercent * 100) / 100,
+        currency: qRes.currency || 'USD',
+        exchange: qRes.fullExchangeName || 'US',
+        shortName: qRes.shortName || clean,
+        longName: qRes.longName || qRes.shortName || clean,
+        fiftyTwoWeekHigh: qRes.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: qRes.fiftyTwoWeekLow,
+        timestamp: new Date().toISOString(),
+      };
+    };
+
+    try {
+      const quote = await Promise.any(quoteUrls.map(fetchQuoteV7));
+      this.setCache(cacheKey, quote);
+      return quote;
+    } catch {
+      // Proceed to fallback
     }
 
     // 3. Try Stooq quote fallback
     try {
       const stooqUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&f=sd2t2ohlcv&h&e=csv`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(3500) });
+      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2000) });
       if (sRes.ok) {
         const csvText = await sRes.text();
         const lines = csvText.trim().split('\n');
@@ -192,62 +196,63 @@ export class YahooFinanceProvider implements MarketDataProvider {
       `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=${interval}&range=${range}`,
     ];
 
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            Accept: 'application/json',
-          },
-          signal: AbortSignal.timeout(4000),
-        });
+    const fetchHistoryFromUrl = async (url: string): Promise<OHLCVBar[]> => {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(2500),
+      });
 
-        if (res.ok) {
-          const json = await res.json();
-          const result = json?.chart?.result?.[0];
-          if (result) {
-            const timestamps: number[] = result.timestamp || [];
-            const quoteObj = result.indicators?.quote?.[0] || {};
-            const adjCloseArr: number[] = result.indicators?.adjclose?.[0]?.adjclose || quoteObj.close || [];
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const result = json?.chart?.result?.[0];
+      if (!result) throw new Error('No chart result');
 
-            const bars: OHLCVBar[] = [];
-            for (let i = 0; i < timestamps.length; i++) {
-              const close = quoteObj.close?.[i];
-              const open = quoteObj.open?.[i] ?? close;
-              const high = quoteObj.high?.[i] ?? close;
-              const low = quoteObj.low?.[i] ?? close;
-              const volume = quoteObj.volume?.[i] ?? 0;
-              const adjClose = adjCloseArr[i] ?? close;
+      const timestamps: number[] = result.timestamp || [];
+      const quoteObj = result.indicators?.quote?.[0] || {};
+      const adjCloseArr: number[] = result.indicators?.adjclose?.[0]?.adjclose || quoteObj.close || [];
 
-              if (close !== null && close !== undefined && !isNaN(close)) {
-                const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
-                bars.push({
-                  date,
-                  open: Math.round(open * 100) / 100,
-                  high: Math.round(high * 100) / 100,
-                  low: Math.round(low * 100) / 100,
-                  close: Math.round(close * 100) / 100,
-                  adjClose: Math.round(adjClose * 100) / 100,
-                  volume: volume || 0,
-                });
-              }
-            }
+      const bars: OHLCVBar[] = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const close = quoteObj.close?.[i];
+        const open = quoteObj.open?.[i] ?? close;
+        const high = quoteObj.high?.[i] ?? close;
+        const low = quoteObj.low?.[i] ?? close;
+        const volume = quoteObj.volume?.[i] ?? 0;
+        const adjClose = adjCloseArr[i] ?? close;
 
-            if (bars.length > 0) {
-              this.setCache(cacheKey, bars);
-              return bars;
-            }
-          }
+        if (close !== null && close !== undefined && !isNaN(close)) {
+          const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+          bars.push({
+            date,
+            open: Math.round(open * 100) / 100,
+            high: Math.round(high * 100) / 100,
+            low: Math.round(low * 100) / 100,
+            close: Math.round(close * 100) / 100,
+            adjClose: Math.round(adjClose * 100) / 100,
+            volume: volume || 0,
+          });
         }
-      } catch (err) {
-        // try next
       }
+
+      if (bars.length === 0) throw new Error('Empty bars');
+      return bars;
+    };
+
+    try {
+      const bars = await Promise.any(urls.map(fetchHistoryFromUrl));
+      this.setCache(cacheKey, bars);
+      return bars;
+    } catch {
+      // try fallback
     }
 
     // Try Stooq historical daily CSV fallback
     try {
       const stooqUrl = `https://stooq.com/q/d/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&i=d`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
+      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2500) });
       if (sRes.ok) {
         const csvText = await sRes.text();
         const lines = csvText.trim().split('\n');
