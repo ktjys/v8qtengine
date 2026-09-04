@@ -435,6 +435,91 @@ export default {
         const runLog = result.runLog;
         const actionableSignals = (result.evaluations || []).filter((e: any) => e.signal_generated);
 
+        // Telegram Notification Dispatch
+        let telegramStatus: { sent: boolean; message: string; target?: string | null } = {
+          sent: false,
+          message: '텔레그램 미전송 (비활성화 또는 설정 미등록)',
+        };
+
+        const sendTelegram = body.send_telegram !== false;
+        const cfg = telegramNotifier.getConfig();
+        const botToken = (
+          body.botToken ||
+          request.headers.get('x-telegram-token') ||
+          env?.TELEGRAM_BOT_TOKEN ||
+          process.env.TELEGRAM_BOT_TOKEN ||
+          cfg.botToken ||
+          ''
+        ).trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
+
+        const chatId = (
+          body.chatId ||
+          request.headers.get('x-telegram-chat-id') ||
+          env?.TELEGRAM_CHAT_ID ||
+          process.env.TELEGRAM_CHAT_ID ||
+          cfg.chatId ||
+          ''
+        ).trim().replace(/^['"]|['"]$/g, '');
+
+        if (sendTelegram) {
+          if (botToken && chatId) {
+            try {
+              const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+              const kstTimeStr = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')} ${String(nowKST.getUTCHours()).padStart(2, '0')}:${String(nowKST.getUTCMinutes()).padStart(2, '0')}:${String(nowKST.getUTCSeconds()).padStart(2, '0')} KST`;
+
+              let reportText = `<b>🚀 퀀트 스캐너 실행 완료 리포트</b>\n`;
+              reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr}\n`;
+              reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
+              reportText += `• <b>검토 대상:</b> ${(result.evaluations || []).length}개 종목\n`;
+              reportText += `• <b>유효 진입 신호:</b> <b>${actionableSignals.length}건</b>\n`;
+              reportText += `• <b>고위험 종목:</b> ${(result.evaluations || []).filter((e: any) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
+
+              if (actionableSignals.length > 0) {
+                reportText += `<b>🎯 오늘 포착된 주요 기회 종목:</b>\n`;
+                actionableSignals.slice(0, 5).forEach((sig: any, idx: number) => {
+                  const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
+                  const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
+                  reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
+                  reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+                  reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
+                  reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 팩터 점수 우수'}\n\n`;
+                });
+              } else {
+                reportText += `ℹ️ 현재 엄격한 리스크 제약을 통과한 신규 진입 신호가 없습니다. (안전 자산/현금 비중 유지 권장)\n\n`;
+              }
+
+              if (url.origin) {
+                reportText += `🔗 <a href="${url.origin}">퀀트 시스템 대시보드 바로가기</a>`;
+              }
+
+              const sendRes = await telegramNotifier.sendMessage(reportText, botToken, chatId);
+              if (sendRes.success && !sendRes.previewOnly) {
+                telegramStatus = {
+                  sent: true,
+                  message: '텔레그램 발송 완료',
+                  target: chatId ? `${chatId.slice(0, 3)}****` : null,
+                };
+              } else {
+                telegramStatus = {
+                  sent: false,
+                  message: sendRes.error || '텔레그램 발송 실패',
+                };
+              }
+            } catch (tErr: any) {
+              console.warn('[WorkerScan] Telegram send error:', tErr);
+              telegramStatus = {
+                sent: false,
+                message: tErr.message || '텔레그램 발송 예외',
+              };
+            }
+          } else {
+            telegramStatus = {
+              sent: false,
+              message: '텔레그램 봇 토큰/챗ID 미등록 (알림 모달에서 등록 필요)',
+            };
+          }
+        }
+
         return jsonResponse({
           success: true,
           scan_log: runLog,
@@ -442,6 +527,7 @@ export default {
           actionable_signals: actionableSignals,
           evaluations_count: (result.evaluations || []).length,
           evaluations: result.evaluations || [],
+          telegram_status: telegramStatus,
         });
       } catch (err: any) {
         console.error('[WorkerScan] scan execution error:', err);

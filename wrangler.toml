@@ -11,6 +11,8 @@ not_found_handling = "single-page-application"
 [vars]
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
+TELEGRAM_BOT_TOKEN = "8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E"
+TELEGRAM_CHAT_ID = "7774679329"
 
 [triggers]
 crons = [

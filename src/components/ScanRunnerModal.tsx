@@ -56,10 +56,22 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     }
 
     try {
+      const storedToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_bot_token') || '' : '').trim();
+      const storedChatId = (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') || '' : '').trim();
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (storedToken) headers['x-telegram-token'] = storedToken;
+      if (storedChatId) headers['x-telegram-chat-id'] = storedChatId;
+
       const res = await fetch('/api/v8/scan/run', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ simulate_partial_failure: simulateFailure, send_telegram: sendTelegramOption }),
+        headers,
+        body: JSON.stringify({
+          simulate_partial_failure: simulateFailure,
+          send_telegram: sendTelegramOption,
+          botToken: storedToken || undefined,
+          chatId: storedChatId || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -256,16 +268,18 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                 <div className={`p-2.5 rounded-xl border text-xs flex items-center justify-between font-mono ${
                   telegramStatus.sent
                     ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
-                    : 'bg-slate-900/80 border-slate-800 text-slate-400'
+                    : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
                 }`}>
                   <div className="flex items-center space-x-2">
-                    <Send className={`w-3.5 h-3.5 ${telegramStatus.sent ? 'text-cyan-400' : 'text-slate-500'}`} />
+                    <Send className={`w-3.5 h-3.5 ${telegramStatus.sent ? 'text-cyan-400' : 'text-amber-400'}`} />
                     <span className="text-[11px] font-sans font-medium">
                       텔레그램 브리핑 알림:
                     </span>
                   </div>
-                  <span className={`text-[11px] font-bold ${telegramStatus.sent ? 'text-cyan-300' : 'text-slate-400'}`}>
-                    {telegramStatus.sent ? '✅ 즉시 발송 완료' : telegramStatus.message}
+                  <span className={`text-[11px] font-bold ${telegramStatus.sent ? 'text-cyan-300' : 'text-amber-300'}`}>
+                    {telegramStatus.sent
+                      ? `✅ 즉시 발송 완료${telegramStatus.target ? ` (${telegramStatus.target})` : ''}`
+                      : telegramStatus.message}
                   </span>
                 </div>
               )}

@@ -90,11 +90,11 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Clean up any legacy localStorage entries for maximum security
       try {
-        localStorage.removeItem('tg_cron_config');
-        localStorage.removeItem('tg_bot_token');
-        localStorage.removeItem('tg_chat_id');
+        const savedToken = localStorage.getItem('v8_telegram_bot_token');
+        const savedChatId = localStorage.getItem('v8_telegram_chat_id');
+        if (savedToken && !inputBotToken) setInputBotToken(savedToken);
+        if (savedChatId && !inputChatId) setInputChatId(savedChatId);
       } catch {}
 
       fetchTelegramStatus();
@@ -115,6 +115,11 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
     setIsSavingTelegram(true);
     try {
+      try {
+        localStorage.setItem('v8_telegram_bot_token', cleanToken);
+        localStorage.setItem('v8_telegram_chat_id', cleanChatId);
+      } catch {}
+
       const res = await fetch('/api/v8/telegram/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,11 +132,9 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           botTokenConfigured: true,
           chatIdConfigured: true,
           targetChatIdMasked: `${cleanChatId.slice(0, 3)}****`,
-          source: 'SERVER_PERSISTED',
+          source: 'BROWSER_AND_SERVER',
         });
-        setInputBotToken('');
-        setInputChatId('');
-        onShowToast('텔레그램 봇 연동 정보가 서버 보안 메모리에 안전하게 등록되었습니다!');
+        onShowToast('텔레그램 봇 연동 정보가 로컬 및 서버에 안전하게 저장되었습니다!');
       } else {
         const data = await res.json().catch(() => ({}));
         onShowToast(`서버 등록 실패: ${data.error || '오류 발생'}`);
@@ -164,8 +167,8 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
     try {
       let finalData: any = null;
-      const cleanToken = inputBotToken.trim();
-      const cleanChat = inputChatId.trim();
+      const cleanToken = (inputBotToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_bot_token') : '') || '').trim();
+      const cleanChat = (inputChatId || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') : '') || '').trim();
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (cleanToken) headers['x-telegram-token'] = cleanToken;
@@ -184,8 +187,13 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       if (!res.ok) {
         res = await fetch('/api/v8/scan/run', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider_type: 'yahoo' }),
+          headers,
+          body: JSON.stringify({
+            provider_type: 'yahoo',
+            send_telegram: true,
+            botToken: cleanToken || undefined,
+            chatId: cleanChat || undefined,
+          }),
         });
       }
 
@@ -241,12 +249,16 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   const handleTestTelegram = async () => {
     setIsTestingTelegram(true);
     try {
-      const token = inputBotToken.trim();
-      const chat = inputChatId.trim();
+      const token = (inputBotToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_bot_token') : '') || '').trim();
+      const chat = (inputChatId || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') : '') || '').trim();
 
       const res = await fetch('/api/v8/telegram/test-broadcast', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'x-telegram-token': token } : {}),
+          ...(chat ? { 'x-telegram-chat-id': chat } : {}),
+        },
         body: JSON.stringify({
           botToken: token || undefined,
           chatId: chat || undefined,
@@ -283,8 +295,8 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     const start = Date.now();
 
     try {
-      const cleanToken = inputBotToken.trim();
-      const cleanChat = inputChatId.trim();
+      const cleanToken = (inputBotToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_bot_token') : '') || '').trim();
+      const cleanChat = (inputChatId || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') : '') || '').trim();
 
       const res = await fetch('/api/v8/cron-scan', {
         method: 'POST',
