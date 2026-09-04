@@ -333,7 +333,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     }
   };
 
-  const cronEndpointUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/v8/cron-scan` : '/api/v8/cron-scan';
+  const cronEndpointUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/v8/cron-scan?async=true` : '/api/v8/cron-scan?async=true';
 
   const handleCopyEndpoint = () => {
     navigator.clipboard.writeText(cronEndpointUrl);
@@ -851,12 +851,13 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
               </div>
               <div className="text-[11px] text-slate-300 leading-relaxed space-y-2 pl-1">
                 <p>
-                  <b className="text-amber-300">1. 운영 주소에서 크론 타임아웃이 났던 원인:</b><br />
-                  Cloudflare Workers는 서버리스 환경으로, 20개 종목의 실시간 데이터(시세, 일봉 차트, 펀더멘털)를 야후 파이낸스로부터 60회 이상 서브리퀘스트(Subrequest)로 호출할 때 야후의 Cloudflare IP 제한 및 지연이 발생해 <b>전체 실행 시간이 30초를 초과</b>하여 외부 크론(cron-job.org)의 30초 대기 한도를 넘겼기 때문입니다.
+                  <b className="text-amber-300">1. 외부 크론(cron-job.org) 타임아웃 방지 (?async=true):</b><br />
+                  외부 크론 서비스는 통상 15~30초 이내에 응답이 오지 않으면 '타임아웃(Timeout)'으로 실패 처리합니다.<br />
+                  이를 원천 방지하기 위해 <code className="text-cyan-300 font-mono text-[10px]">?async=true</code> 모드를 지원합니다. 외부 크론이 호출 시 <b>0.05초 만에 202 Accepted</b> 응답을 먼저 전달하여 타임아웃을 즉시 해소하고, Worker는 <code className="text-emerald-300 font-mono text-[10px]">ctx.waitUntil()</code>을 통해 백그라운드에서 실시간 스캔과 텔레그램 발송을 끝까지 완수합니다.
                 </p>
                 <p>
-                  <b className="text-emerald-300">2. 최적화 완료 (6.5초 세이프티 가드):</b><br />
-                  이제 <code className="text-cyan-300">worker.ts</code>에도 <b>6.5초 타임아웃 레이스</b>를 적용했습니다. 야후 호출이 6.5초를 넘기면 즉시 DB에 보관된 최신 평가 데이터를 채택하여 <b>무조건 7초 이내에 200 OK 응답 및 텔레그램 발송</b>을 완료합니다.
+                  <b className="text-emerald-300">2. 실시간 스캔 10초 세이프티 가드:</b><br />
+                  동기 스캔 모드에서도 야후 파이낸스 타임아웃을 2.5초로 최적화하고 10초 세이프티 가드를 적용하여 어떤 네트워크 환경에서도 연결이 끊기지 않습니다.
                 </p>
                 <p>
                   <b className="text-purple-300">3. Cloudflare 자체 내장 [Cron Triggers] 지원:</b><br />

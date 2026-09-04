@@ -56,7 +56,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(2500),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -106,7 +106,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(2000),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -202,7 +202,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(3000),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

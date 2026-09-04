@@ -103,6 +103,24 @@ async function startServer() {
       )?.trim();
 
       const sourceUrl = `${req.protocol}://${req.get('host')}`;
+      const isAsync = req.query.async === 'true' || req.body?.async === true || req.query.mode === 'async';
+
+      if (isAsync) {
+        executeCronScan({
+          botToken,
+          chatId,
+          triggeredBy: (headers['user-agent'] as string) || 'CronWebhookAsync',
+          sourceUrl,
+        }).catch((err) => console.error('[server] Async cron error:', err));
+
+        return res.status(202).json({
+          success: true,
+          status: 'ACCEPTED',
+          mode: 'async',
+          message: '크론 스캔이 백그라운드 태스크로 시작되었습니다. 완료 시 텔레그램 리포트 및 DB 저장이 자동 완수됩니다.',
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       const result = await executeCronScan({
         botToken,

@@ -73,8 +73,8 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       // Execute the real scan and wait for live quotes & evaluations to be calculated and saved to DB
       const timeoutPromise = new Promise<{ evaluations: FullTickerEvaluation[]; watchlist: any[] }>((_, reject) => {
         setTimeout(() => {
-          reject(new Error('Scan exceeded 25s safety timeout'));
-        }, 25000);
+          reject(new Error('Scan exceeded 10s safety timeout'));
+        }, 10000);
       });
 
       const scanResult = await Promise.race([

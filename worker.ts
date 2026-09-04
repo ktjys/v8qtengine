@@ -722,7 +722,34 @@ export default {
           ''
         ).trim().replace(/^['"]|['"]$/g, '');
 
-        // 2. Execute Quant Pipeline via unified executeCronScan engine
+        // Check if asynchronous background execution is requested (recommended for external cron services to avoid timeouts)
+        const isAsync =
+          url.searchParams.get('async') === 'true' ||
+          bodyData.async === true ||
+          url.searchParams.get('mode') === 'async';
+
+        if (isAsync && ctx && typeof ctx.waitUntil === 'function') {
+          const scanTask = executeCronScan({
+            botToken: botToken || undefined,
+            chatId: chatId || undefined,
+            triggeredBy: 'WorkerHttpWebhookAsync',
+            sourceUrl: url.origin,
+          }).catch((err) => {
+            console.error('[WorkerCronWebhook] Background execution error:', err);
+          });
+
+          ctx.waitUntil(scanTask);
+
+          return jsonResponse({
+            success: true,
+            status: 'ACCEPTED',
+            mode: 'async',
+            message: '크론 스캔이 백그라운드 태스크로 시작되었습니다. 스캔 완료 시 텔레그램 발송 및 DB 저장이 자동 완료됩니다.',
+            timestamp: new Date().toISOString(),
+          }, 202);
+        }
+
+        // 2. Execute Quant Pipeline synchronously
         const cronResult = await executeCronScan({
           botToken: botToken || undefined,
           chatId: chatId || undefined,
