@@ -286,12 +286,16 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   };
 
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [isTestingAsync, setIsTestingAsync] = useState(false);
+  const [asyncPollingStatus, setAsyncPollingStatus] = useState<string | null>(null);
   const [webhookTestResult, setWebhookTestResult] = useState<any>(null);
   const [copiedCurl, setCopiedCurl] = useState(false);
+  const [copiedFullUrl, setCopiedFullUrl] = useState(false);
 
   const handleTestWebhook = async () => {
     setIsTestingWebhook(true);
     setWebhookTestResult(null);
+    setAsyncPollingStatus(null);
     const start = Date.now();
 
     try {
@@ -324,11 +328,12 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
         httpStatus: res.status,
         ok: res.ok,
         latency,
+        isAsync: false,
         data,
       });
 
       if (res.ok && data.success) {
-        onShowToast(`웹훅 테스트 성공 (HTTP 200, ${latency}ms)`);
+        onShowToast(`웹훅 동기 테스트 성공 (HTTP 200, ${latency}ms)`);
       } else {
         onShowToast(`웹훅 응답 코드: HTTP ${res.status}`);
       }
@@ -337,6 +342,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
         httpStatus: 0,
         ok: false,
         latency: Date.now() - start,
+        isAsync: false,
         error: err.message,
       });
       onShowToast(`웹훅 호출 오류: ${err.message}`);
@@ -345,16 +351,135 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     }
   };
 
+  const handleTestAsyncWebhook = async () => {
+    setIsTestingAsync(true);
+    setWebhookTestResult(null);
+    setAsyncPollingStatus('비동기 요청 전송 중 (202 응답 대기)...');
+    const start = Date.now();
+
+    try {
+      const cleanToken = (inputBotToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_bot_token') : '') || '').trim();
+      const cleanChat = (inputChatId || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') : '') || '').trim();
+
+      const queryParams = new URLSearchParams({ async: 'true' });
+      if (cleanToken) queryParams.set('bot_token', cleanToken);
+      if (cleanChat) queryParams.set('chat_id', cleanChat);
+
+      const asyncUrl = `/api/v8/cron-scan?${queryParams.toString()}`;
+
+      const res = await fetch(asyncUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(cleanToken ? { 'x-telegram-token': cleanToken } : {}),
+          ...(cleanChat ? { 'x-telegram-chat-id': cleanChat } : {}),
+        },
+        body: JSON.stringify({
+          async: true,
+          botToken: cleanToken || undefined,
+          chatId: cleanChat || undefined,
+        }),
+      });
+
+      const latency = Date.now() - start;
+      const data = await res.json().catch(() => ({}));
+
+      setWebhookTestResult({
+        httpStatus: res.status,
+        ok: res.ok || res.status === 202,
+        latency,
+        isAsync: true,
+        data,
+        completed: false,
+      });
+
+      if (res.status === 202 || (res.ok && data.status === 'ACCEPTED')) {
+        onShowToast(`비동기 수신 완료 (HTTP 202, ${latency}ms) - 백그라운드 작업 시작`);
+        setAsyncPollingStatus('백그라운드 스캔 및 텔레그램 발송 진행 중... (최종 결과 자동 수신)');
+
+        let attempts = 0;
+        const pollInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const statusRes = await fetch('/api/v8/cron-scan/status');
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              if (statusData.last_scan) {
+                const ls = statusData.last_scan;
+                const scanTime = new Date(ls.timestamp).getTime();
+                if (scanTime >= start - 3000) {
+                  clearInterval(pollInterval);
+                  setIsTestingAsync(false);
+                  setAsyncPollingStatus(null);
+                  setWebhookTestResult({
+                    httpStatus: 202,
+                    ok: true,
+                    latency,
+                    isAsync: true,
+                    data: ls,
+                    completed: true,
+                  });
+                  const isSent = ls.telegram_status?.sent;
+                  onShowToast(
+                    isSent
+                      ? '✅ 텔레그램 알림 발송 완료!'
+                      : `스캔 완료 (텔레그램: ${ls.telegram_status?.message || '완료'})`
+                  );
+                  return;
+                }
+              }
+            }
+          } catch {}
+
+          if (attempts >= 8) {
+            clearInterval(pollInterval);
+            setIsTestingAsync(false);
+            setAsyncPollingStatus(null);
+          }
+        }, 1500);
+      } else {
+        setIsTestingAsync(false);
+        setAsyncPollingStatus(null);
+        onShowToast(`비동기 호출 응답: HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      setIsTestingAsync(false);
+      setAsyncPollingStatus(null);
+      setWebhookTestResult({
+        httpStatus: 0,
+        ok: false,
+        latency: Date.now() - start,
+        isAsync: true,
+        error: err.message,
+      });
+      onShowToast(`비동기 웹훅 오류: ${err.message}`);
+    }
+  };
+
   const cronEndpointUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/v8/cron-scan?async=true` : '/api/v8/cron-scan?async=true';
+
+  const cleanSavedToken = (inputBotToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_bot_token') : '') || '').trim();
+  const cleanSavedChat = (inputChatId || (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') : '') || '').trim();
+
+  const fullCronUrlWithCredentials = cleanSavedToken && cleanSavedChat
+    ? `${cronEndpointUrl}&bot_token=${cleanSavedToken}&chat_id=${cleanSavedChat}`
+    : `${cronEndpointUrl}&bot_token=YOUR_BOT_TOKEN&chat_id=YOUR_CHAT_ID`;
 
   const handleCopyEndpoint = () => {
     navigator.clipboard.writeText(cronEndpointUrl);
     setCopiedUrl(true);
-    onShowToast('스캔 엔드포인트 URL이 클립보드에 복사되었습니다.');
+    onShowToast('스캔 기본 URL이 클립보드에 복사되었습니다.');
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
-  const curlExample = `curl -X POST "${cronEndpointUrl}"`;
+  const handleCopyFullUrl = () => {
+    navigator.clipboard.writeText(fullCronUrlWithCredentials);
+    setCopiedFullUrl(true);
+    onShowToast('토큰 포함 전체 URL이 클립보드에 복사되었습니다.');
+    setTimeout(() => setCopiedFullUrl(false), 2000);
+  };
+
+  const curlExample = `curl -X POST "${fullCronUrlWithCredentials}"`;
 
   const handleCopyCurl = () => {
     navigator.clipboard.writeText(curlExample);

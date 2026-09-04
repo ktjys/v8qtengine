@@ -1,6 +1,14 @@
 import { SignalSnapshot } from '../types/v8';
 import { buildSignalTelegramMessage, buildScanSummaryTelegramMessage } from './templates';
 
+export function escapeTelegramHtml(text?: string | null): string {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function sanitizeToken(token?: string | null): string | null {
   if (!token) return null;
   let clean = token.trim().replace(/^['"]|['"]$/g, '');
@@ -20,13 +28,19 @@ export class TelegramNotifier {
   private chatId: string | null = null;
 
   constructor() {
-    this.botToken = sanitizeToken(process.env.TELEGRAM_BOT_TOKEN || null);
-    this.chatId = sanitizeChatId(process.env.TELEGRAM_CHAT_ID || null);
+    this.botToken = sanitizeToken(
+      process.env.TELEGRAM_BOT_TOKEN || '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+    );
+    this.chatId = sanitizeChatId(
+      process.env.TELEGRAM_CHAT_ID || '7774679329'
+    );
   }
 
   setConfig(botToken?: string, chatId?: string) {
     if (botToken !== undefined) this.botToken = sanitizeToken(botToken);
     if (chatId !== undefined) this.chatId = sanitizeChatId(chatId);
+    if (this.botToken) process.env.TELEGRAM_BOT_TOKEN = this.botToken;
+    if (this.chatId) process.env.TELEGRAM_CHAT_ID = this.chatId;
   }
 
   getConfig() {
@@ -54,7 +68,7 @@ export class TelegramNotifier {
 
     try {
       const url = `https://api.telegram.org/bot${token}/sendMessage`;
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -64,7 +78,25 @@ export class TelegramNotifier {
         }),
       });
 
-      const resData = await res.json().catch(() => ({}));
+      let resData = await res.json().catch(() => ({}));
+
+      // Fallback: If Telegram fails due to entity parsing (e.g. unescaped HTML characters), retry as plain text
+      if (!res.ok || !resData.ok) {
+        const desc = resData.description || `HTTP ${res.status}`;
+        if (desc.includes("can't parse entities") || desc.includes('entity') || desc.includes('tag')) {
+          console.warn('[TelegramNotifier] HTML parsing failed, retrying as plain text:', desc);
+          const plainText = text.replace(/<[^>]*>/g, '');
+          res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chat,
+              text: plainText,
+            }),
+          });
+          resData = await res.json().catch(() => ({}));
+        }
+      }
 
       if (!res.ok || !resData.ok) {
         const desc = resData.description || `HTTP ${res.status}`;

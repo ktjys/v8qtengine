@@ -10,7 +10,8 @@ import { backtestRouter } from './src/api/backtestRoutes';
 import { runRouter } from './src/api/runRoutes';
 import { systemRouter } from './src/api/systemRoutes';
 import { telegramRouter } from './src/api/telegramRoutes';
-import { executeCronScan } from './src/engine/cronScanEngine';
+import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
+import { telegramNotifier } from './src/notification/telegramNotifier';
 import { internalScheduler } from './src/services/internalScheduler';
 import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
@@ -83,41 +84,80 @@ async function startServer() {
     }
 
     try {
-      const q = req.query || {};
+      // Robust query string parsing supporting multiple '?' (e.g. ?async=true?bot_token=...)
+      const queryParams: Record<string, string> = {};
+      if (req.url && req.url.includes('?')) {
+        const rawQueryPart = req.url.substring(req.url.indexOf('?') + 1);
+        const normalizedQuery = rawQueryPart.replace(/\?/g, '&');
+        const searchParams = new URLSearchParams(normalizedQuery);
+        for (const [k, v] of searchParams.entries()) {
+          queryParams[k] = v;
+        }
+      }
+      for (const [k, v] of Object.entries(req.query || {})) {
+        if (typeof v === 'string') queryParams[k] = v;
+      }
+
       const b = req.body || {};
       const headers = req.headers || {};
+      const cfg = telegramNotifier.getConfig();
 
       const botToken = (
-        (q.bot_token as string) ||
-        (q.token as string) ||
+        queryParams.bot_token ||
+        queryParams.botToken ||
+        queryParams.token ||
         b.botToken ||
+        b.bot_token ||
+        b.token ||
         (headers['x-telegram-token'] as string) ||
-        process.env.TELEGRAM_BOT_TOKEN
-      )?.trim();
+        cfg.botToken ||
+        process.env.TELEGRAM_BOT_TOKEN ||
+        '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+      )?.trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
 
       const chatId = (
-        (q.chat_id as string) ||
+        queryParams.chat_id ||
+        queryParams.chatId ||
+        queryParams.chat ||
         b.chatId ||
+        b.chat_id ||
+        b.chat ||
         (headers['x-telegram-chat-id'] as string) ||
-        process.env.TELEGRAM_CHAT_ID
-      )?.trim();
+        cfg.chatId ||
+        process.env.TELEGRAM_CHAT_ID ||
+        '7774679329'
+      )?.trim().replace(/^['"]|['"]$/g, '');
 
       const sourceUrl = `${req.protocol}://${req.get('host')}`;
-      const isAsync = req.query.async === 'true' || req.body?.async === true || req.query.mode === 'async';
+      const isAsync =
+        queryParams.async === 'true' ||
+        queryParams.async === '1' ||
+        queryParams.mode === 'async' ||
+        b.async === true ||
+        b.mode === 'async';
 
       if (isAsync) {
+        console.log(`[server] 🚀 Async cron triggered (botToken: ${botToken ? 'provided' : 'none'}, chat: ${chatId})`);
+
         executeCronScan({
           botToken,
           chatId,
           triggeredBy: (headers['user-agent'] as string) || 'CronWebhookAsync',
           sourceUrl,
-        }).catch((err) => console.error('[server] Async cron error:', err));
+        })
+          .then((scanRes) => {
+            console.log(`[server] ✅ Async cron scan completed! Evaluated: ${scanRes.evaluated_count}, Signals: ${scanRes.actionable_signals_count}, Telegram: ${scanRes.telegram_status?.sent ? 'SENT(' + scanRes.telegram_status.target + ')' : scanRes.telegram_status?.message}`);
+          })
+          .catch((err) => {
+            console.error('[server] ❌ Async cron background error:', err);
+          });
 
         return res.status(202).json({
           success: true,
           status: 'ACCEPTED',
           mode: 'async',
           message: '크론 스캔이 백그라운드 태스크로 시작되었습니다. 완료 시 텔레그램 리포트 및 DB 저장이 자동 완수됩니다.',
+          telegram_target: chatId ? `${chatId.slice(0, 3)}****` : null,
           timestamp: new Date().toISOString(),
         });
       }
@@ -140,7 +180,25 @@ async function startServer() {
     }
   };
 
-  app.all(['/api/v8/cron-scan', '/api/cron-scan', '/api/v8/cron', '/api/cron', '/cron-scan'], cronHandler);
+  // Status endpoint for checking the last cron scan result (especially useful for async mode confirmation)
+  app.get(['/api/v8/cron-scan/status', '/api/v8/cron/status', '/api/v8/cron/last-run'], (req, res) => {
+    const lastResult = getLastCronScanResult();
+    res.json({
+      success: true,
+      last_scan: lastResult,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  app.all([
+    '/api/v8/cron-scan',
+    '/api/cron-scan',
+    '/api/v8/cron',
+    '/api/cron',
+    '/cron-scan',
+    '/api/v8/scan/cron',
+    '/api/scan/cron',
+  ], cronHandler);
 
   // Schedule information and internal scheduler endpoints
   app.get('/api/v8/schedule/status', (req, res) => {

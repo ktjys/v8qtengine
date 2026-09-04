@@ -13,7 +13,7 @@ import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runV8PipelineOnSeedData 
 import { SignalSnapshot } from './src/types/v8';
 import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
-import { executeCronScan } from './src/engine/cronScanEngine';
+import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { telegramNotifier } from './src/notification/telegramNotifier';
 
 function jsonResponse(data: any, status = 200) {
@@ -745,6 +745,20 @@ export default {
       }
     }
 
+    // ========== Cron Scan Status Check ==========
+    if (
+      path === '/api/v8/cron-scan/status' ||
+      path === '/api/v8/cron/status' ||
+      path === '/api/v8/cron/last-run'
+    ) {
+      const lastResult = getLastCronScanResult();
+      return jsonResponse({
+        success: true,
+        last_scan: lastResult,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     // ========== Cron Scan Webhook ==========
     if (
       path === '/api/v8/cron-scan' ||
@@ -759,16 +773,20 @@ export default {
         const startTime = Date.now();
         const runId = `CRON_${Date.now()}`;
 
+        // Robust query parsing handling multiple '?' (e.g. ?async=true?bot_token=...)
+        const rawSearch = url.search ? url.search.substring(1).replace(/\?/g, '&') : '';
+        const searchParams = new URLSearchParams(rawSearch);
+
         // 1. Cron Secret Token Check (Security Gate)
         const secretToken = env?.CRON_SECRET_TOKEN || env?.V8_CRON_SECRET || process.env.CRON_SECRET_TOKEN;
         if (secretToken) {
           const authHeader = request.headers.get('authorization') || '';
           const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : null;
           const providedToken =
-            url.searchParams.get('cron_token') ||
-            url.searchParams.get('token') ||
-            url.searchParams.get('secret') ||
-            url.searchParams.get('key') ||
+            searchParams.get('cron_token') ||
+            searchParams.get('token') ||
+            searchParams.get('secret') ||
+            searchParams.get('key') ||
             request.headers.get('x-cron-token') ||
             bearerToken;
 
@@ -792,27 +810,36 @@ export default {
         const botToken = (
           env?.TELEGRAM_BOT_TOKEN ||
           process.env.TELEGRAM_BOT_TOKEN ||
-          url.searchParams.get('bot_token') ||
-          url.searchParams.get('token') ||
+          searchParams.get('bot_token') ||
+          searchParams.get('botToken') ||
+          searchParams.get('token') ||
           bodyData.botToken ||
+          bodyData.bot_token ||
+          bodyData.token ||
           request.headers.get('x-telegram-token') ||
-          ''
+          '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
         ).trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
 
         const chatId = (
           env?.TELEGRAM_CHAT_ID ||
           process.env.TELEGRAM_CHAT_ID ||
-          url.searchParams.get('chat_id') ||
+          searchParams.get('chat_id') ||
+          searchParams.get('chatId') ||
+          searchParams.get('chat') ||
           bodyData.chatId ||
+          bodyData.chat_id ||
+          bodyData.chat ||
           request.headers.get('x-telegram-chat-id') ||
-          ''
+          '7774679329'
         ).trim().replace(/^['"]|['"]$/g, '');
 
         // Check if asynchronous background execution is requested (recommended for external cron services to avoid timeouts)
         const isAsync =
-          url.searchParams.get('async') === 'true' ||
+          searchParams.get('async') === 'true' ||
+          searchParams.get('async') === '1' ||
           bodyData.async === true ||
-          url.searchParams.get('mode') === 'async';
+          searchParams.get('mode') === 'async' ||
+          bodyData.mode === 'async';
 
         if (isAsync && ctx && typeof ctx.waitUntil === 'function') {
           const scanTask = executeCronScan({
@@ -831,6 +858,7 @@ export default {
             status: 'ACCEPTED',
             mode: 'async',
             message: '크론 스캔이 백그라운드 태스크로 시작되었습니다. 스캔 완료 시 텔레그램 발송 및 DB 저장이 자동 완료됩니다.',
+            telegram_target: chatId ? `${chatId.slice(0, 3)}****` : null,
             timestamp: new Date().toISOString(),
           }, 202);
         }

@@ -3,9 +3,16 @@ import { scanRunRepository } from '../db/repositories/scanRunRepository';
 import { signalRepository } from '../db/repositories/signalRepository';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { scanService } from '../pipeline/scanService';
-import { telegramNotifier } from '../notification/telegramNotifier';
+import { telegramNotifier, escapeTelegramHtml } from '../notification/telegramNotifier';
 import { createSignalSnapshot } from './signalEngine';
 import { FullTickerEvaluation, ScanRunLog } from '../types/v8';
+
+// In-memory cache of the latest cron scan execution (useful for async status polling)
+let lastCronScanResult: CronScanResult | null = null;
+
+export function getLastCronScanResult(): CronScanResult | null {
+  return lastCronScanResult;
+}
 
 export interface CronScanOptions {
   botToken?: string | null;
@@ -101,28 +108,7 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
 
     actionable = evaluations.filter((e) => e.signal_generated);
 
-    // 4. Record the scan run log
-    const durationMs = Date.now() - startTime;
-    const runLog: ScanRunLog = {
-      run_id: runId,
-      started_at: new Date(startTime).toISOString(),
-      finished_at: new Date().toISOString(),
-      watchlist_count: watchlistTotalCount,
-      evaluated_count: evaluations.length,
-      signal_count: actionable.length,
-      failure_count: scanError ? 1 : 0,
-      failed_tickers: scanError ? [{ ticker: 'SCAN_SERVICE', error: scanError }] : [],
-      status: scanError ? 'FAILED' : 'SUCCESS',
-      error_summary: scanError ? `스캔 오류: ${scanError}` : `${slotName} 무결성 스캔 완료 (${actionable.length}건 시그널 도출)`,
-    };
-
-    try {
-      await scanRunRepository.save(runLog);
-    } catch (err) {
-      console.warn('[CronScan] Failed to save scan run log:', err);
-    }
-
-    // 5. Telegram Notification
+    // 4. Telegram Notification (Prepared and sent before database log commit)
     let telegramResult = {
       configured: false,
       sent: false,
@@ -131,8 +117,19 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       message: '텔레그램 봇 토큰/챗ID 미설정 (시뮬레이션 모드)',
     };
 
-    const token = options.botToken || process.env.TELEGRAM_BOT_TOKEN;
-    const chat = options.chatId || process.env.TELEGRAM_CHAT_ID;
+    const cfg = telegramNotifier.getConfig();
+    const token = (
+      options.botToken ||
+      cfg.botToken ||
+      process.env.TELEGRAM_BOT_TOKEN ||
+      '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+    );
+    const chat = (
+      options.chatId ||
+      cfg.chatId ||
+      process.env.TELEGRAM_CHAT_ID ||
+      '7774679329'
+    );
 
     if (token && chat) {
       const cleanToken = token.trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
@@ -140,7 +137,7 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       const maskedTarget = cleanChat ? `${cleanChat.slice(0, 3)}****` : null;
 
       let reportText = `<b>📊 퀀트 엔진 자동 스캔 리포트</b>\n`;
-      reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${slotName})\n`;
+      reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${escapeTelegramHtml(slotName)})\n`;
       reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
       reportText += `• <b>모니터링 대상:</b> ${evaluations.length}개 자산\n`;
       reportText += `• <b>유효 진입 신호:</b> <b>${actionable.length}건</b>\n`;
@@ -151,17 +148,23 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
         actionable.slice(0, 4).forEach((sig, idx) => {
           const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
           const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-          reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
+          const safeName = escapeTelegramHtml(sig.name);
+          const safeTicker = escapeTelegramHtml(sig.ticker);
+          const safeDecision = escapeTelegramHtml(sig.decision?.decision || 'BUY');
+          const safeReason = escapeTelegramHtml(sig.decision?.reason || '기술적 반등 및 모멘텀 지속');
+
+          reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
           reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
-          reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
-          reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 모멘텀 지속'}\n\n`;
+          reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${safeDecision}</code>\n`;
+          reportText += `   - 핵심이유: ${safeReason}\n\n`;
         });
       } else {
         reportText += `ℹ️ 현재 엄격한 리스크 제약을 통과한 신규 진입 신호가 없습니다. (안전 자산/현금 비중 유지 권장)\n\n`;
       }
 
       if (options.sourceUrl) {
-        reportText += `🔗 <a href="${options.sourceUrl}">퀀트 시스템 대시보드 바로가기</a>`;
+        const safeUrl = options.sourceUrl.replace(/[<>"']/g, '').trim();
+        reportText += `🔗 <a href="${safeUrl}">퀀트 시스템 대시보드 바로가기</a>`;
       }
 
       const sendRes = await telegramNotifier.sendMessage(reportText, cleanToken, cleanChat);
@@ -193,7 +196,34 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       }
     }
 
-    return {
+    // 5. Record the scan run log (including Telegram dispatch result)
+    const durationMs = Date.now() - startTime;
+    const tgStatusSummary = telegramResult.sent
+      ? `[텔레그램: 발송완료(${telegramResult.target})]`
+      : `[텔레그램: ${telegramResult.message}]`;
+
+    const runLog: ScanRunLog = {
+      run_id: runId,
+      started_at: new Date(startTime).toISOString(),
+      finished_at: new Date().toISOString(),
+      watchlist_count: watchlistTotalCount,
+      evaluated_count: evaluations.length,
+      signal_count: actionable.length,
+      failure_count: scanError ? 1 : 0,
+      failed_tickers: scanError ? [{ ticker: 'SCAN_SERVICE', error: scanError }] : [],
+      status: scanError ? 'FAILED' : 'SUCCESS',
+      error_summary: scanError
+        ? `스캔 오류: ${scanError} ${tgStatusSummary}`
+        : `${slotName} 무결성 스캔 완료 (${actionable.length}건 시그널 도출) ${tgStatusSummary}`,
+    };
+
+    try {
+      await scanRunRepository.save(runLog);
+    } catch (err) {
+      console.warn('[CronScan] Failed to save scan run log:', err);
+    }
+
+    const finalResult: CronScanResult = {
       success: true,
       timestamp: new Date().toISOString(),
       slot: slotName,
@@ -214,9 +244,12 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       telegram_status: telegramResult,
       run_id: runId,
     };
+
+    lastCronScanResult = finalResult;
+    return finalResult;
   } catch (err: any) {
     console.error('[executeCronScan] Error during cron scan:', err);
-    return {
+    const failResult: CronScanResult = {
       success: false,
       timestamp: new Date().toISOString(),
       slot: slotName,
@@ -233,5 +266,7 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       run_id: runId,
       error: err.message,
     };
+    lastCronScanResult = failResult;
+    return failResult;
   }
 }
