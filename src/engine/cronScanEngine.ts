@@ -70,16 +70,11 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
     let scanError: string | undefined;
 
     try {
-      const timeoutPromise = new Promise<{ evaluations: FullTickerEvaluation[]; watchlist: any[] }>((resolve) => {
-        setTimeout(async () => {
-          console.warn('[CronScan] Scan exceeded 6.5s safety limit. Reusing latest database evaluations for instant response.');
-          try {
-            const cached = await evaluationRepository.getAll();
-            resolve({ evaluations: cached || [], watchlist: cached || [] });
-          } catch {
-            resolve({ evaluations: [], watchlist: [] });
-          }
-        }, 6500);
+      // Execute the real scan and wait for live quotes & evaluations to be calculated and saved to DB
+      const timeoutPromise = new Promise<{ evaluations: FullTickerEvaluation[]; watchlist: any[] }>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Scan exceeded 25s safety timeout'));
+        }, 25000);
       });
 
       const scanResult = await Promise.race([

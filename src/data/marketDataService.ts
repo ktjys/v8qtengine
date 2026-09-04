@@ -132,12 +132,15 @@ export class MarketDataService {
       if (dbBars.length > 0) {
         const quoteDate = liveQuote.timestamp ? liveQuote.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
         const lastBar = dbBars[dbBars.length - 1];
+        let barToSave: OHLCVBar | null = null;
+
         if (lastBar.date === quoteDate) {
           lastBar.close = liveQuote.price;
           lastBar.high = Math.max(lastBar.high, liveQuote.price);
           lastBar.low = Math.min(lastBar.low, liveQuote.price);
+          barToSave = lastBar;
         } else if (quoteDate >= lastBar.date) {
-          dbBars.push({
+          const newBar: OHLCVBar = {
             date: quoteDate,
             open: Math.round((liveQuote.price - (liveQuote.change || 0)) * 100) / 100,
             high: Math.max(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
@@ -145,7 +148,13 @@ export class MarketDataService {
             close: liveQuote.price,
             adjClose: liveQuote.price,
             volume: 100000,
-          });
+          };
+          dbBars.push(newBar);
+          barToSave = newBar;
+        }
+
+        if (barToSave) {
+          marketDataRepository.saveBars(cleanTicker, [barToSave], this.provider.name).catch(() => null);
         }
       }
     }

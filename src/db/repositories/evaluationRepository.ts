@@ -54,7 +54,6 @@ export class EvaluationRepository {
           risk_level: ev.risk?.risk_level ?? 'MEDIUM',
           decision: ev.decision?.decision ?? 'HOLD',
           confidence: ev.decision?.confidence ?? 0.8,
-          signal_generated: ev.signal_generated === true,
           reason_json: {
             name: ev.name,
             price: ev.price,

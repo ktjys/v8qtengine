@@ -36,10 +36,12 @@ export class HistoricalDataProvider {
       dbFetchLimit = 1500;
     }
 
-    // 1. Try DB first (only if DB has genuine non-seed bars with enough length)
+    // 1. Try DB first (only if DB has genuine non-seed bars with enough length and fresh within 24h)
     const dbBars = await marketDataRepository.getBars(clean, dbFetchLimit);
     const hasSeedBar = dbBars?.some((b) => b.source === 'seed');
-    if (dbBars && dbBars.length >= minBarsNeeded && !hasSeedBar) {
+    const lastBarTime = dbBars && dbBars.length > 0 ? new Date(dbBars[dbBars.length - 1].date).getTime() : 0;
+    const isDbFresh = dbBars && dbBars.length >= minBarsNeeded && !hasSeedBar && (Date.now() - lastBarTime < 24 * 60 * 60 * 1000);
+    if (isDbFresh) {
       return dbBars;
     }
 
@@ -59,7 +61,12 @@ export class HistoricalDataProvider {
         return bars;
       }
     } catch (err) {
-      console.warn(`[HistoricalDataProvider] Yahoo fetch failed for ${clean}, using seed fallback:`, (err as Error).message);
+      console.warn(`[HistoricalDataProvider] Yahoo fetch failed for ${clean}:`, (err as Error).message);
+    }
+
+    // If DB had enough non-seed bars, use them even if older than 24h before resorting to synthetic seed
+    if (dbBars && dbBars.length >= minBarsNeeded && !hasSeedBar) {
+      return dbBars;
     }
 
     // 3. Fallback to Seed (결정적 재현을 위해 DB에 영속화하지 않는다)

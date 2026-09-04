@@ -14,6 +14,7 @@ import { SignalSnapshot } from './src/types/v8';
 import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan } from './src/engine/cronScanEngine';
+import { telegramNotifier } from './src/notification/telegramNotifier';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -34,8 +35,8 @@ async function ensureDbConnected(env: any): Promise<boolean> {
   if (dbInitialized) return dbClient.isSupabaseConnected;
   dbInitialized = true;
 
-  const envUrl = env?.SUPABASE_URL || '';
-  const envKey = env?.SUPABASE_KEY || '';
+  const envUrl = env?.SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : '') || '';
+  const envKey = env?.SUPABASE_KEY || (typeof process !== 'undefined' ? process.env?.SUPABASE_KEY : '') || '';
   if (envUrl && envKey) {
     const result = await dbClient.connectFromTrustedEnv(envUrl, envKey);
     return result.success;
@@ -507,15 +508,86 @@ export default {
 
     // ========== Telegram & Cron ==========
     if (path === '/api/v8/telegram/status') {
-      const envToken = env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
-      const envChatId = env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '';
+      const cfg = telegramNotifier.getConfig();
+      const envToken = env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || cfg.botToken || '';
+      const envChatId = env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || cfg.chatId || '';
       return jsonResponse({
         success: true,
         configured: Boolean(envToken && envChatId),
         botTokenConfigured: Boolean(envToken),
         chatIdConfigured: Boolean(envChatId),
         targetChatIdMasked: envChatId ? `${envChatId.slice(0, 3)}****` : null,
+        source: (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN) ? 'ENV_VARIABLE' : cfg.botToken ? 'UI_SESSION' : 'UNCONFIGURED',
       });
+    }
+
+    if (path === '/api/v8/telegram/config' && method === 'POST') {
+      try {
+        let body: any = {};
+        try { body = await request.json(); } catch {}
+        const { botToken, chatId } = body || {};
+        telegramNotifier.setConfig(botToken, chatId);
+        return jsonResponse({
+          success: true,
+          message: '텔레그램 봇 연동 정보가 설정되었습니다.',
+          status: {
+            configured: Boolean(botToken && chatId),
+            targetChatIdMasked: chatId ? `${chatId.slice(0, 3)}****` : null,
+          }
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
+    if (path === '/api/v8/schedule/status') {
+      const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+      const kstHour = nowKST.getUTCHours();
+      const kstMinute = nowKST.getUTCMinutes();
+      const kstTimeStr = `${String(kstHour).padStart(2, '0')}:${String(kstMinute).padStart(2, '0')} KST`;
+
+      let nextSlot = {
+        id: 'PRE_MARKET',
+        name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축',
+        target_time: '22:00 KST',
+      };
+      if (kstHour < 6 || (kstHour === 6 && kstMinute < 30)) {
+        nextSlot = { id: 'POST_MARKET', name: '🌅 미국 정규장 마감 브리핑 (종가 확정)', target_time: '06:30 KST' };
+      } else if (kstHour < 22) {
+        nextSlot = { id: 'PRE_MARKET', name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축', target_time: '22:00 KST' };
+      } else {
+        nextSlot = { id: 'INTRADAY', name: '🌙 장중 급변 & 모멘텀 브레이크아웃 감시', target_time: '02:00 KST' };
+      }
+
+      return jsonResponse({
+        success: true,
+        active: true,
+        current_kst_time: kstTimeStr,
+        last_executed_slot: 'Cloudflare Cron 활성화',
+        next_scheduled_slot: nextSlot,
+        schedules: [
+          { id: 'POST_MARKET', name: '🌅 미국 정규장 마감 브리핑 (종가 확정)', time: '06:30 KST' },
+          { id: 'PRE_MARKET', name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축', time: '22:00 KST' },
+          { id: 'INTRADAY', name: '🌙 장중 급변 & 모멘텀 브레이크아웃 감시', time: '02:00 KST' },
+        ],
+      });
+    }
+
+    if (path === '/api/v8/schedule/trigger' && method === 'POST') {
+      try {
+        const cfg = telegramNotifier.getConfig();
+        const botToken = (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || cfg.botToken || '').trim();
+        const chatId = (env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || cfg.chatId || '').trim();
+        const result = await executeCronScan({
+          botToken: botToken || undefined,
+          chatId: chatId || undefined,
+          triggeredBy: 'ManualTrigger',
+          sourceUrl: url.origin,
+        });
+        return jsonResponse(result);
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
     }
 
     if (path === '/api/v8/telegram/test-broadcast' && method === 'POST') {
@@ -593,7 +665,9 @@ export default {
       path === '/api/cron-scan' ||
       path === '/api/v8/cron' ||
       path === '/api/cron' ||
-      path === '/cron-scan'
+      path === '/cron-scan' ||
+      path === '/api/v8/scan/cron' ||
+      path === '/api/scan/cron'
     ) {
       try {
         const startTime = Date.now();
@@ -678,11 +752,12 @@ export default {
     await ensureDbConnected(env);
     console.log('[Cloudflare Cron Trigger] Scheduled event triggered:', event?.cron);
 
-    const botToken = (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '')
+    const cfg = telegramNotifier.getConfig();
+    const botToken = (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || cfg.botToken || '')
       .trim()
       .replace(/^['"]|['"]$/g, '')
       .replace(/^bot/i, '');
-    const chatId = (env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '')
+    const chatId = (env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || cfg.chatId || '')
       .trim()
       .replace(/^['"]|['"]$/g, '');
 
@@ -690,12 +765,13 @@ export default {
       triggeredBy: `CloudflareCron:${event?.cron || 'scheduled'}`,
       botToken: botToken || undefined,
       chatId: chatId || undefined,
+    }).catch((err) => {
+      console.error('[Cloudflare Cron Trigger] Execution error:', err);
     });
 
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(scanTask);
-    } else {
-      await scanTask;
     }
+    await scanTask;
   },
 };

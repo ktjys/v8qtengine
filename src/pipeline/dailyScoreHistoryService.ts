@@ -113,9 +113,12 @@ export class DailyScoreHistoryService {
     // 4. Calculate day by day Point-in-Time metrics
     const allHistory: DailyScorePoint[] = [];
 
-    // PIT fundamentals를 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
+    // PIT fundamentals 및 classification을 배치로 1회 조회 후 포인터로 소비 (bar별 getAsOf N+1 방지)
     const fundHistory = await fundamentalsRepository.getHistoryAsOf(cleanTicker);
     let fundHistoryIdx = 0;
+
+    const classHistory = await classificationRepository.getHistoryAsOf(cleanTicker);
+    let classHistoryIdx = 0;
 
     // Warmup period requires at least 25 bars for indicators
     const startIndex = Math.max(25, 0);
@@ -131,7 +134,13 @@ export class DailyScoreHistoryService {
         benchmarkBars.length > 0 ? benchmarkBars.filter((b) => b.date <= barDate) : undefined;
 
       // PIT 수동 오버라이드: barDate 기준 유효한 분류만 적용 (미래 오버라이드 look-ahead 방지)
-      const manualOverride = await classificationRepository.getAsOf(cleanTicker, barDate);
+      while (classHistoryIdx + 1 < classHistory.length && (classHistory[classHistoryIdx + 1].effective_date || '') <= barDate) {
+        classHistoryIdx++;
+      }
+      const manualOverride =
+        classHistory[classHistoryIdx] && (classHistory[classHistoryIdx].effective_date || '') <= barDate
+          ? classHistory[classHistoryIdx]
+          : null;
 
       // Momentum-derived beta for classification (PIT over the same bar window)
       const mom = calculateMomentumIndicators(pitBars, pitBenchmark);

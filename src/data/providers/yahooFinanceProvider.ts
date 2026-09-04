@@ -44,7 +44,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const cached = this.getCached<QuoteData>(cacheKey, 30 * 1000);
     if (cached) return cached;
 
-    // 1. Race Yahoo Chart API (query1 & query2 simultaneously for instant response)
+    // 1. Try Yahoo Chart API (query1 then query2)
     const chartUrls = [
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
@@ -56,7 +56,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -86,15 +86,15 @@ export class YahooFinanceProvider implements MarketDataProvider {
       };
     };
 
-    try {
-      const quote = await Promise.any(chartUrls.map(fetchChartQuote));
-      this.setCache(cacheKey, quote);
-      return quote;
-    } catch {
-      // Proceed to fallback
+    for (const url of chartUrls) {
+      try {
+        const quote = await fetchChartQuote(url);
+        this.setCache(cacheKey, quote);
+        return quote;
+      } catch {}
     }
 
-    // 2. Race Yahoo Quote API v7 (query1 & query2)
+    // 2. Try Yahoo Quote API v7 (query1 then query2)
     const quoteUrls = [
       `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
       `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
@@ -106,7 +106,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -135,18 +135,18 @@ export class YahooFinanceProvider implements MarketDataProvider {
       };
     };
 
-    try {
-      const quote = await Promise.any(quoteUrls.map(fetchQuoteV7));
-      this.setCache(cacheKey, quote);
-      return quote;
-    } catch {
-      // Proceed to fallback
+    for (const url of quoteUrls) {
+      try {
+        const quote = await fetchQuoteV7(url);
+        this.setCache(cacheKey, quote);
+        return quote;
+      } catch {}
     }
 
     // 3. Try Stooq quote fallback
     try {
       const stooqUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&f=sd2t2ohlcv&h&e=csv`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2000) });
+      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
       if (sRes.ok) {
         const csvText = await sRes.text();
         const lines = csvText.trim().split('\n');
@@ -202,7 +202,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(6000),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -241,18 +241,18 @@ export class YahooFinanceProvider implements MarketDataProvider {
       return bars;
     };
 
-    try {
-      const bars = await Promise.any(urls.map(fetchHistoryFromUrl));
-      this.setCache(cacheKey, bars);
-      return bars;
-    } catch {
-      // try fallback
+    for (const url of urls) {
+      try {
+        const bars = await fetchHistoryFromUrl(url);
+        this.setCache(cacheKey, bars);
+        return bars;
+      } catch {}
     }
 
     // Try Stooq historical daily CSV fallback
     try {
       const stooqUrl = `https://stooq.com/q/d/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&i=d`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2500) });
+      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
       if (sRes.ok) {
         const csvText = await sRes.text();
         const lines = csvText.trim().split('\n');
