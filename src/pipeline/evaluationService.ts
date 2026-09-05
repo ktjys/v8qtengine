@@ -1,5 +1,5 @@
 import { AssetClassification, FullTickerEvaluation } from '../types/v8';
-import { MarketDataService, ProcessedAssetData } from '../data/marketDataService';
+import { MarketDataService, ProcessedAssetData, marketDataService as defaultMarketDataService } from '../data/marketDataService';
 import { classifyAsset } from '../engine/classificationEngine';
 import { evaluateV8, MarketSnapshot } from '../engine/evaluateV8';
 
@@ -7,7 +7,7 @@ export class EvaluationService {
   private marketDataService: MarketDataService;
 
   constructor(marketDataService?: MarketDataService) {
-    this.marketDataService = marketDataService || new MarketDataService();
+    this.marketDataService = marketDataService || defaultMarketDataService;
   }
 
   setProvider(providerType: 'yahoo' | 'seed') {

@@ -44,7 +44,14 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const cached = this.getCached<QuoteData>(cacheKey, 30 * 1000);
     if (cached) return cached;
 
-    // 1. Try Yahoo Chart API (query1 then query2)
+    // 1. Fetch 1y chart which populates BOTH quote cache and 1y history cache in 1 single subrequest
+    try {
+      await this.getHistorical(clean, '1y', '1d');
+      const newlyCached = this.getCached<QuoteData>(cacheKey);
+      if (newlyCached) return newlyCached;
+    } catch {}
+
+    // 2. Fallback to 5d chart if 1y timed out
     const chartUrls = [
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
@@ -209,6 +216,28 @@ export class YahooFinanceProvider implements MarketDataProvider {
       const json = await res.json();
       const result = json?.chart?.result?.[0];
       if (!result) throw new Error('No chart result');
+
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (meta && typeof (meta.regularMarketPrice ?? meta.previousClose) === 'number') {
+        const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
+        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
+        const change = currentPrice - prevClose;
+        const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+        const quoteObj: QuoteData = {
+          ticker: clean,
+          price: Math.round(currentPrice * 100) / 100,
+          change: Math.round(change * 100) / 100,
+          changePercent: Math.round(changePercent * 100) / 100,
+          currency: meta.currency || 'USD',
+          exchange: meta.exchangeName || 'US',
+          shortName: meta.shortName || meta.symbol || clean,
+          longName: meta.longName || meta.shortName || clean,
+          fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+          fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+          timestamp: new Date().toISOString(),
+        };
+        this.setCache(`quote_${clean}`, quoteObj);
+      }
 
       const timestamps: number[] = result.timestamp || [];
       const quoteObj = result.indicators?.quote?.[0] || {};

@@ -96,9 +96,48 @@ export class FundamentalsRepository {
     }
   }
 
+  /**
+   * Preload all fundamentals in 1 single Supabase query to prevent individual subrequests during scan
+   */
+  async preloadAll(): Promise<void> {
+    if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
+      try {
+        const { data, error } = await dbClient.supabase
+          .from('fundamentals')
+          .select('*')
+          .order('as_of_date', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            const rec = toRecord(row);
+            const key = `${rec.ticker}_${rec.as_of_date}`;
+            if (!dbClient.fundamentals.has(key)) {
+              dbClient.fundamentals.set(key, rec);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[FundamentalsRepository] preloadAll exception:', err);
+      }
+    }
+  }
+
   async getLatest(ticker: string): Promise<FundamentalsRecord | null> {
     const clean = ticker.toUpperCase().trim();
 
+    // 1. Check in-memory cache first
+    const matching: FundamentalsRecord[] = [];
+    for (const [k, v] of dbClient.fundamentals.entries()) {
+      if (k.startsWith(`${clean}_`)) {
+        matching.push(v);
+      }
+    }
+    if (matching.length > 0) {
+      matching.sort((a, b) => b.as_of_date.localeCompare(a.as_of_date));
+      return matching[0];
+    }
+
+    // 2. Query Supabase if not cached
     if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
@@ -121,15 +160,7 @@ export class FundamentalsRepository {
       }
     }
 
-    const matching: FundamentalsRecord[] = [];
-    for (const [k, v] of dbClient.fundamentals.entries()) {
-      if (k.startsWith(`${clean}_`)) {
-        matching.push(v);
-      }
-    }
-    if (matching.length === 0) return null;
-    matching.sort((a, b) => b.as_of_date.localeCompare(a.as_of_date));
-    return matching[0];
+    return null;
   }
 
   /**

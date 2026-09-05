@@ -99,6 +99,14 @@ export class MarketDataService {
     return dbBars;
   }
 
+  async preloadForScan(): Promise<void> {
+    await Promise.allSettled([
+      assetRepository.preloadAll(),
+      fundamentalsRepository.preloadAll(),
+      this.getBenchmarkBars(),
+    ]);
+  }
+
   async processTicker(ticker: string, isEtfHint = false): Promise<ProcessedAssetData> {
     const cleanTicker = ticker.toUpperCase().trim();
     const benchmarkBars = await this.getBenchmarkBars();
@@ -108,54 +116,35 @@ export class MarketDataService {
       this.provider.resetFallbackFlag && this.provider.resetFallbackFlag();
     }
 
-    // 1. Always fetch live real-time quote first
-    const liveQuote = await this.provider.getQuote(cleanTicker);
-
-    // 2. Fetch historical bars from DB or live provider, verifying freshness (< 24h)
-    let dbBars = await marketDataRepository.getBars(cleanTicker, 252);
-    const lastDate = dbBars.length > 0 ? new Date(dbBars[dbBars.length - 1].date).getTime() : 0;
-    const isStale = dbBars.length < 200 || isNaN(lastDate) || (Date.now() - lastDate > 24 * 60 * 60 * 1000);
-
-    if (isStale) {
-      const fetchedBars = await this.provider.getHistorical(cleanTicker, '1y');
-      if (fetchedBars && fetchedBars.length > 0) {
-        // Provider may have internally fallen back to seed (e.g. Yahoo -> seed);
-        // persist the honest source so provenance is not mislabeled as real data.
-        const usedFallback = this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
-        await marketDataRepository.saveBars(cleanTicker, fetchedBars, usedFallback ? 'seed' : this.provider.name);
-        dbBars = fetchedBars;
-      }
+    // 1. Fetch 1y historical bars (Yahoo chart returns 1y bars AND caches the live quote in 1 subrequest!)
+    let dbBars = await this.provider.getHistorical(cleanTicker, '1y');
+    if (!dbBars || dbBars.length < 50) {
+      dbBars = await marketDataRepository.getBars(cleanTicker, 252);
     }
 
-    // 3. Synchronize / enrich latest bar with current live price
-    if (liveQuote && liveQuote.price > 0) {
-      if (dbBars.length > 0) {
-        const quoteDate = liveQuote.timestamp ? liveQuote.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
-        const lastBar = dbBars[dbBars.length - 1];
-        let barToSave: OHLCVBar | null = null;
+    // 2. Retrieve live quote (hits in-memory cache populated by getHistorical, 0 network subrequests!)
+    const liveQuote = await this.provider.getQuote(cleanTicker);
 
-        if (lastBar.date === quoteDate) {
-          lastBar.close = liveQuote.price;
-          lastBar.high = Math.max(lastBar.high, liveQuote.price);
-          lastBar.low = Math.min(lastBar.low, liveQuote.price);
-          barToSave = lastBar;
-        } else if (quoteDate >= lastBar.date) {
-          const newBar: OHLCVBar = {
-            date: quoteDate,
-            open: Math.round((liveQuote.price - (liveQuote.change || 0)) * 100) / 100,
-            high: Math.max(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
-            low: Math.min(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
-            close: liveQuote.price,
-            adjClose: liveQuote.price,
-            volume: 100000,
-          };
-          dbBars.push(newBar);
-          barToSave = newBar;
-        }
+    // 3. Synchronize / enrich latest bar with current live price in memory
+    if (liveQuote && liveQuote.price > 0 && dbBars.length > 0) {
+      const quoteDate = liveQuote.timestamp ? liveQuote.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
+      const lastBar = dbBars[dbBars.length - 1];
 
-        if (barToSave) {
-          marketDataRepository.saveBars(cleanTicker, [barToSave], this.provider.name).catch(() => null);
-        }
+      if (lastBar.date === quoteDate) {
+        lastBar.close = liveQuote.price;
+        lastBar.high = Math.max(lastBar.high, liveQuote.price);
+        lastBar.low = Math.min(lastBar.low, liveQuote.price);
+      } else if (quoteDate >= lastBar.date) {
+        const newBar: OHLCVBar = {
+          date: quoteDate,
+          open: Math.round((liveQuote.price - (liveQuote.change || 0)) * 100) / 100,
+          high: Math.max(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
+          low: Math.min(liveQuote.price, liveQuote.price - (liveQuote.change || 0)),
+          close: liveQuote.price,
+          adjClose: liveQuote.price,
+          volume: 100000,
+        };
+        dbBars.push(newBar);
       }
     }
 
@@ -166,7 +155,7 @@ export class MarketDataService {
       dbBars = dbBars.slice(-252);
     }
 
-    // 4. Fetch fundamentals from DB or provider
+    // 4. Fetch fundamentals from DB or provider (uses preloaded in-memory cache, 0 network subrequests!)
     const dbFund = await fundamentalsRepository.getLatest(cleanTicker);
     const dbAsset = await assetRepository.findByTicker(cleanTicker);
 
@@ -373,3 +362,5 @@ export class MarketDataService {
     return results;
   }
 }
+
+export const marketDataService = new MarketDataService();

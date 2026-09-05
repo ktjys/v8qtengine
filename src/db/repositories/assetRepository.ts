@@ -18,6 +18,26 @@ export interface AssetRecord {
 export class AssetRepository {
   private syncedTickers = new Set<string>();
 
+  /**
+   * Preload all assets in 1 single Supabase query to prevent individual subrequests during scan
+   */
+  async preloadAll(): Promise<void> {
+    if (dbClient.supabase && dbClient.isSupabaseConnected) {
+      try {
+        const { data, error } = await dbClient.supabase.from('assets').select('*');
+        if (!error && Array.isArray(data)) {
+          for (const a of data) {
+            const clean = a.ticker.toUpperCase().trim();
+            dbClient.assets.set(clean, a);
+            this.syncedTickers.add(clean);
+          }
+        }
+      } catch (err) {
+        console.warn('[AssetRepository] preloadAll exception:', err);
+      }
+    }
+  }
+
   async findByTicker(ticker: string): Promise<AssetRecord | null> {
     const clean = ticker.toUpperCase().trim();
 

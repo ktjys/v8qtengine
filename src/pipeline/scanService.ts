@@ -1,5 +1,6 @@
 import { AssetClassification, FullTickerEvaluation, ScanRunItem, ScanRunLog, SignalSnapshot } from '../types/v8';
 import { evaluationService } from './evaluationService';
+import { marketDataService } from '../data/marketDataService';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { signalRepository } from '../db/repositories/signalRepository';
@@ -44,9 +45,9 @@ export class ScanService {
     const evaluations: FullTickerEvaluation[] = [];
     const failedList: { ticker: string; error: string }[] = [];
 
-    // Pre-warm benchmark SPY bars once upfront so all tickers share the cache instantly
+    // Preload assets, fundamentals, and benchmark upfront in parallel to save subrequests
     try {
-      await evaluationService.getLiveQuote('SPY').catch(() => null);
+      await marketDataService.preloadForScan();
     } catch {}
 
     // Process tickers concurrently in chunks of 10 to balance speed and rate limits
@@ -144,13 +145,15 @@ export class ScanService {
       if (shouldGenerateSignal(ev, existingSignals)) {
         const snap = createSignalSnapshot(ev);
         newSignals.push(snap);
-        if (options.saveToDb !== false) {
-          try {
-            await signalRepository.save(snap);
-          } catch (err) {
-            console.warn('[ScanService] signalRepository.save warning:', err);
-          }
-        }
+      }
+    }
+
+    // Save newly generated signals in 1 single batch call
+    if (options.saveToDb !== false && newSignals.length > 0) {
+      try {
+        await signalRepository.saveSignals(newSignals);
+      } catch (err) {
+        console.warn('[ScanService] signalRepository.saveSignals warning:', err);
       }
     }
 
