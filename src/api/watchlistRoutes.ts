@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { evaluationService } from '../pipeline/evaluationService';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
+import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
 
 export const watchlistRouter = Router();
 
@@ -20,9 +21,21 @@ watchlistRouter.post('/', async (req, res) => {
   try {
     const { ticker, name, memo } = req.body;
     if (!ticker) {
-      return res.status(400).json({ error: 'Ticker is required' });
+      return res.status(400).json({ success: false, error: 'Ticker is required' });
     }
     const cleanTicker = ticker.toUpperCase().trim();
+
+    // 0. Hard Limit Enforcement (Max 30 items)
+    const existingList = await watchlistRepository.getAll();
+    const isAlreadyInWatchlist = existingList.some((w) => w.ticker === cleanTicker);
+    if (!isAlreadyInWatchlist && existingList.length >= MAX_WATCHLIST_CAPACITY) {
+      return res.status(400).json({
+        success: false,
+        error: WATCHLIST_CAPACITY_ERROR_MESSAGE,
+        current_count: existingList.length,
+        max_capacity: MAX_WATCHLIST_CAPACITY,
+      });
+    }
 
     // 1. Ticker Validation with Yahoo Finance Search API
     try {

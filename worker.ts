@@ -15,6 +15,7 @@ import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { telegramNotifier } from './src/notification/telegramNotifier';
+import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './src/constants/limits';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -184,6 +185,18 @@ export default {
           const cleanTicker = (body.ticker || '').toUpperCase().trim();
           if (!cleanTicker) {
             return jsonResponse({ success: false, error: 'Ticker is required' }, 400);
+          }
+
+          // Hard Limit Enforcement (Max 30 items)
+          const currentList = await watchlistRepository.getAll();
+          const exists = currentList.some((w) => w.ticker === cleanTicker);
+          if (!exists && currentList.length >= MAX_WATCHLIST_CAPACITY) {
+            return jsonResponse({
+              success: false,
+              error: WATCHLIST_CAPACITY_ERROR_MESSAGE,
+              current_count: currentList.length,
+              max_capacity: MAX_WATCHLIST_CAPACITY,
+            }, 400);
           }
 
           await assetRepository.upsert({

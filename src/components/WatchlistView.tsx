@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import {
+  AlertCircle,
+  AlertTriangle,
   ArrowDownUp,
   Check,
   CheckCircle2,
@@ -28,6 +30,7 @@ import {
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { SortableHeader } from './SortableHeader';
+import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
 
 export type WatchlistSortField =
   | 'ticker'
@@ -189,10 +192,19 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     return sortOrder === 'desc' ? -diff : diff;
   });
 
+  const isCapacityReached = (evaluations || []).length >= MAX_WATCHLIST_CAPACITY;
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTicker.trim()) return;
-    onAddTicker(newTicker.toUpperCase().trim(), newName.trim(), newMemo.trim());
+    const clean = newTicker.toUpperCase().trim();
+    const alreadyExists = (evaluations || []).some((ev) => ev.ticker === clean);
+    if (!alreadyExists && isCapacityReached) {
+      alert(WATCHLIST_CAPACITY_ERROR_MESSAGE);
+      return;
+    }
+
+    onAddTicker(clean, newName.trim(), newMemo.trim());
     setNewTicker('');
     setNewName('');
     setNewMemo('');
@@ -245,12 +257,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           <div>
             <h2 className="text-lg font-bold text-slate-100 flex items-center space-x-2">
               <span>워치리스트 전종목 평가 매트릭스</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 font-mono">
-                {evaluations.length}개 대상
+              <span
+                className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold border ${
+                  isCapacityReached
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                    : evaluations.length >= 25
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                }`}
+                title="Cloudflare 환경 안정성을 위해 최대 30개 종목으로 용량을 제한합니다."
+              >
+                {evaluations.length} / {MAX_WATCHLIST_CAPACITY}개
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              전체 종목에 대해 4대 서브 스코어(기술/모멘텀/펀더멘털/밸류)와 독립 리스크를 동시 산출합니다.
+              전체 종목에 대해 4대 서브 스코어(기술/모멘텀/펀더멘털/밸류)와 독립 리스크를 동시 산출합니다. (최대 {MAX_WATCHLIST_CAPACITY}개 한도)
             </p>
           </div>
 
@@ -279,11 +300,24 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             )}
 
             <button
+              id="watchlist-add-ticker-btn"
               onClick={() => setShowAddModal(true)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 whitespace-nowrap"
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-md transition-all active:scale-95 whitespace-nowrap ${
+                isCapacityReached
+                  ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-750'
+                  : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/30'
+              }`}
+              title={
+                isCapacityReached
+                  ? `워치리스트 한도(${MAX_WATCHLIST_CAPACITY}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
+                  : `워치리스트에 새 종목 추가 (${evaluations.length}/${MAX_WATCHLIST_CAPACITY})`
+              }
             >
               <Plus className="w-3.5 h-3.5" />
               <span>종목 추가</span>
+              <span className="text-[10px] opacity-80 font-mono">
+                ({evaluations.length}/{MAX_WATCHLIST_CAPACITY})
+              </span>
             </button>
           </div>
         </div>
@@ -677,13 +711,38 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <Plus className="w-4 h-4 text-cyan-400" />
                 <span>워치리스트 종목 추가</span>
               </h3>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center space-x-2">
+                <span
+                  className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full border ${
+                    isCapacityReached
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                      : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                  }`}
+                >
+                  {evaluations.length} / {MAX_WATCHLIST_CAPACITY}개
+                </span>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
+
+            {isCapacityReached && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-start space-x-2.5 text-rose-300 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <div>
+                  <p className="font-semibold text-rose-200">
+                    최대 등록 한도({MAX_WATCHLIST_CAPACITY}개)에 도달했습니다.
+                  </p>
+                  <p className="text-[11px] text-rose-300/90 mt-0.5 leading-relaxed">
+                    Cloudflare Workers의 무료 서브리퀘스트 한도(50회) 및 실시간 스캔 속도를 안정적으로 유지하기 위해 관리 종목을 최대 {MAX_WATCHLIST_CAPACITY}개로 제한하고 있습니다. 신규 종목을 등록하시려면 기존 종목을 삭제해 주세요.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
               <div>
@@ -691,11 +750,13 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   티커 심볼 (Ticker) *
                 </label>
                 <input
+                  id="watchlist-new-ticker-input"
                   type="text"
                   placeholder="예: META, CRM, IVV, SOXX"
                   value={newTicker}
                   onChange={(e) => setNewTicker(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-mono uppercase focus:outline-none focus:border-cyan-500"
+                  disabled={isCapacityReached}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-mono uppercase focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   required
                 />
               </div>
@@ -703,21 +764,25 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">종목명 (선택)</label>
                 <input
+                  id="watchlist-new-name-input"
                   type="text"
                   placeholder="예: Meta Platforms, Inc."
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500"
+                  disabled={isCapacityReached}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">관찰 메모</label>
                 <textarea
+                  id="watchlist-new-memo-input"
                   placeholder="관찰 목적 및 전략 메모..."
                   value={newMemo}
                   onChange={(e) => setNewMemo(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-20 resize-none focus:outline-none focus:border-cyan-500"
+                  disabled={isCapacityReached}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-20 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -730,10 +795,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   취소
                 </button>
                 <button
+                  id="watchlist-submit-ticker-btn"
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95"
+                  disabled={isCapacityReached}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                 >
-                  워치리스트 추가 및 즉시 평가
+                  {isCapacityReached ? '한도 초과 (추가 불가)' : '워치리스트 추가 및 즉시 평가'}
                 </button>
               </div>
             </form>

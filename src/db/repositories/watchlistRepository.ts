@@ -1,6 +1,7 @@
 import { dbClient } from '../supabaseClient';
 import { WatchlistItem } from '../../types/v8';
 import { assetRepository } from './assetRepository';
+import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../../constants/limits';
 
 export class WatchlistRepository {
   async getAll(): Promise<WatchlistItem[]> {
@@ -82,6 +83,15 @@ export class WatchlistRepository {
   async add(item: { ticker: string; name?: string; memo?: string; is_active?: boolean }): Promise<WatchlistItem> {
     const clean = item.ticker.toUpperCase().trim();
     const existing = dbClient.watchlist.get(clean);
+
+    // Hard limit enforcement: If not already in watchlist, verify current count < MAX_WATCHLIST_CAPACITY
+    if (!existing) {
+      const currentList = await this.getAll();
+      if (currentList.length >= MAX_WATCHLIST_CAPACITY) {
+        throw new Error(WATCHLIST_CAPACITY_ERROR_MESSAGE);
+      }
+    }
+
     const now = new Date().toISOString();
     const isActive = item.is_active !== undefined ? item.is_active : true;
 

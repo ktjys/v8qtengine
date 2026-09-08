@@ -18,6 +18,7 @@ import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runPipelineOnSeedData } from './data/seed/initialData';
 import { calculateBacktestMetrics } from './engine/backtestEngine';
+import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './constants/limits';
 
 const initialSeed = runPipelineOnSeedData();
 const initialSummary = calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
@@ -200,6 +201,13 @@ export default function App() {
   const handleAddTicker = async (ticker: string, name: string, memo: string) => {
     const cleanTicker = ticker.toUpperCase().trim();
     if (!cleanTicker) return;
+
+    // Hard limit enforcement: max 30 items
+    const isAlreadyIn = watchlist.some((w) => w.ticker === cleanTicker);
+    if (!isAlreadyIn && watchlist.length >= MAX_WATCHLIST_CAPACITY) {
+      showToast(WATCHLIST_CAPACITY_ERROR_MESSAGE);
+      return;
+    }
 
     try {
       if (typeof window !== 'undefined') {
