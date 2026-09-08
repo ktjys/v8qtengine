@@ -38,6 +38,58 @@ export class YahooFinanceProvider implements MarketDataProvider {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
 
+  private extractQuoteFromChart(clean: string, meta: any, bars?: OHLCVBar[]): QuoteData | null {
+    if (!meta || typeof (meta.regularMarketPrice ?? meta.previousClose) !== 'number') {
+      return null;
+    }
+
+    const currentPrice =
+      meta.regularMarketPrice ??
+      meta.previousClose ??
+      (bars && bars.length > 0 ? bars[bars.length - 1].close : 100);
+
+    let changePercent = 0;
+    let change = 0;
+
+    if (typeof meta.regularMarketChangePercent === 'number') {
+      changePercent = meta.regularMarketChangePercent;
+      change =
+        typeof meta.fulldayChange === 'number'
+          ? meta.fulldayChange
+          : (currentPrice * changePercent) / 100;
+    } else if (typeof meta.fulldayChangePercent === 'number') {
+      changePercent = meta.fulldayChangePercent;
+      change =
+        typeof meta.fulldayChange === 'number'
+          ? meta.fulldayChange
+          : (currentPrice * changePercent) / 100;
+    } else if (typeof meta.previousClose === 'number' && meta.previousClose > 0) {
+      change = currentPrice - meta.previousClose;
+      changePercent = (change / meta.previousClose) * 100;
+    } else if (bars && bars.length >= 2) {
+      const lastClose = bars[bars.length - 1].close;
+      const prevClose = bars[bars.length - 2].close;
+      if (prevClose > 0) {
+        change = lastClose - prevClose;
+        changePercent = (change / prevClose) * 100;
+      }
+    }
+
+    return {
+      ticker: clean,
+      price: Math.round(currentPrice * 100) / 100,
+      change: Math.round(change * 100) / 100,
+      changePercent: Math.round(changePercent * 100) / 100,
+      currency: meta.currency || 'USD',
+      exchange: meta.exchangeName || 'US',
+      shortName: meta.shortName || meta.symbol || clean,
+      longName: meta.longName || meta.shortName || clean,
+      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   async getQuote(ticker: string): Promise<QuoteData> {
     const clean = ticker.toUpperCase().trim();
     const cacheKey = `quote_${clean}`;
@@ -81,25 +133,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
       if (res.ok) {
         const json = await res.json();
         const meta = json?.chart?.result?.[0]?.meta;
-        if (meta && typeof (meta.regularMarketPrice ?? meta.previousClose) === 'number') {
-          const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
-          const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
-          const change = currentPrice - prevClose;
-          const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
-
-          const quote: QuoteData = {
-            ticker: clean,
-            price: Math.round(currentPrice * 100) / 100,
-            change: Math.round(change * 100) / 100,
-            changePercent: Math.round(changePercent * 100) / 100,
-            currency: meta.currency || 'USD',
-            exchange: meta.exchangeName || 'US',
-            shortName: meta.shortName || meta.symbol || clean,
-            longName: meta.longName || meta.shortName || clean,
-            fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-            fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-            timestamp: new Date().toISOString(),
-          };
+        const quote = this.extractQuoteFromChart(clean, meta);
+        if (quote) {
           this.setCache(cacheKey, quote);
           return quote;
         }
@@ -134,28 +169,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
       const json = await res.json();
       const result = json?.chart?.result?.[0];
       if (!result) throw new Error('No chart result');
-
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (meta && typeof (meta.regularMarketPrice ?? meta.previousClose) === 'number') {
-        const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
-        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
-        const change = currentPrice - prevClose;
-        const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
-        const quoteObj: QuoteData = {
-          ticker: clean,
-          price: Math.round(currentPrice * 100) / 100,
-          change: Math.round(change * 100) / 100,
-          changePercent: Math.round(changePercent * 100) / 100,
-          currency: meta.currency || 'USD',
-          exchange: meta.exchangeName || 'US',
-          shortName: meta.shortName || meta.symbol || clean,
-          longName: meta.longName || meta.shortName || clean,
-          fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-          fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-          timestamp: new Date().toISOString(),
-        };
-        this.setCache(`quote_${clean}`, quoteObj);
-      }
+      const meta = result.meta;
 
       const timestamps: number[] = result.timestamp || [];
       const quoteObj = result.indicators?.quote?.[0] || {};
@@ -185,6 +199,12 @@ export class YahooFinanceProvider implements MarketDataProvider {
       }
 
       if (bars.length === 0) throw new Error('Empty bars');
+
+      const extractedQuote = this.extractQuoteFromChart(clean, meta, bars);
+      if (extractedQuote) {
+        this.setCache(`quote_${clean}`, extractedQuote);
+      }
+
       return bars;
     };
 

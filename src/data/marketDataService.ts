@@ -303,11 +303,20 @@ export class MarketDataService {
 
     const dataQuality = evaluateDataQuality(normalized, isEtf);
 
+    let finalChange1d = normalized.quote.changePercent;
+    if ((finalChange1d === undefined || isNaN(finalChange1d) || finalChange1d === null) && dbBars.length >= 2) {
+      const last = dbBars[dbBars.length - 1].close;
+      const prev = dbBars[dbBars.length - 2].close;
+      if (prev > 0) {
+        finalChange1d = Math.round(((last - prev) / prev) * 100) / 100;
+      }
+    }
+
     return {
       ticker: cleanTicker,
       name: normalized.quote.longName || normalized.quote.shortName || cleanTicker,
       price: normalized.quote.price,
-      change1d: normalized.quote.changePercent,
+      change1d: finalChange1d ?? 0,
       rawMetadata,
       indicators,
       riskInputs,

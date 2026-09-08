@@ -63,8 +63,13 @@ telegramRouter.post('/test-broadcast', async (req, res) => {
         const meta = qJson?.chart?.result?.[0]?.meta;
         if (meta?.regularMarketPrice) {
           nvdaPrice = meta.regularMarketPrice;
-          const prev = meta.chartPreviousClose || meta.previousClose || nvdaPrice;
-          nvdaChange = Math.round(((nvdaPrice - prev) / prev) * 1000) / 10;
+          if (typeof meta.regularMarketChangePercent === 'number') {
+            nvdaChange = Math.round(meta.regularMarketChangePercent * 10) / 10;
+          } else if (typeof meta.fulldayChangePercent === 'number') {
+            nvdaChange = Math.round(meta.fulldayChangePercent * 10) / 10;
+          } else if (meta.previousClose) {
+            nvdaChange = Math.round(((nvdaPrice - meta.previousClose) / meta.previousClose) * 1000) / 10;
+          }
         }
       }
     } catch {}

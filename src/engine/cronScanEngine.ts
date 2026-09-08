@@ -154,7 +154,7 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
           const safeReason = escapeTelegramHtml(sig.decision?.reason || '기술적 반등 및 모멘텀 지속');
 
           reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
-          reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+          reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (전일대비: ${arrow} ${changeStr})\n`;
           reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${safeDecision}</code>\n`;
           reportText += `   - 핵심이유: ${safeReason}\n\n`;
         });
