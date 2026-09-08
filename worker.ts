@@ -28,12 +28,8 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
-let dbInitialized = false;
-
 async function ensureDbConnected(env: any): Promise<boolean> {
   if (dbClient.isSupabaseConnected) return true;
-  if (dbInitialized) return dbClient.isSupabaseConnected;
-  dbInitialized = true;
 
   const envUrl = env?.SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : '') || '';
   const envKey = env?.SUPABASE_KEY || (typeof process !== 'undefined' ? process.env?.SUPABASE_KEY : '') || '';
@@ -571,11 +567,87 @@ export default {
     }
 
     // ========== Backtest Backfill ==========
+    if (path === '/api/v8/backtest/backfill-init' && method === 'POST') {
+      try {
+        const { initBackfill } = await import('./src/engine/backfillEngine');
+        const body: any = await request.json().catch(() => ({}));
+        const { lookbackRange, tickers } = body || {};
+        const initData = await initBackfill({
+          lookbackRange: lookbackRange || '1y',
+          tickers,
+        });
+        return jsonResponse({
+          success: true,
+          data: initData,
+        });
+      } catch (err: any) {
+        console.error('[worker] Backfill init error:', err);
+        return jsonResponse({ success: false, error: err.message || 'Backfill init failed' }, 500);
+      }
+    }
+
+    if (path === '/api/v8/backtest/backfill-ticker' && method === 'POST') {
+      try {
+        const { backfillSingleTicker } = await import('./src/engine/backfillEngine');
+        const body: any = await request.json().catch(() => ({}));
+        const { ticker, lookbackRange, opportunityThreshold } = body || {};
+        if (!ticker) {
+          return jsonResponse({ success: false, error: 'Ticker is required' }, 400);
+        }
+        const result = await backfillSingleTicker(ticker, {
+          lookbackRange: lookbackRange || '1y',
+          opportunityThreshold: opportunityThreshold ? Number(opportunityThreshold) : 70,
+        });
+        return jsonResponse({
+          success: true,
+          data: result,
+        });
+      } catch (err: any) {
+        console.error('[worker] Backfill ticker error:', err);
+        return jsonResponse({ success: false, error: err.message || 'Backfill ticker failed' }, 500);
+      }
+    }
+
+    if (path === '/api/v8/backtest/backfill-finalize' && method === 'POST') {
+      try {
+        const { finalizeBackfill } = await import('./src/engine/backfillEngine');
+        const body: any = await request.json().catch(() => ({}));
+        const {
+          targetTickers,
+          range,
+          totalBarsIngested,
+          allSignals,
+          detailsByTicker,
+          minDate,
+          maxDate,
+        } = body || {};
+
+        const result = await finalizeBackfill(
+          targetTickers || [],
+          range || '1y',
+          totalBarsIngested || 0,
+          allSignals,
+          detailsByTicker || {},
+          minDate || '',
+          maxDate || ''
+        );
+
+        return jsonResponse({
+          success: true,
+          message: `과거 ${range || '1y'} 데이터 백필 완료: ${result.totalBarsIngested}개 봉과 ${result.totalSignalsGenerated}개 시그널이 적재되었습니다.`,
+          result,
+        });
+      } catch (err: any) {
+        console.error('[worker] Backfill finalize error:', err);
+        return jsonResponse({ success: false, error: err.message || 'Backfill finalize failed' }, 500);
+      }
+    }
+
     if (path === '/api/v8/backtest/backfill' && method === 'POST') {
       try {
         const { runHistoricalBackfill } = await import('./src/engine/backfillEngine');
-        const body: any = await request.json();
-        const { lookbackRange, tickers, opportunityThreshold, replaceExisting } = body;
+        const body: any = await request.json().catch(() => ({}));
+        const { lookbackRange, tickers, opportunityThreshold, replaceExisting } = body || {};
         const result = await runHistoricalBackfill({
           lookbackRange: lookbackRange || '1y',
           tickers,
