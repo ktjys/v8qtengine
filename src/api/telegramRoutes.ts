@@ -87,7 +87,7 @@ telegramRouter.post('/test-broadcast', async (req, res) => {
       `💡 <b>기회 점수:</b> 89점 (STRONG_OPPORTUNITY)\n` +
       `🛡️ <b>리스크 등급:</b> LOW (안전 영역)\n` +
       `🎯 <b>결론:</b> 기술적 반등 및 모멘텀 지속에 따른 분할 매수 적합\n\n` +
-      `하루 3회 자동 스캔(06:30, 22:00, 02:00 KST) 또는 수동 스캔 시 위와 동일한 실시간 종가/현재가 기준으로 리포트가 발송됩니다.`;
+      `하루 2회 자동 스캔(06:30 정규장 마감, 23:00 밤 11시 개장 브리핑 KST) 또는 수동 스캔 시 위와 동일한 실시간 종가/현재가 기준으로 리포트가 발송됩니다.`;
 
     const sendRes = await telegramNotifier.sendMessage(testMessage, customToken, customChatId);
 

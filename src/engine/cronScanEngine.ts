@@ -63,10 +63,8 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
   let slotName = '수동/실시간 스캔';
   if (kstHour >= 6 && kstHour <= 8) {
     slotName = '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)';
-  } else if (kstHour >= 21 && kstHour <= 23) {
-    slotName = '🌃 [2회차] 프리마켓 갭 분석 & 당일 관심종목 압축';
-  } else if (kstHour >= 1 && kstHour <= 3) {
-    slotName = '🌙 [3회차] 장중 급변 & 모멘텀 브레이크아웃 감시';
+  } else if (kstHour >= 22 && kstHour <= 23) {
+    slotName = '🌃 [2회차] 미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)';
   }
 
   try {

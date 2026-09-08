@@ -11,24 +11,17 @@ interface ScheduleSlot {
 const SCHEDULE_SLOTS: ScheduleSlot[] = [
   {
     id: 'POST_MARKET',
-    name: '🌅 미국 정규장 마감 브리핑 (종가 확정)',
+    name: '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)',
     targetKstHour: 6,
     targetKstMinute: 30,
     targetDays: [1, 2, 3, 4, 5, 6], // 월~토
   },
   {
-    id: 'PRE_MARKET',
-    name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축',
-    targetKstHour: 22,
+    id: 'REGULAR_MARKET',
+    name: '🌃 [2회차] 미국 정규장 개장 & 당일 관심종목 브리핑 (밤 11시)',
+    targetKstHour: 23,
     targetKstMinute: 0,
-    targetDays: [1, 2, 3, 4, 5], // 월~금
-  },
-  {
-    id: 'INTRADAY',
-    name: '🌙 장중 급변 & 모멘텀 브레이크아웃 감시',
-    targetKstHour: 2,
-    targetKstMinute: 0,
-    targetDays: [2, 3, 4, 5, 6], // 화~토
+    targetDays: [1, 2, 3, 4, 5], // 월~금 (미국 정규장 개장일 밤 11시)
   },
 ];
 

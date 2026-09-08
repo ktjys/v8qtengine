@@ -125,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="header-schedule-btn"
               onClick={onOpenScheduleModal}
               className="flex items-center space-x-1 p-2 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-medium border border-slate-700 transition-all active:scale-95"
-              title="하루 3회 자동 스캔 & 텔레그램 알림 설정"
+              title="하루 2회 자동 스캔 & 텔레그램 알림 설정 (06:30, 23:00 KST)"
             >
               <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
               <span className="hidden sm:inline">자동 알림</span>

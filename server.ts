@@ -220,7 +220,7 @@ async function startServer() {
   app.get('/api/v8/schedule/info', (req, res) => {
     res.json({
       success: true,
-      total_schedules: 3,
+      total_schedules: 2,
       schedules: [
         {
           slot: 'POST_MARKET',
@@ -231,20 +231,12 @@ async function startServer() {
           priority: 'HIGH',
         },
         {
-          slot: 'PRE_MARKET',
-          name: '프리마켓 갭 분석 & 당일 관심종목 압축',
-          timeKST: '22:00 KST (평일 월~금)',
-          cronUTC: '00 13 * * 1-5',
-          purpose: '프리마켓 변동성 반영, 당일 진입 유효 후보군 압축 및 포트폴리오 비중 브리핑',
-          priority: 'MEDIUM',
-        },
-        {
-          slot: 'INTRADAY',
-          name: '장중 급변 & 모멘텀 브레이크아웃 감시',
-          timeKST: '02:00 KST (평일 화~토)',
-          cronUTC: '00 17 * * 1-5',
-          purpose: '장중 거래량 폭증 및 변동성 브레이크아웃 종목 포착 시 실시간 긴급 신호 발송',
-          priority: 'MEDIUM',
+          slot: 'REGULAR_MARKET',
+          name: '미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)',
+          timeKST: '23:00 KST (평일 월~금)',
+          cronUTC: '00 14 * * 1-5',
+          purpose: '정규장 개장 후 초기 변동성 및 당일 진입 유효 기회종목 압축 브리핑 (수면 방해 없는 밤 11시 발송)',
+          priority: 'HIGH',
         },
       ],
     });

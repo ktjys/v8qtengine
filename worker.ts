@@ -705,16 +705,16 @@ export default {
       const kstTimeStr = `${String(kstHour).padStart(2, '0')}:${String(kstMinute).padStart(2, '0')} KST`;
 
       let nextSlot = {
-        id: 'PRE_MARKET',
-        name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축',
-        target_time: '22:00 KST',
+        id: 'REGULAR_MARKET',
+        name: '🌃 [2회차] 미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)',
+        target_time: '23:00 KST',
       };
       if (kstHour < 6 || (kstHour === 6 && kstMinute < 30)) {
-        nextSlot = { id: 'POST_MARKET', name: '🌅 미국 정규장 마감 브리핑 (종가 확정)', target_time: '06:30 KST' };
-      } else if (kstHour < 22) {
-        nextSlot = { id: 'PRE_MARKET', name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축', target_time: '22:00 KST' };
+        nextSlot = { id: 'POST_MARKET', name: '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)', target_time: '06:30 KST' };
+      } else if (kstHour < 23) {
+        nextSlot = { id: 'REGULAR_MARKET', name: '🌃 [2회차] 미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)', target_time: '23:00 KST' };
       } else {
-        nextSlot = { id: 'INTRADAY', name: '🌙 장중 급변 & 모멘텀 브레이크아웃 감시', target_time: '02:00 KST' };
+        nextSlot = { id: 'POST_MARKET', name: '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)', target_time: '06:30 KST (익일)' };
       }
 
       return jsonResponse({
@@ -724,9 +724,8 @@ export default {
         last_executed_slot: 'Cloudflare Cron 활성화',
         next_scheduled_slot: nextSlot,
         schedules: [
-          { id: 'POST_MARKET', name: '🌅 미국 정규장 마감 브리핑 (종가 확정)', time: '06:30 KST' },
-          { id: 'PRE_MARKET', name: '🌃 프리마켓 갭 분석 & 당일 관심종목 압축', time: '22:00 KST' },
-          { id: 'INTRADAY', name: '🌙 장중 급변 & 모멘텀 브레이크아웃 감시', time: '02:00 KST' },
+          { id: 'POST_MARKET', name: '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)', time: '06:30 KST' },
+          { id: 'REGULAR_MARKET', name: '🌃 [2회차] 미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)', time: '23:00 KST' },
         ],
       });
     }

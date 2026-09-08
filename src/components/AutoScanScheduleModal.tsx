@@ -51,24 +51,14 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       icon: '🌅',
     },
     {
-      slot: 'PRE_MARKET',
-      title: '2회차: 프리마켓 갭 & 관심종목 압축',
-      timeKST: '22:00 KST (월~금)',
-      cronUTC: '00 13 * * 1-5',
-      desc: '프리마켓 갭상승/하락 변동성 반영, 당일 진입 유효 후보군 압축 및 포트폴리오 비중 브리핑',
-      badge: '장전 전략',
+      slot: 'REGULAR_MARKET',
+      title: '2회차: 정규장 개장 & 기회 종목 브리핑',
+      timeKST: '23:00 KST (월~금)',
+      cronUTC: '00 14 * * 1-5',
+      desc: '미국 정규장 개장 초기 변동성 반영, 당일 진입 유효 기회종목 압축 브리핑 (수면 방해 없는 밤 11시 발송)',
+      badge: '개장 브리핑',
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       icon: '🌃',
-    },
-    {
-      slot: 'INTRADAY',
-      title: '3회차: 장중 급변 & 모멘텀 감시',
-      timeKST: '02:00 KST (화~토)',
-      cronUTC: '00 17 * * 1-5',
-      desc: '장중 거래량 폭증 및 변동성 브레이크아웃 급변 종목 포착 시 실시간 긴급 신호 발송',
-      badge: '장중 브레이크아웃',
-      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-      icon: '🌙',
     },
   ];
 
@@ -159,10 +149,8 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     let slotName = '수동/실시간 스캔';
     if (kstHour >= 6 && kstHour <= 8) {
       slotName = '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)';
-    } else if (kstHour >= 21 && kstHour <= 23) {
-      slotName = '🌃 [2회차] 프리마켓 갭 분석 & 당일 관심종목 압축';
-    } else if (kstHour >= 1 && kstHour <= 3) {
-      slotName = '🌙 [3회차] 장중 급변 & 모멘텀 브레이크아웃 감시';
+    } else if (kstHour >= 22 && kstHour <= 23) {
+      slotName = '🌃 [2회차] 미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)';
     }
 
     try {
@@ -503,7 +491,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
               <div className="flex items-center space-x-1.5 sm:space-x-2">
                 <h3 className="text-base sm:text-lg font-bold text-slate-100">자동 스캔 & 알림 시스템</h3>
                 <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                  하루 3회 자동화
+                  하루 2회 자동화
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 font-mono hidden sm:block">
@@ -530,7 +518,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            ⏰ 3회 스캔 스케줄
+            ⏰ 2회 스캔 스케줄
           </button>
           <button
             onClick={() => setActiveTab('telegram')}
@@ -573,7 +561,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      외부 크론 서비스 없이도 서버 내부에서 매일 3회 정해진 시각(06:30, 22:00, 02:00 KST)에 스스로 자동 실행합니다.
+                      외부 크론 서비스 없이도 서버 내부에서 매일 2회 정해진 시각(06:30, 23:00 밤 11시 KST)에 스스로 자동 실행합니다.
                     </p>
                   </div>
                 </div>
@@ -999,7 +987,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                 <p>
                   <b className="text-purple-300">3. Cloudflare 자체 내장 [Cron Triggers] 지원:</b><br />
                   Cloudflare Workers는 상주 프로세스가 없어서 일반 Node.js의 <code className="text-slate-400">setInterval</code>은 돌지 않지만, Cloudflare가 자체 제공하는 <b>Cron Triggers(Scheduled Event)</b>를 지원합니다.<br />
-                  이미 <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 크론 스케줄(<code className="text-slate-300 text-[10px]">06:30, 22:00, 02:00 KST</code>)과 <code className="text-emerald-300 font-mono text-[10px]">worker.ts</code>의 <code className="text-slate-300 text-[10px]">scheduled()</code> 이벤트 핸들러를 등록해 두었습니다.<br />
+                  이미 <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 크론 스케줄(<code className="text-slate-300 text-[10px]">06:30, 23:00 KST</code>)과 <code className="text-emerald-300 font-mono text-[10px]">worker.ts</code>의 <code className="text-slate-300 text-[10px]">scheduled()</code> 이벤트 핸들러를 등록해 두었습니다.<br />
                   👉 <b>Cloudflare 대시보드</b> (<span className="text-slate-200 font-semibold">Workers & Pages &gt; v8qtengine &gt; Settings &gt; Triggers &gt; Cron Triggers</span>)에서 확인하실 수 있으며, 외부 크론 없이도 Cloudflare가 시간에 맞춰 Worker를 직접 깨워 텔레그램을 100% 자동 발송합니다!
                 </p>
               </div>
@@ -1031,7 +1019,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                     요청 방식(Request Method)을 <b>POST</b> 또는 <b>GET</b>으로 선택합니다.
                   </li>
                   <li>
-                    스케줄 실행 시간을 <b>한국 시간 06:30, 22:00, 02:00</b> (UTC 기준 21:30, 13:00, 17:00)로 등록하면, 브라우저를 켜두지 않아도 365일 24시간 정해진 시간에 퀀트 스캔을 수행하고 텔레그램으로 알림을 자동 발송합니다.
+                    스케줄 실행 시간을 <b>한국 시간 06:30, 23:00 (밤 11시)</b> (UTC 기준 21:30, 14:00)로 등록하면, 수면 방해 없이 365일 정해진 시간에 퀀트 스캔을 수행하고 텔레그램으로 알림을 자동 발송합니다.
                   </li>
                 </ol>
               </div>
