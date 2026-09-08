@@ -20,71 +20,69 @@ export interface IndicatorSnapshotRecord {
 }
 
 export class IndicatorRepository {
-  async save(ticker: string, indicators: RawMarketIndicators, date: string): Promise<void> {
-    const clean = ticker.toUpperCase().trim();
-    const tradeDate = date || new Date().toISOString().split('T')[0];
-    const key = `${clean}_${tradeDate}`;
+  async saveAll(items: { ticker: string; indicators: RawMarketIndicators; date: string }[]): Promise<void> {
+    if (!items || items.length === 0) return;
     const now = new Date().toISOString();
+    const payloads: any[] = [];
 
-    const record: IndicatorSnapshotRecord = {
-      ticker: clean,
-      trade_date: tradeDate,
-      price: indicators.price,
-      ma20: indicators.ma20,
-      ma50: indicators.ma50,
-      ma200: indicators.ma200,
-      rsi14: indicators.rsi14,
-      drawdown_from_high: indicators.drawdownFromHigh,
-      macd_histogram_positive: indicators.macdHistogramPositive,
-      return_1m: indicators.return1M,
-      return_3m: indicators.return3M,
-      return_6m: indicators.return6M,
-      relative_strength_spy: indicators.relativeStrengthVsSpy,
-      created_at: now,
-    };
+    for (const item of items) {
+      const clean = item.ticker.toUpperCase().trim();
+      const tradeDate = item.date || now.split('T')[0];
+      const key = `${clean}_${tradeDate}`;
 
-    dbClient.indicator_snapshots.set(key, record);
+      const record: IndicatorSnapshotRecord = {
+        ticker: clean,
+        trade_date: tradeDate,
+        price: item.indicators.price,
+        ma20: item.indicators.ma20,
+        ma50: item.indicators.ma50,
+        ma200: item.indicators.ma200,
+        rsi14: item.indicators.rsi14,
+        drawdown_from_high: item.indicators.drawdownFromHigh,
+        macd_histogram_positive: item.indicators.macdHistogramPositive,
+        return_1m: item.indicators.return1M,
+        return_3m: item.indicators.return3M,
+        return_6m: item.indicators.return6M,
+        relative_strength_spy: item.indicators.relativeStrengthVsSpy,
+        created_at: now,
+      };
 
-    if (dbClient.isTableAvailable('indicator_snapshots') && dbClient.supabase) {
+      dbClient.indicator_snapshots.set(key, record);
+
+      payloads.push({
+        ticker: clean,
+        trade_date: tradeDate,
+        price: item.indicators.price,
+        ma20: item.indicators.ma20,
+        ma50: item.indicators.ma50,
+        ma200: item.indicators.ma200,
+        rsi14: item.indicators.rsi14,
+        drawdown_52w: item.indicators.drawdownFromHigh,
+        return_1m: item.indicators.return1M,
+        return_3m: item.indicators.return3M,
+        return_6m: item.indicators.return6M,
+        relative_strength_spy: item.indicators.relativeStrengthVsSpy,
+        created_at: now,
+      });
+    }
+
+    if (dbClient.isTableAvailable('indicator_snapshots') && dbClient.supabase && payloads.length > 0) {
       try {
-        await assetRepository.upsert({
-          ticker: clean,
-          name: clean,
-          asset_type: 'equity',
-          exchange: 'US',
-          currency: 'USD',
-          is_active: true,
-          created_at: now,
-          updated_at: now,
-        });
-
-        const payload = {
-          ticker: clean,
-          trade_date: tradeDate,
-          price: indicators.price,
-          ma20: indicators.ma20,
-          ma50: indicators.ma50,
-          ma200: indicators.ma200,
-          rsi14: indicators.rsi14,
-          drawdown_52w: indicators.drawdownFromHigh,
-          return_1m: indicators.return1M,
-          return_3m: indicators.return3M,
-          return_6m: indicators.return6M,
-          relative_strength_spy: indicators.relativeStrengthVsSpy,
-          created_at: now,
-        };
-
         const { error } = await dbClient.supabase
           .from('indicator_snapshots')
-          .upsert(payload, { onConflict: 'ticker,trade_date' });
+          .upsert(payloads, { onConflict: 'ticker,trade_date' });
 
         if (error) {
-          dbClient.handleDbError('indicator_snapshots', 'save', error);
+          dbClient.handleDbError('indicator_snapshots', 'saveAll', error);
         }
       } catch (err) {
-        dbClient.handleDbError('indicator_snapshots', 'save', err);
+        dbClient.handleDbError('indicator_snapshots', 'saveAll', err);
       }
     }
+  }
+
+  async save(ticker: string, indicators: RawMarketIndicators, date: string): Promise<void> {
+    await this.saveAll([{ ticker, indicators, date }]);
   }
 
   async getLatest(ticker: string): Promise<IndicatorSnapshotRecord | null> {

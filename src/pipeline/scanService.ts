@@ -120,12 +120,17 @@ export class ScanService {
       }
     }
 
-    // Save evaluations to DB
+    // Save evaluations and indicator snapshots in batch to DB
     if (options.saveToDb !== false) {
       try {
         await evaluationRepository.saveAll(evaluations);
       } catch (err) {
         console.warn('[ScanService] evaluationRepository.saveAll warning:', err);
+      }
+      try {
+        await marketDataService.flushIndicators();
+      } catch (err) {
+        console.warn('[ScanService] marketDataService.flushIndicators warning:', err);
       }
     }
 
@@ -181,19 +186,9 @@ export class ScanService {
       } catch {}
     }
 
-    let allSignals: SignalSnapshot[] = [];
-    try {
-      allSignals = await signalRepository.getAll();
-    } catch {
-      allSignals = newSignals;
-    }
-
-    let currentWatchlist: any[] = [];
-    try {
-      currentWatchlist = await watchlistRepository.getAll();
-    } catch {
-      currentWatchlist = watchlist;
-    }
+    // Assemble final signal list without redundant network queries
+    const allSignals: SignalSnapshot[] = [...newSignals, ...existingSignals];
+    const currentWatchlist: any[] = watchlist;
 
     return {
       runLog: scanLog,

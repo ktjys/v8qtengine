@@ -38,6 +38,15 @@ export class MarketDataService {
   private provider: MarketDataProvider;
   private benchmarkBarsCache: OHLCVBar[] | null = null;
   private benchmarkLastFetched = 0;
+  private pendingIndicators: { ticker: string; indicators: RawMarketIndicators; date: string }[] = [];
+
+  async flushIndicators(): Promise<void> {
+    if (this.pendingIndicators.length > 0) {
+      const items = [...this.pendingIndicators];
+      this.pendingIndicators = [];
+      await indicatorRepository.saveAll(items);
+    }
+  }
 
   constructor(providerType?: 'yahoo' | 'seed') {
     const selected = providerType || (process.env.V8_DATA_PROVIDER === 'seed' ? 'seed' : 'yahoo');
@@ -238,8 +247,26 @@ export class MarketDataService {
       pegRatio: fundInd.pegRatio,
     };
 
-    // Save indicator snapshot to DB
-    await indicatorRepository.save(cleanTicker, indicators, normalized.quote.timestamp || new Date().toISOString().split('T')[0]);
+    // Buffer indicator snapshot in-memory (batch persisted at end of scan)
+    const tradeDate = normalized.quote.timestamp || new Date().toISOString().split('T')[0];
+    const indKey = `${cleanTicker}_${tradeDate}`;
+    dbClient.indicator_snapshots.set(indKey, {
+      ticker: cleanTicker,
+      trade_date: tradeDate,
+      price: indicators.price,
+      ma20: indicators.ma20,
+      ma50: indicators.ma50,
+      ma200: indicators.ma200,
+      rsi14: indicators.rsi14,
+      drawdown_from_high: indicators.drawdownFromHigh,
+      macd_histogram_positive: indicators.macdHistogramPositive,
+      return_1m: indicators.return1M,
+      return_3m: indicators.return3M,
+      return_6m: indicators.return6M,
+      relative_strength_spy: indicators.relativeStrengthVsSpy,
+      created_at: new Date().toISOString(),
+    });
+    this.pendingIndicators.push({ ticker: cleanTicker, indicators, date: tradeDate });
 
     const riskInputs: RawRiskInputs = {
       beta: mom.beta,

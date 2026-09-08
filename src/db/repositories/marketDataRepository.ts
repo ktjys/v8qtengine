@@ -58,8 +58,8 @@ export class MarketDataRepository {
 
     if (dbClient.isTableAvailable('market_data_daily') && dbClient.supabase && records.length > 0) {
       try {
-        // Upsert in batches of 100 to Supabase
-        const batchSize = 100;
+        // Upsert in batches of 300 to Supabase (saves subrequests in Cloudflare Workers)
+        const batchSize = 300;
         for (let i = 0; i < records.length; i += batchSize) {
           const chunk = records.slice(i, i + batchSize).map((r) => ({
             ticker: r.ticker,

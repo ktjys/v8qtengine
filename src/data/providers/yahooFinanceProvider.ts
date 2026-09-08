@@ -41,153 +41,71 @@ export class YahooFinanceProvider implements MarketDataProvider {
   async getQuote(ticker: string): Promise<QuoteData> {
     const clean = ticker.toUpperCase().trim();
     const cacheKey = `quote_${clean}`;
-    const cached = this.getCached<QuoteData>(cacheKey, 30 * 1000);
+    const cached = this.getCached<QuoteData>(cacheKey, 60 * 1000);
     if (cached) return cached;
 
-    // 1. Fetch 1y chart which populates BOTH quote cache and 1y history cache in 1 single subrequest
+    // Check if we have historical bars cached from a recent getHistorical call
+    const histCached = this.getCached<OHLCVBar[]>(`history_${clean}_1y_1d`);
+    if (histCached && histCached.length > 0) {
+      const lastBar = histCached[histCached.length - 1];
+      const prevBar = histCached.length > 1 ? histCached[histCached.length - 2] : lastBar;
+      const change = lastBar.close - prevBar.close;
+      const changePercent = prevBar.close > 0 ? (change / prevBar.close) * 100 : 0;
+
+      const derivedQuote: QuoteData = {
+        ticker: clean,
+        price: Math.round(lastBar.close * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        changePercent: Math.round(changePercent * 100) / 100,
+        currency: 'USD',
+        exchange: 'US',
+        shortName: clean,
+        longName: clean,
+        timestamp: lastBar.date,
+      };
+      this.setCache(cacheKey, derivedQuote);
+      return derivedQuote;
+    }
+
+    // Fast 5d chart attempt if not in cache
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`;
     try {
-      await this.getHistorical(clean, '1y', '1d');
-      const newlyCached = this.getCached<QuoteData>(cacheKey);
-      if (newlyCached) return newlyCached;
-    } catch {}
-
-    // 2. Fallback to 5d chart if 1y timed out
-    const chartUrls = [
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`,
-    ];
-
-    const fetchChartQuote = async (url: string): Promise<QuoteData> => {
-      const res = await fetch(url, {
+      const res = await fetch(chartUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
           Accept: 'application/json',
         },
         signal: AbortSignal.timeout(2500),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (!meta || typeof (meta.regularMarketPrice ?? meta.previousClose) !== 'number') {
-        throw new Error('Invalid meta');
-      }
+      if (res.ok) {
+        const json = await res.json();
+        const meta = json?.chart?.result?.[0]?.meta;
+        if (meta && typeof (meta.regularMarketPrice ?? meta.previousClose) === 'number') {
+          const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
+          const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
+          const change = currentPrice - prevClose;
+          const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
 
-      const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
-      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
-      const change = currentPrice - prevClose;
-      const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
-
-      return {
-        ticker: clean,
-        price: Math.round(currentPrice * 100) / 100,
-        change: Math.round(change * 100) / 100,
-        changePercent: Math.round(changePercent * 100) / 100,
-        currency: meta.currency || 'USD',
-        exchange: meta.exchangeName || 'US',
-        shortName: meta.shortName || meta.symbol || clean,
-        longName: meta.longName || meta.shortName || clean,
-        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-        fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-        timestamp: new Date().toISOString(),
-      };
-    };
-
-    for (const url of chartUrls) {
-      try {
-        const quote = await fetchChartQuote(url);
-        this.setCache(cacheKey, quote);
-        return quote;
-      } catch {}
-    }
-
-    // 2. Try Yahoo Quote API v7 (query1 then query2)
-    const quoteUrls = [
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
-      `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(clean)}`,
-    ];
-
-    const fetchQuoteV7 = async (url: string): Promise<QuoteData> => {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(2000),
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const qRes = json?.quoteResponse?.result?.[0];
-      if (!qRes || typeof (qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice) !== 'number') {
-        throw new Error('Invalid quote response');
-      }
-
-      const currentPrice = qRes.regularMarketPrice ?? qRes.postMarketPrice ?? qRes.preMarketPrice;
-      const change = qRes.regularMarketChange ?? 0;
-      const changePercent = qRes.regularMarketChangePercent ?? 0;
-
-      return {
-        ticker: clean,
-        price: Math.round(currentPrice * 100) / 100,
-        change: Math.round(change * 100) / 100,
-        changePercent: Math.round(changePercent * 100) / 100,
-        currency: qRes.currency || 'USD',
-        exchange: qRes.fullExchangeName || 'US',
-        shortName: qRes.shortName || clean,
-        longName: qRes.longName || qRes.shortName || clean,
-        fiftyTwoWeekHigh: qRes.fiftyTwoWeekHigh,
-        fiftyTwoWeekLow: qRes.fiftyTwoWeekLow,
-        timestamp: new Date().toISOString(),
-      };
-    };
-
-    for (const url of quoteUrls) {
-      try {
-        const quote = await fetchQuoteV7(url);
-        this.setCache(cacheKey, quote);
-        return quote;
-      } catch {}
-    }
-
-    // 3. Try Stooq quote fallback
-    try {
-      const stooqUrl = `https://stooq.com/q/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&f=sd2t2ohlcv&h&e=csv`;
-      const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(4000) });
-      if (sRes.ok) {
-        const csvText = await sRes.text();
-        const lines = csvText.trim().split('\n');
-        if (lines.length >= 2) {
-          const parts = lines[1].split(',');
-          // Symbol,Date,Time,Open,High,Low,Close,Volume
-          if (parts.length >= 7) {
-            const open = parseFloat(parts[3]);
-            const close = parseFloat(parts[6]);
-            if (!isNaN(close) && close > 0) {
-              const change = !isNaN(open) && open > 0 ? close - open : 0;
-              const changePercent = !isNaN(open) && open > 0 ? (change / open) * 100 : 0;
-              const quote: QuoteData = {
-                ticker: clean,
-                price: Math.round(close * 100) / 100,
-                change: Math.round(change * 100) / 100,
-                changePercent: Math.round(changePercent * 100) / 100,
-                currency: 'USD',
-                exchange: 'US',
-                shortName: clean,
-                longName: clean,
-                timestamp: parts[1] || new Date().toISOString(),
-              };
-              this.setCache(cacheKey, quote);
-              return quote;
-            }
-          }
+          const quote: QuoteData = {
+            ticker: clean,
+            price: Math.round(currentPrice * 100) / 100,
+            change: Math.round(change * 100) / 100,
+            changePercent: Math.round(changePercent * 100) / 100,
+            currency: meta.currency || 'USD',
+            exchange: meta.exchangeName || 'US',
+            shortName: meta.shortName || meta.symbol || clean,
+            longName: meta.longName || meta.shortName || clean,
+            fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+            timestamp: new Date().toISOString(),
+          };
+          this.setCache(cacheKey, quote);
+          return quote;
         }
       }
-    } catch (sErr) {
-      // ignore
-    }
+    } catch {}
 
-    console.warn(`[YahooFinanceProvider] getQuote failed for ${clean}, falling back to Seed data`);
     this.lastUsedFallback = true;
     return this.fallbackProvider.getQuote(clean);
   }
