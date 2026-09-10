@@ -13,6 +13,7 @@ import { WatchlistView } from './components/WatchlistView';
 import { BacktestView } from './components/BacktestView';
 import { ClassificationView } from './components/ClassificationView';
 import { ScanRunsView } from './components/ScanRunsView';
+import { MacroEarningsView } from './components/MacroEarningsView';
 import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
@@ -25,7 +26,7 @@ const initialSeed = runPipelineOnSeedData();
 const initialSummary = calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro'>('dashboard');
   const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(initialSeed.evaluations);
   const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(initialSummary);
@@ -303,6 +304,7 @@ export default function App() {
               if (mode) setWatchlistStrategyMode(mode);
               setActiveTab('watchlist');
             }}
+            onNavigateToMacro={() => setActiveTab('macro')}
             onRecalculate={handleRecalculateEvaluations}
             isRecalculating={isRecalculating}
           />
@@ -346,6 +348,12 @@ export default function App() {
             runs={runs}
             onTriggerScan={() => setIsScanModalOpen(true)}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
+          />
+        )}
+
+        {activeTab === 'macro' && (
+          <MacroEarningsView
+            onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
           />
         )}
       </main>

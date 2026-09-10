@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
   BarChart3,
+  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -10,6 +12,7 @@ import {
   Database,
   Eye,
   Flame,
+  Globe,
   Layers,
   RefreshCw,
   Send,
@@ -19,8 +22,9 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { BacktestSummary, FullTickerEvaluation, SignalSnapshot } from '../types/v8';
+import { BacktestSummary, FullTickerEvaluation, SignalSnapshot, MacroMarketRegime, EarningsEvent } from '../types/v8';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
+import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { SortableHeader } from './SortableHeader';
 
@@ -42,6 +46,7 @@ interface DashboardViewProps {
   onSelectTicker: (ticker: string, initialTab?: 'overview' | 'chart' | 'dip_buy') => void;
   onPreviewTelegram: (ticker: string) => void;
   onNavigateToWatchlist: (mode?: 'MOMENTUM' | 'DCA_DIP') => void;
+  onNavigateToMacro?: () => void;
   onRecalculate?: () => void;
   isRecalculating?: boolean;
 }
@@ -53,11 +58,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectTicker,
   onPreviewTelegram,
   onNavigateToWatchlist,
+  onNavigateToMacro,
   onRecalculate,
   isRecalculating = false,
 }) => {
   const [showAllWatch, setShowAllWatch] = useState(false);
   const [showAllSignals, setShowAllSignals] = useState(false);
+  const [macroRegime, setMacroRegime] = useState<MacroMarketRegime | null>(null);
+  const [imminentEarnings, setImminentEarnings] = useState<EarningsEvent[]>([]);
+
+  useEffect(() => {
+    MacroEarningsEngine.getMacroMarketRegime().then(setMacroRegime).catch(() => {});
+    const calendar = MacroEarningsEngine.getEarningsCalendar();
+    setImminentEarnings(calendar.filter((e) => e.riskStage === 'IMMINENT_DANGER'));
+  }, []);
   const [signalSortField, setSignalSortField] = useState<DashboardSignalSortField>('signal_date');
   const [signalSortOrder, setSignalSortOrder] = useState<'desc' | 'asc'>('desc');
 
@@ -224,6 +238,53 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 1.5 Phase 1: Macro Market Regime & Earnings Risk Guard Ribbon */}
+      {macroRegime && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-slate-300">시장 매크로 국면:</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${macroRegime.regimeBadgeColor}`}>
+                  {macroRegime.regimeLabel}
+                </span>
+                <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                  • VIX <b>{macroRegime.vix.level.toFixed(1)}</b> | 10Y 금리 <b>{macroRegime.us10y.level.toFixed(2)}%</b> | DXY <b>{macroRegime.dxy.level.toFixed(1)}</b>
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 mt-1 text-xs text-slate-400 truncate">
+                {imminentEarnings.length > 0 ? (
+                  <span className="text-rose-400 font-medium flex items-center space-x-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      어닝 임박 경고: <b>{imminentEarnings.map(e => `${e.ticker}(D-${e.daysUntil})`).join(', ')}</b> (신규 진입 비중 50% 제한 가드 가동)
+                    </span>
+                  </span>
+                ) : (
+                  <span>가이드: {macroRegime.actionableSummary}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0 self-end md:self-auto">
+            {onNavigateToMacro && (
+              <button
+                id="dashboard-goto-macro-btn"
+                onClick={onNavigateToMacro}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium border border-slate-700 transition-all active:scale-95"
+              >
+                <span>매크로·실적 센터</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2. Closed-Loop Pipeline Architecture Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">

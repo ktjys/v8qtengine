@@ -3,6 +3,7 @@ import {
   Activity,
   Bell,
   Clock,
+  Globe,
   Layers,
   ListFilter,
   RefreshCw,
@@ -11,8 +12,8 @@ import {
 } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs';
-  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs') => void;
+  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro';
+  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro') => void;
   onOpenScanModal: () => void;
   onOpenScheduleModal: () => void;
   totalCount: number;
@@ -117,6 +118,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Bell className="w-4 h-4 text-cyan-400" />
               <span>알림 & 스캔 이력</span>
             </button>
+
+            <button
+              id="tab-macro-btn"
+              onClick={() => setActiveTab('macro')}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'macro'
+                  ? 'bg-slate-800 text-cyan-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+              }`}
+            >
+              <Globe className="w-4 h-4 text-emerald-400" />
+              <span>매크로 & 실적</span>
+            </button>
           </nav>
 
           {/* Action Trigger */}
@@ -183,6 +197,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             실행 이력
+          </button>
+          <button
+            onClick={() => setActiveTab('macro')}
+            className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium transition-all ${
+              activeTab === 'macro' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 bg-slate-950/40'
+            }`}
+          >
+            매크로 & 실적
           </button>
         </div>
       </div>

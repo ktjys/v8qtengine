@@ -7,6 +7,7 @@ import { scanService } from '../pipeline/scanService';
 import { telegramNotifier, escapeTelegramHtml } from '../notification/telegramNotifier';
 import { createSignalSnapshot } from './signalEngine';
 import { ensureDipEvaluation } from './dipBuyEngine';
+import { MacroEarningsEngine } from './macroEarningsEngine';
 import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types/v8';
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
@@ -137,12 +138,44 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       .filter((d) => d.suitability.isSuitable && (d.actionSignal === 'STRONG_DIP_BUY' || d.actionSignal === 'MODERATE_DCA'))
       .sort((a, b) => b.dip_score - a.dip_score);
 
+    // Phase 1: 매크로 시장 체제 & 실적 캘린더 가드 조회
+    let macroSummaryText = '';
+    let earningsRiskText = '';
+    try {
+      const macro = await MacroEarningsEngine.getMacroMarketRegime();
+      macroSummaryText = `🌐 <b>[시장 매크로 체제: ${escapeTelegramHtml(macro.regimeLabel)}]</b>\n` +
+        `• <b>VIX 공포지수:</b> ${macro.vix.level.toFixed(1)} (${macro.vix.label})\n` +
+        `• <b>미국 10년물 금리:</b> ${macro.us10y.level.toFixed(2)}% | <b>달러(DXY):</b> ${macro.dxy.level.toFixed(1)}\n` +
+        `• <b>운용 가이드:</b> ${escapeTelegramHtml(macro.actionableSummary)}\n\n`;
+
+      const earningsCalendar = MacroEarningsEngine.getEarningsCalendar();
+      const imminentEvents = earningsCalendar.filter((e) => e.riskStage === 'IMMINENT_DANGER');
+      if (imminentEvents.length > 0) {
+        earningsRiskText = `⚠️ <b>[실적 발표(Earnings) 임박 경고]</b>\n`;
+        imminentEvents.slice(0, 3).forEach((ev) => {
+          earningsRiskText += `• <b>${ev.ticker}</b> (${ev.companyName}): 실적 발표 <b>D-${ev.daysUntil}</b> (${ev.earningsDate})\n` +
+            `  └ ${escapeTelegramHtml(ev.guardAction)}\n`;
+        });
+        earningsRiskText += `\n`;
+      }
+    } catch (macroErr) {
+      console.warn('[CronScan] Macro regime fetch skipped:', macroErr);
+    }
+
     let reportText = `<b>📊 퀀트 엔진 듀얼 전략 자동 스캔 리포트</b>\n`;
     reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${escapeTelegramHtml(slotName)})\n`;
     reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
     reportText += `• <b>모니터링 대상:</b> ${evaluations.length}개 자산\n`;
     reportText += `• <b>전략 A (추세돌파) 신호:</b> <b>${actionable.length}건</b>\n`;
     reportText += `• <b>전략 B (우량주 눌림추매) 신호:</b> <b>${dipOpportunities.length}건</b>\n\n`;
+
+    if (macroSummaryText) {
+      reportText += macroSummaryText;
+    }
+
+    if (earningsRiskText) {
+      reportText += earningsRiskText;
+    }
 
     // 1. 전략 A: 추세 모멘텀 섹션
     reportText += `🚀 <b>[전략 A: 상승 추세 & 모멘텀 돌파]</b>\n`;

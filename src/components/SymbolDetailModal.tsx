@@ -6,11 +6,13 @@ import {
   ArrowRight,
   BarChart2,
   Bell,
+  Calendar,
   Check,
   CheckCircle2,
   Copy,
   Edit3,
   ExternalLink,
+  Globe,
   Layers,
   LineChart,
   Percent,
@@ -37,6 +39,7 @@ import {
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { buildSignalTelegramMessage, buildDipBuyTelegramMessage } from '../notification/templates';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
+import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
 import { SymbolDailyScoreChart } from './SymbolDailyScoreChart';
 import { AlertHistoryView } from './AlertHistoryView';
 
@@ -138,6 +141,10 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
 
   const dipEvaluation = useMemo(() => ensureDipEvaluation(evaluation), [evaluation]);
   const dipTelegramMessage = useMemo(() => buildDipBuyTelegramMessage(dipEvaluation), [dipEvaluation]);
+
+  const earningsRisk = useMemo(() => {
+    return MacroEarningsEngine.getEarningsRisk(evaluation.ticker);
+  }, [evaluation.ticker]);
 
   const handleCopyDipTelegram = () => {
     navigator.clipboard.writeText(dipTelegramMessage);
@@ -624,6 +631,73 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                   <ArrowRight className="w-4 h-4" />
                 </div>
               </div>
+
+              {/* Earnings & Macro Risk Guard Box */}
+              {earningsRisk && (
+                <div
+                  className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    earningsRisk.riskStage === 'IMMINENT_DANGER'
+                      ? 'bg-rose-950/25 border-rose-500/40 text-rose-200'
+                      : earningsRisk.riskStage === 'UPCOMING_SOON'
+                      ? 'bg-amber-950/25 border-amber-500/30 text-amber-200'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-start space-x-3">
+                    <div
+                      className={`p-2 rounded-xl mt-0.5 ${
+                        earningsRisk.riskStage === 'IMMINENT_DANGER'
+                          ? 'bg-rose-500/20 text-rose-400'
+                          : earningsRisk.riskStage === 'UPCOMING_SOON'
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-slate-800 text-emerald-400'
+                      }`}
+                    >
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold uppercase tracking-wider">
+                          실적 발표 (Earnings) 리스크 가드
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            earningsRisk.riskStage === 'IMMINENT_DANGER'
+                              ? 'bg-rose-500/30 text-rose-200 border border-rose-500/50 animate-pulse'
+                              : earningsRisk.riskStage === 'UPCOMING_SOON'
+                              ? 'bg-amber-500/30 text-amber-200 border border-amber-500/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
+                          {earningsRisk.riskStage === 'IMMINENT_DANGER'
+                            ? `🚨 D-${earningsRisk.daysUntil} (임박 경고)`
+                            : earningsRisk.riskStage === 'UPCOMING_SOON'
+                            ? `⏳ D-${earningsRisk.daysUntil} (시즌 도래)`
+                            : `✅ D-${earningsRisk.daysUntil} (안정권)`}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-300 mt-1">
+                        예정일: <b>{earningsRisk.earningsDate}</b> ({earningsRisk.reportTime === 'AMC' ? '장마감 후' : '장시작 전'})
+                        {earningsRisk.estimatedEps !== null && (
+                          <span className="text-slate-400 ml-2">
+                            • 예상 EPS: <b>${earningsRisk.estimatedEps}</b> / 매출: <b>{earningsRisk.estimatedRevenue}</b>
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        가드 조치: <b>{earningsRisk.guardAction}</b>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0 border-t sm:border-t-0 border-slate-800/60 pt-2 sm:pt-0">
+                    <div className="text-[10px] text-slate-400">포지션 한도 제한</div>
+                    <div className="text-sm font-bold font-mono text-white">
+                      {earningsRisk.riskStage === 'IMMINENT_DANGER' ? '최대 50% 캡' : '100% 정상 허용'}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 4 Score Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

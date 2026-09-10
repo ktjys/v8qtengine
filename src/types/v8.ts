@@ -186,6 +186,8 @@ export interface FullTickerEvaluation {
   provenance?: DataProvenance;
   raw_metadata?: Record<string, any>;
   dip_evaluation?: DipBuyEvaluation;
+  macro_regime?: MacroMarketRegime;
+  earnings_risk?: EarningsEvent;
 }
 
 export type BlueChipTier = 'S' | 'A' | 'B' | 'C';
@@ -473,4 +475,56 @@ export interface AlertNotificationLog {
     }>;
   };
 }
+
+// ==========================================
+// Phase 1: Macro Market Regime & Earnings Risk
+// ==========================================
+
+export type MarketRegimeType = 'RISK_ON' | 'NEUTRAL_CAUTION' | 'RISK_OFF';
+export type VixStatus = 'NORMAL' | 'ELEVATED' | 'PANIC';
+export type InterestRateTrend = 'FALLING' | 'STABLE' | 'RISING';
+export type DollarTrend = 'WEAK' | 'NEUTRAL' | 'STRONG';
+
+export interface MacroIndicatorDetails<TStatus> {
+  symbol: string;
+  name: string;
+  level: number;
+  change1d: number;
+  status: TStatus;
+  label: string;
+  historicalInterpretation: string;
+}
+
+export interface MacroMarketRegime {
+  vix: MacroIndicatorDetails<VixStatus>;
+  us10y: MacroIndicatorDetails<InterestRateTrend>;
+  dxy: MacroIndicatorDetails<DollarTrend>;
+  overallRegime: MarketRegimeType;
+  regimeLabel: string;
+  regimeBadgeColor: string;
+  riskMultiplier: number; // 1.0 (Risk-on) | 0.7 (Caution) | 0.4 (Risk-off)
+  momentumCutoffBonus: number; // 0 | +5 | +10
+  actionableSummary: string;
+  recommendation: string;
+  lastUpdated: string;
+}
+
+export type EarningsRiskStage = 'SAFE' | 'UPCOMING_SOON' | 'IMMINENT_DANGER';
+
+export interface EarningsEvent {
+  ticker: string;
+  companyName: string;
+  earningsDate: string; // YYYY-MM-DD
+  reportTime: 'BMO' | 'AMC' | 'DURING';
+  daysUntil: number; // negative if passed, 0 if today, positive if future
+  riskStage: EarningsRiskStage;
+  stageLabel: string;
+  estimatedEps: number | null;
+  estimatedRevenue: string | null;
+  lastSurprise: string | null;
+  guardAction: string;
+  positionSizeCapMultiplier: number; // 0.5 for IMMINENT_DANGER, 1.0 for SAFE
+  isImminent: boolean; // true if daysUntil <= 7 && daysUntil >= 0
+}
+
 
