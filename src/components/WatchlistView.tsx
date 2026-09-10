@@ -18,10 +18,13 @@ import {
   Sliders,
   Sparkles,
   Trash2,
+  TrendingUp,
+  ShieldCheck,
   X,
   Zap,
 } from 'lucide-react';
 import {
+  ActiveStrategyMode,
   AssetType,
   DecisionType,
   FullTickerEvaluation,
@@ -31,6 +34,7 @@ import {
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { SortableHeader } from './SortableHeader';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
+import { DipBuyMatrix } from './DipBuyMatrix';
 
 export type WatchlistSortField =
   | 'ticker'
@@ -48,7 +52,8 @@ export type WatchlistSortField =
 
 interface WatchlistViewProps {
   evaluations: FullTickerEvaluation[];
-  onSelectTicker: (ticker: string, initialTab?: 'overview' | 'chart') => void;
+  initialStrategyMode?: ActiveStrategyMode;
+  onSelectTicker: (ticker: string, initialTab?: 'overview' | 'chart' | 'dip_buy') => void;
   onPreviewTelegram: (ticker: string) => void;
   onAddTicker: (ticker: string, name: string, memo: string) => void;
   onDeleteTicker: (ticker: string) => void;
@@ -59,6 +64,7 @@ interface WatchlistViewProps {
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
   evaluations,
+  initialStrategyMode = 'MOMENTUM',
   onSelectTicker,
   onPreviewTelegram,
   onAddTicker,
@@ -67,6 +73,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   onRecalculate,
   isRecalculating = false,
 }) => {
+  const [strategyMode, setStrategyMode] = useState<ActiveStrategyMode>(initialStrategyMode);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAssetType, setFilterAssetType] = useState<string>('ALL');
   const [filterStrategy, setFilterStrategy] = useState<string>('ALL');
@@ -322,119 +329,173 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           </div>
         </div>
 
-        {/* Filters Bar */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
-          <div className="flex items-center space-x-1 text-slate-400 font-medium mr-1">
-            <Filter className="w-3.5 h-3.5" />
-            <span>필터:</span>
+        {/* Dual Strategy Mode Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
+          <div className="flex items-center p-1 bg-slate-950/80 rounded-xl border border-slate-800 w-fit">
+            <button
+              id="strategy-tab-momentum"
+              onClick={() => setStrategyMode('MOMENTUM')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                strategyMode === 'MOMENTUM'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>전략 A: 모멘텀 돌파 추세추종</span>
+            </button>
+            <button
+              id="strategy-tab-dipbuy"
+              onClick={() => setStrategyMode('DCA_DIP')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                strategyMode === 'DCA_DIP'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>전략 B: 우량대형주 적립 & 눌림목 추매 (DCA)</span>
+            </button>
           </div>
 
-          {/* Asset Type */}
-          <select
-            value={filterAssetType}
-            onChange={(e) => setFilterAssetType(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
-          >
-            <option value="ALL">자산 분류 (전체)</option>
-            <option value="etf">ETF</option>
-            <option value="equity">개별주 (Equity)</option>
-          </select>
-
-          {/* Strategy */}
-          <select
-            value={filterStrategy}
-            onChange={(e) => setFilterStrategy(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
-          >
-            <option value="ALL">전략 (전체)</option>
-            <option value="broad_market_etf">Broad Market ETF</option>
-            <option value="growth_etf">Growth ETF</option>
-            <option value="dividend_etf">Dividend ETF</option>
-            <option value="sector_etf">Sector ETF</option>
-            <option value="income_etf">Income ETF</option>
-            <option value="quality">Quality (우량주)</option>
-            <option value="established_growth">Established Growth (대형성장)</option>
-            <option value="speculative">Speculative (투기/고변동)</option>
-          </select>
-
-          {/* Risk Level */}
-          <select
-            value={filterRisk}
-            onChange={(e) => setFilterRisk(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
-          >
-            <option value="ALL">리스크 레벨 (전체)</option>
-            <option value="LOW">LOW Risk</option>
-            <option value="MEDIUM">MEDIUM Risk</option>
-            <option value="HIGH">HIGH Risk</option>
-          </select>
-
-          {/* Decision */}
-          <select
-            value={filterDecision}
-            onChange={(e) => setFilterDecision(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
-          >
-            <option value="ALL">의사결정 (전체)</option>
-            <option value="STRONG_OPPORTUNITY">STRONG OPPORTUNITY</option>
-            <option value="OPPORTUNITY">OPPORTUNITY</option>
-            <option value="WATCH">WATCH</option>
-            <option value="NEUTRAL">NEUTRAL</option>
-            <option value="AVOID">AVOID</option>
-          </select>
-
-          {/* Signals Only Toggle */}
-          <button
-            onClick={() => setSignalsOnly(!signalsOnly)}
-            className={`px-2.5 py-1 rounded-lg border transition-all flex items-center space-x-1.5 ${
-              signalsOnly
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-semibold'
-                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
-            <span>신호 발생 종목만 보기</span>
-          </button>
-
-          {(filterAssetType !== 'ALL' ||
-            filterStrategy !== 'ALL' ||
-            filterRisk !== 'ALL' ||
-            filterDecision !== 'ALL' ||
-            signalsOnly ||
-            searchTerm) && (
-            <button
-              onClick={() => {
-                setFilterAssetType('ALL');
-                setFilterStrategy('ALL');
-                setFilterRisk('ALL');
-                setFilterDecision('ALL');
-                setSignalsOnly(false);
-                setSearchTerm('');
-              }}
-              className="text-cyan-400 hover:underline text-xs ml-auto"
-            >
-              필터 초기화
-            </button>
-          )}
+          <div className="text-xs text-slate-400 font-sans">
+            {strategyMode === 'MOMENTUM' ? (
+              <span className="flex items-center space-x-1.5 text-cyan-400">
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>상승 모멘텀 돌파 진입 신호 모니터링 모드</span>
+              </span>
+            ) : (
+              <span className="flex items-center space-x-1.5 text-emerald-400">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>22% 양도세 절세형 무매도 장기 적립 & 과매도 추매 모드</span>
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Momentum Filters Bar (Only in MOMENTUM mode) */}
+        {strategyMode === 'MOMENTUM' && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
+            <div className="flex items-center space-x-1 text-slate-400 font-medium mr-1">
+              <Filter className="w-3.5 h-3.5" />
+              <span>필터:</span>
+            </div>
+
+            {/* Asset Type */}
+            <select
+              value={filterAssetType}
+              onChange={(e) => setFilterAssetType(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+            >
+              <option value="ALL">자산 분류 (전체)</option>
+              <option value="etf">ETF</option>
+              <option value="equity">개별주 (Equity)</option>
+            </select>
+
+            {/* Strategy */}
+            <select
+              value={filterStrategy}
+              onChange={(e) => setFilterStrategy(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+            >
+              <option value="ALL">전략 (전체)</option>
+              <option value="broad_market_etf">Broad Market ETF</option>
+              <option value="growth_etf">Growth ETF</option>
+              <option value="dividend_etf">Dividend ETF</option>
+              <option value="sector_etf">Sector ETF</option>
+              <option value="income_etf">Income ETF</option>
+              <option value="quality">Quality (우량주)</option>
+              <option value="established_growth">Established Growth (대형성장)</option>
+              <option value="speculative">Speculative (투기/고변동)</option>
+            </select>
+
+            {/* Risk Level */}
+            <select
+              value={filterRisk}
+              onChange={(e) => setFilterRisk(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+            >
+              <option value="ALL">리스크 레벨 (전체)</option>
+              <option value="LOW">LOW Risk</option>
+              <option value="MEDIUM">MEDIUM Risk</option>
+              <option value="HIGH">HIGH Risk</option>
+            </select>
+
+            {/* Decision */}
+            <select
+              value={filterDecision}
+              onChange={(e) => setFilterDecision(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+            >
+              <option value="ALL">의사결정 (전체)</option>
+              <option value="STRONG_OPPORTUNITY">STRONG OPPORTUNITY</option>
+              <option value="OPPORTUNITY">OPPORTUNITY</option>
+              <option value="WATCH">WATCH</option>
+              <option value="NEUTRAL">NEUTRAL</option>
+              <option value="AVOID">AVOID</option>
+            </select>
+
+            {/* Signals Only Toggle */}
+            <button
+              onClick={() => setSignalsOnly(!signalsOnly)}
+              className={`px-2.5 py-1 rounded-lg border transition-all flex items-center space-x-1.5 ${
+                signalsOnly
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-semibold'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>신호 발생 종목만 보기</span>
+            </button>
+
+            {(filterAssetType !== 'ALL' ||
+              filterStrategy !== 'ALL' ||
+              filterRisk !== 'ALL' ||
+              filterDecision !== 'ALL' ||
+              signalsOnly ||
+              searchTerm) && (
+              <button
+                onClick={() => {
+                  setFilterAssetType('ALL');
+                  setFilterStrategy('ALL');
+                  setFilterRisk('ALL');
+                  setFilterDecision('ALL');
+                  setSignalsOnly(false);
+                  setSearchTerm('');
+                }}
+                className="text-cyan-400 hover:underline text-xs ml-auto"
+              >
+                필터 초기화
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* 2. Main Matrix Table */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400">
-                <SortableHeader<WatchlistSortField>
-                  field="ticker"
-                  currentField={sortField}
-                  currentOrder={sortOrder}
-                  onSort={handleSort}
-                  className="py-3.5 px-4 font-semibold"
-                >
-                  <span className="text-slate-400 font-mono text-[11px] mr-1.5">No.</span>
-                  <span>종목코드 / 이름</span>
-                </SortableHeader>
+      {/* 2. Main Content based on Active Strategy Mode */}
+      {strategyMode === 'DCA_DIP' ? (
+        <DipBuyMatrix
+          evaluations={evaluations}
+          searchTerm={searchTerm}
+          onSelectTicker={onSelectTicker}
+          onDeleteTicker={onDeleteTicker}
+        />
+      ) : (
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400">
+                  <SortableHeader<WatchlistSortField>
+                    field="ticker"
+                    currentField={sortField}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                    className="py-3.5 px-4 font-semibold"
+                  >
+                    <span className="text-slate-400 font-mono text-[11px] mr-1.5">No.</span>
+                    <span>종목코드 / 이름</span>
+                  </SortableHeader>
 
                 <SortableHeader<WatchlistSortField>
                   field="strategy"
@@ -701,6 +762,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           </table>
         </div>
       </div>
+      )}
 
       {/* Add Ticker Modal */}
       {showAddModal && (

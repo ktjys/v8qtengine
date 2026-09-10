@@ -1,6 +1,6 @@
 {
   "name": "Quant Decision & Signal Engine",
-  "description": "다차원 자산 분류, 기회-리스크 독립 평가 매트릭스, 불변 시그널 원장, Look-ahead Bias 제거 백테스트를 제공하는 단독 퀀트 의사결정 플랫폼",
+  "description": "모멘텀 추세추종 및 우량대형주 적립·눌림목 추매(DCA) 듀얼 전략, 기회-리스크 독립 평가 매트릭스, 불변 시그널 원장을 제공하는 단독 퀀트 의사결정 플랫폼",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

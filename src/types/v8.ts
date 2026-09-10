@@ -185,7 +185,58 @@ export interface FullTickerEvaluation {
   data_quality?: DataQualityReport;
   provenance?: DataProvenance;
   raw_metadata?: Record<string, any>;
+  dip_evaluation?: DipBuyEvaluation;
 }
+
+export type BlueChipTier = 'S' | 'A' | 'B' | 'C';
+
+export interface BlueChipSuitability {
+  score: number; // 0 ~ 100
+  tier: BlueChipTier;
+  tierLabel: string; // '💎 S등급 (초우량/인덱스)' | '🥇 A등급 (대형성장우량)' | '🥈 B등급 (일반대형)' | '⚠️ C등급 (추매부적합)'
+  isSuitable: boolean; // true if score >= 70
+  breakdown: {
+    indexStatusScore: number; // 0 ~ 30
+    marketCapScore: number; // 0 ~ 25
+    qualityScore: number; // 0 ~ 25
+    stabilityScore: number; // 0 ~ 20
+  };
+  reasons: string[];
+}
+
+export type DipTimingSignal =
+  | 'STRONG_DIP_BUY'
+  | 'MODERATE_DCA'
+  | 'NEUTRAL_ACCUMULATE'
+  | 'OVERBOUGHT_WAIT'
+  | 'INELIGIBLE_AVOID';
+
+export interface DipTiming {
+  score: number; // 0 ~ 100
+  rsi: number;
+  rsiZone: 'DEEP_OVERSOLD' | 'DIP_ZONE' | 'HEALTHY' | 'OVERBOUGHT';
+  drawdownFromHigh: number; // -0.082
+  drawdownLabel: string;
+  supportLevel: string;
+  reasons: string[];
+}
+
+export interface DipBuyEvaluation {
+  ticker: string;
+  name: string;
+  price: number;
+  change1d: number;
+  suitability: BlueChipSuitability;
+  timing: DipTiming;
+  dip_score: number; // 종합 추매 매력도
+  actionSignal: DipTimingSignal;
+  signalLabel: string;
+  actionable: boolean;
+  guidanceMessage: string;
+  suggestedDcaRatio: string;
+}
+
+export type ActiveStrategyMode = 'MOMENTUM' | 'DCA_DIP';
 
 export type SignalStatus =
   | 'NEW'
@@ -387,5 +438,39 @@ export interface SymbolScoreHistoryResult {
   range: string;
   summary: SymbolScoreHistorySummary;
   history: DailyScorePoint[];
+}
+
+export type AlertStrategyType = 'STRATEGY_A' | 'STRATEGY_B' | 'DUAL_SCAN_REPORT' | 'MANUAL_ALERT';
+export type AlertDeliveryStatus = 'SENT' | 'PREVIEW_ONLY' | 'FAILED' | 'LOCAL_LOGGED';
+
+export interface AlertNotificationLog {
+  id: string; // e.g. alert-2026-09-09-123456
+  timestamp: string; // ISO string
+  kst_time: string; // e.g. "2026-09-10 11:45:00"
+  strategy_type: AlertStrategyType;
+  title: string;
+  tickers: string[];
+  signals_count: number;
+  delivery_status: AlertDeliveryStatus;
+  delivery_target?: string | null; // e.g. "123****"
+  message_preview: string;
+  message_body: string;
+  details?: {
+    strategy_a_tickers?: Array<{
+      ticker: string;
+      score: number;
+      decision: string;
+      price: number;
+      change1d: number;
+    }>;
+    strategy_b_tickers?: Array<{
+      ticker: string;
+      tier: string;
+      dip_score: number;
+      rsi: number;
+      drawdown: string;
+      suggested_action: string;
+    }>;
+  };
 }
 

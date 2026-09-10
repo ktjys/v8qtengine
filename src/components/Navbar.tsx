@@ -114,8 +114,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
               }`}
             >
-              <Layers className="w-4 h-4" />
-              <span>실행 로그</span>
+              <Bell className="w-4 h-4 text-cyan-400" />
+              <span>알림 & 스캔 이력</span>
             </button>
           </nav>
 

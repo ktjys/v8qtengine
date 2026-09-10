@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart2,
+  Bell,
   Check,
   CheckCircle2,
   Copy,
@@ -34,13 +35,15 @@ import {
   StrategyType,
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
-import { buildSignalTelegramMessage } from '../notification/templates';
+import { buildSignalTelegramMessage, buildDipBuyTelegramMessage } from '../notification/templates';
+import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { SymbolDailyScoreChart } from './SymbolDailyScoreChart';
+import { AlertHistoryView } from './AlertHistoryView';
 
 interface SymbolDetailModalProps {
   evaluation: FullTickerEvaluation | null;
   historicalSignals: SignalSnapshot[];
-  initialTab?: 'overview' | 'chart' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals';
+  initialTab?: 'overview' | 'chart' | 'dip_buy' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals' | 'alerts';
   onClose: () => void;
   onSaveOverride: (
     ticker: string,
@@ -62,8 +65,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
 }) => {
   if (!evaluation) return null;
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'dip_buy' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals'>(initialTab);
   const [copiedTelegram, setCopiedTelegram] = useState(false);
+  const [copiedDipTelegram, setCopiedDipTelegram] = useState(false);
 
   // Manual Override Form State
   const [editAssetType, setEditAssetType] = useState<AssetType>(evaluation.classification.asset_type);
@@ -132,6 +136,15 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   const decision = evaluation.decision;
   const classification = evaluation.classification;
 
+  const dipEvaluation = useMemo(() => ensureDipEvaluation(evaluation), [evaluation]);
+  const dipTelegramMessage = useMemo(() => buildDipBuyTelegramMessage(dipEvaluation), [dipEvaluation]);
+
+  const handleCopyDipTelegram = () => {
+    navigator.clipboard.writeText(dipTelegramMessage);
+    setCopiedDipTelegram(true);
+    setTimeout(() => setCopiedDipTelegram(false), 2000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-2.5 sm:p-4 overflow-y-auto animate-fadeIn">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden my-auto">
@@ -187,7 +200,18 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            종합 진단
+            전략 A: 종합 진단
+          </button>
+          <button
+            onClick={() => setActiveTab('dip_buy')}
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+              activeTab === 'dip_buy'
+                ? 'border-emerald-400 text-emerald-400 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>전략 B: 우량주 눌림추매 ({dipEvaluation.suitability.tierLabel})</span>
           </button>
           <button
             onClick={() => setActiveTab('chart')}
@@ -250,10 +274,265 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
           >
             수동 Override
           </button>
+          <button
+            onClick={() => setActiveTab('alerts')}
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+              activeTab === 'alerts'
+                ? 'border-purple-400 text-purple-300 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5 text-purple-400" />
+            <span>발송 알림 이력</span>
+          </button>
         </div>
 
         {/* Modal Body */}
         <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1 text-slate-200">
+          {/* TAB: STRATEGY B DIP BUYING & BLUE CHIP SUITABILITY */}
+          {activeTab === 'dip_buy' && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Top Decision Hero */}
+              <div
+                className={`p-5 rounded-2xl border ${
+                  dipEvaluation.actionSignal === 'STRONG_DIP_BUY'
+                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-100'
+                    : dipEvaluation.actionSignal === 'MODERATE_DCA'
+                    ? 'bg-amber-950/40 border-amber-500/40 text-amber-100'
+                    : dipEvaluation.actionSignal === 'OVERBOUGHT_WAIT'
+                    ? 'bg-blue-950/40 border-blue-500/40 text-blue-100'
+                    : 'bg-rose-950/30 border-rose-800 text-rose-200'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        전략 B: 우량대형주 적립 & 눌림목 추매 신호
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 border border-slate-700 text-slate-300">
+                        양도세 절세 복리형
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold mt-1 flex items-center space-x-3">
+                      <span>{dipEvaluation.signalLabel}</span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                      💡 {dipEvaluation.guidanceMessage}
+                    </p>
+                  </div>
+
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800/80 shrink-0">
+                    <div className="text-right">
+                      <div className="text-[11px] text-slate-400">종합 추매 매력도</div>
+                      <div className="text-3xl font-black font-mono tracking-tight text-white">
+                        {dipEvaluation.dip_score}
+                        <span className="text-sm font-normal text-slate-400"> / 100</span>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-emerald-400 font-semibold mt-1">
+                      권고: {dipEvaluation.suggestedDcaRatio}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2-Column Grid: Suitability vs Timing */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Column 1: Blue-Chip Suitability */}
+                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <h3 className="font-bold text-sm text-slate-200">
+                        우량대형주 적합도 (체급 검증)
+                      </h3>
+                    </div>
+                    <span
+                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
+                        dipEvaluation.suitability.tier === 'S'
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                          : dipEvaluation.suitability.tier === 'A'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : dipEvaluation.suitability.tier === 'B'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                      }`}
+                    >
+                      {dipEvaluation.suitability.tierLabel} ({dipEvaluation.suitability.score}점)
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    손절매 없이 장기 보유하며 눌림목에서 모아가기 위해서는 <b>파산 위험이 없고(지수/시총) 현금 창출력과 하방 안정성</b>이 검증된 자산이어야 합니다.
+                  </p>
+
+                  {/* 4 Factor Bars */}
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-400">① 대표 지수 / ETF 지위</span>
+                        <span className="font-mono text-slate-200 font-semibold">
+                          {dipEvaluation.suitability.breakdown.indexStatusScore} / 30점
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-purple-500 h-full rounded-full transition-all"
+                          style={{ width: `${(dipEvaluation.suitability.breakdown.indexStatusScore / 30) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-400">② 시가총액 규모 (체급)</span>
+                        <span className="font-mono text-slate-200 font-semibold">
+                          {dipEvaluation.suitability.breakdown.marketCapScore} / 25점
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-blue-500 h-full rounded-full transition-all"
+                          style={{ width: `${(dipEvaluation.suitability.breakdown.marketCapScore / 25) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-400">③ 펀더멘털 건전성 및 해자</span>
+                        <span className="font-mono text-slate-200 font-semibold">
+                          {dipEvaluation.suitability.breakdown.qualityScore} / 25점
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-emerald-500 h-full rounded-full transition-all"
+                          style={{ width: `${(dipEvaluation.suitability.breakdown.qualityScore / 25) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-400">④ 하방 안정성 / 저변동성</span>
+                        <span className="font-mono text-slate-200 font-semibold">
+                          {dipEvaluation.suitability.breakdown.stabilityScore} / 20점
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-cyan-500 h-full rounded-full transition-all"
+                          style={{ width: `${(dipEvaluation.suitability.breakdown.stabilityScore / 20) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reasons list */}
+                  <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300">
+                    <div className="text-[11px] font-semibold text-slate-400 uppercase">체급 판정 근거:</div>
+                    {dipEvaluation.suitability.reasons.map((r, i) => (
+                      <div key={i} className="flex items-start space-x-2">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>{r}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Column 2: Dip Timing Analysis */}
+                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <TrendingDown className="w-4 h-4 text-cyan-400" />
+                      <h3 className="font-bold text-sm text-slate-200">
+                        현재 눌림목 타이밍 (할인율 검증)
+                      </h3>
+                    </div>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      {dipEvaluation.timing.score}점 / 100
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    상승 기조 중의 <b>단기 과매도, 고점 대비 낙폭, 장기 이평선 지지력</b>을 분석하여 최적의 분할 매수 단가를 제시합니다.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">RSI (14일)</span>
+                      <span className="font-mono font-bold text-lg text-slate-100">
+                        {dipEvaluation.timing.rsi.toFixed(1)}
+                      </span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">
+                        {dipEvaluation.timing.rsiZone === 'DEEP_OVERSOLD'
+                          ? '극심한 과매도 (강력 기회)'
+                          : dipEvaluation.timing.rsiZone === 'OVERSOLD'
+                          ? '과매도 눌림목 (추매 적기)'
+                          : dipEvaluation.timing.rsiZone === 'HEALTHY_PULLBACK'
+                          ? '건전한 숨고르기 조정'
+                          : dipEvaluation.timing.rsiZone === 'OVERBOUGHT'
+                          ? '단기 과열 (추매 보류)'
+                          : '적정 중립'}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">고점 대비 하락폭</span>
+                      <span className="font-mono font-bold text-lg text-rose-400">
+                        {dipEvaluation.timing.drawdownLabel}
+                      </span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">
+                        최고가 대비 할인율
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-xs">
+                    <span className="text-slate-400 block text-[11px]">장기 추세 & 지지선 판정</span>
+                    <span className="font-semibold text-slate-200 block mt-0.5">
+                      {dipEvaluation.timing.supportLevel}
+                    </span>
+                  </div>
+
+                  {/* Timing Reasons */}
+                  <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300">
+                    <div className="text-[11px] font-semibold text-slate-400 uppercase">타이밍 세부 요인:</div>
+                    {dipEvaluation.timing.reasons.map((r, i) => (
+                      <div key={i} className="flex items-start space-x-2">
+                        <ArrowRight className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                        <span>{r}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Tax Advantage & Long-Term DCA Guide Banner */}
+              <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>양도소득세(22%) 절세 & 장기 복리 극대화 가이드</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    단기 매매를 지양하고 <b>매도 없이 눌림목에서만 평단가를 낮추며 모아가면</b> 연간 250만 원 초과분에 대한 22% 해외주식 양도소득세가 지속 이연되어 압도적인 복리 복합 수익률을 누릴 수 있습니다.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleCopyDipTelegram}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all active:scale-95 shrink-0 shadow-lg shadow-emerald-600/20"
+                >
+                  {copiedDipTelegram ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                  <span>{copiedDipTelegram ? '알림 텍스트 복사됨!' : '전략 B 알림 양식 복사'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* TAB: DAILY SCORE & INDICATORS CHART */}
           {activeTab === 'chart' && (
             <div className="space-y-6 animate-fadeIn">
@@ -838,6 +1117,25 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                 </button>
               </div>
             </form>
+          )}
+
+          {/* TAB 7: ALERTS HISTORY FOR THIS TICKER */}
+          {activeTab === 'alerts' && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="bg-slate-950/70 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-100 flex items-center space-x-2">
+                    <Bell className="w-4 h-4 text-purple-400" />
+                    <span>{evaluation.ticker} 관련 발송 알림 이력 (Alert Audit)</span>
+                  </h4>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    정기/수동 스캔 및 텔레그램 연동을 통해 {evaluation.ticker} 종목이 포함되어 발송/기록된 알림 내역입니다.
+                  </p>
+                </div>
+              </div>
+
+              <AlertHistoryView initialTickerFilter={evaluation.ticker} />
+            </div>
           )}
         </div>
       </div>

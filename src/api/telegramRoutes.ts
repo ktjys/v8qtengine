@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { telegramNotifier } from '../notification/telegramNotifier';
 import { signalRepository } from '../db/repositories/signalRepository';
+import { alertHistoryRepository } from '../db/repositories/alertHistoryRepository';
+import { AlertNotificationLog } from '../types/v8';
 
 export const telegramRouter = Router();
 
@@ -90,6 +92,53 @@ telegramRouter.post('/test-broadcast', async (req, res) => {
       `하루 2회 자동 스캔(06:30 정규장 마감, 23:00 밤 11시 개장 브리핑 KST) 또는 수동 스캔 시 위와 동일한 실시간 종가/현재가 기준으로 리포트가 발송됩니다.`;
 
     const sendRes = await telegramNotifier.sendMessage(testMessage, customToken, customChatId);
+
+    // Record to Alert History
+    try {
+      const kstTimeStr = new Intl.DateTimeFormat('ko-KR', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(new Date());
+
+      const alertLog: AlertNotificationLog = {
+        id: `alert-test-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        kst_time: kstTimeStr,
+        strategy_type: 'MANUAL_ALERT',
+        title: '🚨 [테스트] 텔레그램 연동 실시간 테스트 알림 (NVDA)',
+        tickers: ['NVDA'],
+        signals_count: 1,
+        delivery_status: sendRes.previewOnly
+          ? 'PREVIEW_ONLY'
+          : sendRes.success
+          ? 'SENT'
+          : 'FAILED',
+        delivery_target: customChatId ? `${customChatId.slice(0, 3)}****` : null,
+        message_preview: `NVDA 실시간 현재가 $${nvdaPrice.toFixed(2)} (${changeStr}) 테스트 발송`,
+        message_body: testMessage,
+        details: {
+          strategy_a_tickers: [
+            {
+              ticker: 'NVDA',
+              score: 89,
+              decision: 'BUY',
+              price: nvdaPrice,
+              change1d: nvdaChange,
+            },
+          ],
+        },
+      };
+
+      await alertHistoryRepository.save(alertLog);
+    } catch (aErr) {
+      console.warn('[TelegramRoute] Failed to save alert log:', aErr);
+    }
 
     if (sendRes.previewOnly) {
       res.json({

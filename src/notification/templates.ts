@@ -1,4 +1,34 @@
-import { SignalSnapshot } from '../types/v8';
+import { DipBuyEvaluation, SignalSnapshot } from '../types/v8';
+
+export function buildDipBuyTelegramMessage(dip: DipBuyEvaluation): string {
+  const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
+  const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
+
+  return `🛡️ [우량주 장기적립 & 눌림목 추매 알림]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 <b>${dip.ticker}</b> (${dip.name})
+• 현재가: $${dip.price.toFixed(2)} (${arrow} ${changeStr})
+• 신호 판정: <b>${dip.signalLabel}</b>
+• 추매 권고 비중: <code>${dip.suggestedDcaRatio}</code>
+
+💎 <b>우량대형주 적합도 (안전성)</b>
+• 체급 등급: <b>${dip.suitability.tierLabel}</b> (${dip.suitability.score}점 / 100)
+• 지수/ETF 지위: ${dip.suitability.breakdown.indexStatusScore}/30점
+• 시가총액 규모: ${dip.suitability.breakdown.marketCapScore}/25점
+• 재무/해자 건전성: ${dip.suitability.breakdown.qualityScore}/25점
+• 하방 안정성: ${dip.suitability.breakdown.stabilityScore}/20점
+
+📉 <b>현재 눌림목 타이밍 (할인율)</b>
+• 타이밍 점수: <b>${dip.timing.score}점</b> / 100
+• RSI (14일): ${dip.timing.rsi.toFixed(1)} (${dip.timing.rsiZone})
+• 고점 대비 조정폭: ${dip.timing.drawdownLabel}
+• 지지선 상태: ${dip.timing.supportLevel}
+
+💡 <b>적립 가이드:</b>
+"${dip.guidanceMessage}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+양도소득세 절세형 장기 복리 적립 엔진 (Strategy B)`;
+}
 
 export function buildSignalTelegramMessage(snapshot: SignalSnapshot): string {
   const fundText =

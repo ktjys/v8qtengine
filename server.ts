@@ -10,6 +10,7 @@ import { backtestRouter } from './src/api/backtestRoutes';
 import { runRouter } from './src/api/runRoutes';
 import { systemRouter } from './src/api/systemRoutes';
 import { telegramRouter } from './src/api/telegramRoutes';
+import { alertRouter } from './src/api/alertRoutes';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { telegramNotifier } from './src/notification/telegramNotifier';
 import { internalScheduler } from './src/services/internalScheduler';
@@ -72,6 +73,7 @@ async function startServer() {
   app.use('/api/v8/runs', runRouter);
   app.use('/api/v8/system', systemRouter);
   app.use('/api/v8/telegram', telegramRouter);
+  app.use('/api/v8/alerts', alertRouter);
 
   // Auto-scan / Cron routes for local and production parity (supports all aliases and methods)
   const cronHandler = async (req: express.Request, res: express.Response) => {

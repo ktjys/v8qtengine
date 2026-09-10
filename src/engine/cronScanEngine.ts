@@ -1,11 +1,13 @@
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { scanRunRepository } from '../db/repositories/scanRunRepository';
+import { alertHistoryRepository } from '../db/repositories/alertHistoryRepository';
 import { signalRepository } from '../db/repositories/signalRepository';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { scanService } from '../pipeline/scanService';
 import { telegramNotifier, escapeTelegramHtml } from '../notification/telegramNotifier';
 import { createSignalSnapshot } from './signalEngine';
-import { FullTickerEvaluation, ScanRunLog } from '../types/v8';
+import { ensureDipEvaluation } from './dipBuyEngine';
+import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types/v8';
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
 let lastCronScanResult: CronScanResult | null = null;
@@ -129,41 +131,69 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       '7774679329'
     );
 
+    // 전략 B: 우량대형주 적립 & 눌림목 추매 평가
+    const dipEvaluations = evaluations.map((e) => ensureDipEvaluation(e));
+    const dipOpportunities = dipEvaluations
+      .filter((d) => d.suitability.isSuitable && (d.actionSignal === 'STRONG_DIP_BUY' || d.actionSignal === 'MODERATE_DCA'))
+      .sort((a, b) => b.dip_score - a.dip_score);
+
+    let reportText = `<b>📊 퀀트 엔진 듀얼 전략 자동 스캔 리포트</b>\n`;
+    reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${escapeTelegramHtml(slotName)})\n`;
+    reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    reportText += `• <b>모니터링 대상:</b> ${evaluations.length}개 자산\n`;
+    reportText += `• <b>전략 A (추세돌파) 신호:</b> <b>${actionable.length}건</b>\n`;
+    reportText += `• <b>전략 B (우량주 눌림추매) 신호:</b> <b>${dipOpportunities.length}건</b>\n\n`;
+
+    // 1. 전략 A: 추세 모멘텀 섹션
+    reportText += `🚀 <b>[전략 A: 상승 추세 & 모멘텀 돌파]</b>\n`;
+    if (actionable.length > 0) {
+      actionable.slice(0, 3).forEach((sig, idx) => {
+        const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
+        const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
+        const safeName = escapeTelegramHtml(sig.name);
+        const safeTicker = escapeTelegramHtml(sig.ticker);
+        const safeDecision = escapeTelegramHtml(sig.decision?.decision || 'BUY');
+        const safeReason = escapeTelegramHtml(sig.decision?.reason || '기술적 반등 및 모멘텀 지속');
+
+        reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
+        reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+        reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${safeDecision}</code>\n`;
+        reportText += `   - 근거: ${safeReason}\n`;
+      });
+    } else {
+      reportText += `   ℹ️ 리스크 제약을 통과한 모멘텀 돌파 신호 없음 (보수적 접근 권장)\n`;
+    }
+    reportText += `\n`;
+
+    // 2. 전략 B: 우량대형주 적립 & 눌림목 추매 섹션
+    reportText += `🛡️ <b>[전략 B: 우량대형주 적립 & 눌림목 추매]</b>\n`;
+    if (dipOpportunities.length > 0) {
+      dipOpportunities.slice(0, 3).forEach((dip, idx) => {
+        const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
+        const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
+        const safeName = escapeTelegramHtml(dip.name);
+        const safeTicker = escapeTelegramHtml(dip.ticker);
+
+        reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
+        reportText += `   - 현재가: $${dip.price.toFixed(2)} (${arrow} ${changeStr})\n`;
+        reportText += `   - 우량적합도: <b>${dip.suitability.tierLabel}</b> (${dip.suitability.score}점)\n`;
+        reportText += `   - 눌림타이밍: <b>${dip.timing.score}점</b> (RSI ${dip.timing.rsi.toFixed(1)}, ${dip.timing.drawdownLabel})\n`;
+        reportText += `   - 신호: <b>${dip.signalLabel}</b> (권고: <code>${dip.suggestedDcaRatio}</code>)\n`;
+      });
+    } else {
+      reportText += `   ℹ️ 현재 우량주 중 최적의 과매도 눌림목 구간에 도달한 종목 없음 (정기 일정 유지)\n`;
+    }
+    reportText += `\n`;
+
+    if (options.sourceUrl) {
+      const safeUrl = options.sourceUrl.replace(/[<>"']/g, '').trim();
+      reportText += `🔗 <a href="${safeUrl}">퀀트 시스템 대시보드 바로가기</a>`;
+    }
+
     if (token && chat) {
       const cleanToken = token.trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
       const cleanChat = chat.trim().replace(/^['"]|['"]$/g, '');
       const maskedTarget = cleanChat ? `${cleanChat.slice(0, 3)}****` : null;
-
-      let reportText = `<b>📊 퀀트 엔진 자동 스캔 리포트</b>\n`;
-      reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${escapeTelegramHtml(slotName)})\n`;
-      reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
-      reportText += `• <b>모니터링 대상:</b> ${evaluations.length}개 자산\n`;
-      reportText += `• <b>유효 진입 신호:</b> <b>${actionable.length}건</b>\n`;
-      reportText += `• <b>고위험 종목:</b> ${evaluations.filter((e) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
-
-      if (actionable.length > 0) {
-        reportText += `<b>🎯 오늘 포착된 주요 기회 종목:</b>\n`;
-        actionable.slice(0, 4).forEach((sig, idx) => {
-          const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
-          const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-          const safeName = escapeTelegramHtml(sig.name);
-          const safeTicker = escapeTelegramHtml(sig.ticker);
-          const safeDecision = escapeTelegramHtml(sig.decision?.decision || 'BUY');
-          const safeReason = escapeTelegramHtml(sig.decision?.reason || '기술적 반등 및 모멘텀 지속');
-
-          reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
-          reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (전일대비: ${arrow} ${changeStr})\n`;
-          reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${safeDecision}</code>\n`;
-          reportText += `   - 핵심이유: ${safeReason}\n\n`;
-        });
-      } else {
-        reportText += `ℹ️ 현재 엄격한 리스크 제약을 통과한 신규 진입 신호가 없습니다. (안전 자산/현금 비중 유지 권장)\n\n`;
-      }
-
-      if (options.sourceUrl) {
-        const safeUrl = options.sourceUrl.replace(/[<>"']/g, '').trim();
-        reportText += `🔗 <a href="${safeUrl}">퀀트 시스템 대시보드 바로가기</a>`;
-      }
 
       const sendRes = await telegramNotifier.sendMessage(reportText, cleanToken, cleanChat);
 
@@ -194,7 +224,60 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       }
     }
 
-    // 5. Record the scan run log (including Telegram dispatch result)
+    // 5. Record the alert notification log (Audit history for both Strategy A & Strategy B)
+    try {
+      const allActionTickers = Array.from(
+        new Set([
+          ...actionable.map((e) => e.ticker),
+          ...dipOpportunities.map((e) => e.ticker),
+        ])
+      );
+
+      const alertDeliveryStatus = telegramResult.sent
+        ? 'SENT'
+        : telegramResult.previewOnly
+        ? 'PREVIEW_ONLY'
+        : telegramResult.configured
+        ? 'FAILED'
+        : 'LOCAL_LOGGED';
+
+      const alertLog: AlertNotificationLog = {
+        id: `alert-${runId}`,
+        timestamp: new Date(startTime).toISOString(),
+        kst_time: kstTimeStr,
+        strategy_type: 'DUAL_SCAN_REPORT',
+        title: `🚀 [${slotName}] 듀얼 퀀트 브리핑 (모멘텀 ${actionable.length}건 + 눌림목 ${dipOpportunities.length}건)`,
+        tickers: allActionTickers,
+        signals_count: actionable.length + dipOpportunities.length,
+        delivery_status: alertDeliveryStatus,
+        delivery_target: telegramResult.target,
+        message_preview: `전략 A ${actionable.length}건, 전략 B ${dipOpportunities.length}건 포착 (${telegramResult.message})`,
+        message_body: reportText,
+        details: {
+          strategy_a_tickers: actionable.map((e) => ({
+            ticker: e.ticker,
+            score: e.opportunity?.opportunity_score ?? 50,
+            decision: e.decision?.decision || 'BUY',
+            price: e.price ?? 0,
+            change1d: e.change1d ?? 0,
+          })),
+          strategy_b_tickers: dipOpportunities.map((dip) => ({
+            ticker: dip.ticker,
+            tier: dip.suitability.tier,
+            dip_score: dip.dip_score,
+            rsi: Number(dip.timing.rsi.toFixed(1)),
+            drawdown: dip.timing.drawdownLabel,
+            suggested_action: dip.suggestedDcaRatio,
+          })),
+        },
+      };
+
+      await alertHistoryRepository.save(alertLog);
+    } catch (alertErr) {
+      console.warn('[CronScan] Failed to save alert notification log:', alertErr);
+    }
+
+    // 6. Record the scan run log (including Telegram dispatch result)
     const durationMs = Date.now() - startTime;
     const tgStatusSummary = telegramResult.sent
       ? `[텔레그램: 발송완료(${telegramResult.target})]`

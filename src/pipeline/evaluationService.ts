@@ -2,6 +2,7 @@ import { AssetClassification, FullTickerEvaluation } from '../types/v8';
 import { MarketDataService, ProcessedAssetData, marketDataService as defaultMarketDataService } from '../data/marketDataService';
 import { classifyAsset } from '../engine/classificationEngine';
 import { evaluateV8, MarketSnapshot } from '../engine/evaluateV8';
+import { evaluateDipBuyStrategy } from '../engine/dipBuyEngine';
 
 export class EvaluationService {
   private marketDataService: MarketDataService;
@@ -71,6 +72,17 @@ export class EvaluationService {
       },
     });
 
+    const dipEvaluation = evaluateDipBuyStrategy(
+      processed.ticker,
+      processed.name,
+      processed.price,
+      processed.change1d,
+      classification,
+      processed.indicators,
+      processed.rawMetadata,
+      processed.riskInputs
+    );
+
     return {
       ticker: processed.ticker,
       name: processed.name,
@@ -92,6 +104,7 @@ export class EvaluationService {
         warnings: provenanceWarnings,
       },
       raw_metadata: processed.rawMetadata,
+      dip_evaluation: dipEvaluation,
     };
   }
 

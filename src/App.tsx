@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ActiveStrategyMode,
   BacktestSummary,
   FullTickerEvaluation,
   ScanRunLog,
@@ -30,17 +31,18 @@ export default function App() {
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(initialSummary);
   const [runs, setRuns] = useState<ScanRunLog[]>(INITIAL_SCAN_RUNS);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialSeed.watchlist);
+  const [watchlistStrategyMode, setWatchlistStrategyMode] = useState<ActiveStrategyMode>('MOMENTUM');
 
   // Modals
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  const [selectedModalTab, setSelectedModalTab] = useState<'overview' | 'chart'>('overview');
+  const [selectedModalTab, setSelectedModalTab] = useState<'overview' | 'chart' | 'dip_buy'>('overview');
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const handleOpenSymbolDetail = (ticker: string, initialTab: 'overview' | 'chart' = 'overview') => {
+  const handleOpenSymbolDetail = (ticker: string, initialTab: 'overview' | 'chart' | 'dip_buy' = 'overview') => {
     setSelectedTicker(ticker);
     setSelectedModalTab(initialTab);
   };
@@ -295,9 +297,12 @@ export default function App() {
             evaluations={evaluations}
             recentSignals={signals}
             backtestSummary={backtestSummary}
-            onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
+            onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onPreviewTelegram={(t) => handleOpenSymbolDetail(t, 'overview')}
-            onNavigateToWatchlist={() => setActiveTab('watchlist')}
+            onNavigateToWatchlist={(mode) => {
+              if (mode) setWatchlistStrategyMode(mode);
+              setActiveTab('watchlist');
+            }}
             onRecalculate={handleRecalculateEvaluations}
             isRecalculating={isRecalculating}
           />
@@ -305,7 +310,9 @@ export default function App() {
 
         {activeTab === 'watchlist' && (
           <WatchlistView
+            key={watchlistStrategyMode}
             evaluations={evaluations}
+            initialStrategyMode={watchlistStrategyMode}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onPreviewTelegram={(t) => handleOpenSymbolDetail(t, 'overview')}
             onAddTicker={handleAddTicker}
@@ -338,6 +345,7 @@ export default function App() {
           <ScanRunsView
             runs={runs}
             onTriggerScan={() => setIsScanModalOpen(true)}
+            onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
           />
         )}
       </main>
@@ -360,6 +368,7 @@ export default function App() {
           onClose={() => setIsScanModalOpen(false)}
           onScanCompleted={handleScanCompleted}
           totalWatchlistCount={watchlist.length}
+          onViewAlertHistory={() => setActiveTab('runs')}
         />
       )}
 

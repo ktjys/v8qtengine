@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, Layers, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, Bell, CheckCircle2, Clock, Layers, RefreshCw, Search } from 'lucide-react';
 import { ScanRunLog } from '../types/v8';
 import { SortableHeader } from './SortableHeader';
+import { AlertHistoryView } from './AlertHistoryView';
 
 export type ScanRunsSortField =
   | 'run_id'
@@ -15,9 +16,17 @@ export type ScanRunsSortField =
 interface ScanRunsViewProps {
   runs: ScanRunLog[];
   onTriggerScan: () => void;
+  onSelectTicker?: (ticker: string, tab?: string) => void;
+  initialTab?: 'alerts' | 'runs';
 }
 
-export const ScanRunsView: React.FC<ScanRunsViewProps> = ({ runs, onTriggerScan }) => {
+export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
+  runs,
+  onTriggerScan,
+  onSelectTicker,
+  initialTab = 'alerts',
+}) => {
+  const [activeSubTab, setActiveSubTab] = useState<'alerts' | 'runs'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [sortField, setSortField] = useState<ScanRunsSortField>('started_at');
@@ -78,53 +87,90 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({ runs, onTriggerScan 
 
   return (
     <div className="space-y-6 animate-fadeIn text-xs">
-      {/* Header */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center space-x-2">
-              <Layers className="w-5 h-5 text-cyan-400" />
-              <span>스캔 실행 및 감사 이력 (Scan Runs Audit - Section 15)</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              "왜 어제는 신호가 1개였고 오늘은 4개인가?"를 역추적할 수 있도록 전체 실행 내역을 기록합니다.
-            </p>
-          </div>
+      {/* Top Level Sub-Navigation Switcher */}
+      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-2xl p-2 shadow-sm">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setActiveSubTab('alerts')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+              activeSubTab === 'alerts'
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>알림 발송 내역 (Alert History)</span>
+          </button>
 
           <button
-            onClick={onTriggerScan}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 whitespace-nowrap"
+            onClick={() => setActiveSubTab('runs')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+              activeSubTab === 'runs'
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>신규 스캔 실행</span>
+            <Layers className="w-4 h-4" />
+            <span>스캔 실행 로그 ({runs.length})</span>
           </button>
         </div>
 
-        {/* Search & Filter Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="실행 ID / 내용 검색..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:border-cyan-500"
-          >
-            <option value="ALL">상태 (전체)</option>
-            <option value="SUCCESS">SUCCESS</option>
-            <option value="PARTIAL_SUCCESS">PARTIAL_SUCCESS</option>
-            <option value="FAILED">FAILED</option>
-          </select>
-        </div>
+        <button
+          onClick={onTriggerScan}
+          className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold shadow-md transition-all active:scale-95 text-xs whitespace-nowrap"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>신규 스캔 실행</span>
+        </button>
       </div>
+
+      {/* Sub-Tab 1: Alert History */}
+      {activeSubTab === 'alerts' && (
+        <AlertHistoryView onSelectTicker={onSelectTicker} onTriggerScan={onTriggerScan} />
+      )}
+
+      {/* Sub-Tab 2: Scan Execution Logs */}
+      {activeSubTab === 'runs' && (
+        <div className="space-y-6">
+          {/* Header & Filter */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-100 flex items-center space-x-2">
+                  <Layers className="w-5 h-5 text-cyan-400" />
+                  <span>스캔 실행 및 감사 이력 (Scan Runs Audit)</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  "왜 어제는 신호가 1개였고 오늘은 4개인가?"를 역추적할 수 있도록 전체 실행 내역을 기록합니다.
+                </p>
+              </div>
+            </div>
+
+            {/* Search & Filter Toolbar */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
+              <div className="relative flex-1 min-w-[200px] max-w-xs">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="실행 ID / 내용 검색..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:border-cyan-500"
+              >
+                <option value="ALL">상태 (전체)</option>
+                <option value="SUCCESS">SUCCESS</option>
+                <option value="PARTIAL_SUCCESS">PARTIAL_SUCCESS</option>
+                <option value="FAILED">FAILED</option>
+              </select>
+            </div>
+          </div>
 
       {/* Runs Table */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
@@ -253,5 +299,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({ runs, onTriggerScan 
         </div>
       </div>
     </div>
-  );
+  )}
+</div>
+);
 };

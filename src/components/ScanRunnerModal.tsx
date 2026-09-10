@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   AlertTriangle,
+  Bell,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -16,12 +17,14 @@ interface ScanRunnerModalProps {
   onClose: () => void;
   onScanCompleted: (result: { scan_log: ScanRunLog; new_signals: SignalSnapshot[] }) => void;
   totalWatchlistCount?: number;
+  onViewAlertHistory?: () => void;
 }
 
 export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   onClose,
   onScanCompleted,
   totalWatchlistCount,
+  onViewAlertHistory,
 }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [simulateFailure, setSimulateFailure] = useState(false);
@@ -384,12 +387,28 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               )}
             </button>
           ) : (
-            <button
-              onClick={onClose}
-              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-bold transition-all active:scale-95"
-            >
-              스캔 결과 확인 및 닫기
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              {onViewAlertHistory && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onViewAlertHistory();
+                  }}
+                  className="w-full sm:w-1/2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/30 transition-all flex items-center justify-center space-x-1.5 active:scale-95"
+                >
+                  <Bell className="w-4 h-4" />
+                  <span>발송 알림 이력 확인</span>
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className={`w-full ${
+                  onViewAlertHistory ? 'sm:w-1/2' : ''
+                } py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-bold transition-all active:scale-95`}
+              >
+                스캔 결과 확인 및 닫기
+              </button>
+            </div>
           )}
         </div>
       </div>
