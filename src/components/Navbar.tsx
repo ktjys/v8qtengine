@@ -9,11 +9,12 @@ import {
   RefreshCw,
   Sliders,
   TrendingUp,
+  Scale,
 } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro';
-  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro') => void;
+  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper';
+  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper') => void;
   onOpenScanModal: () => void;
   onOpenScheduleModal: () => void;
   totalCount: number;
@@ -131,6 +132,32 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Globe className="w-4 h-4 text-emerald-400" />
               <span>매크로 & 실적</span>
             </button>
+
+            <button
+              id="tab-portfolio-btn"
+              onClick={() => setActiveTab('portfolio')}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'portfolio'
+                  ? 'bg-slate-800 text-purple-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+              }`}
+            >
+              <Scale className="w-4 h-4 text-purple-400" />
+              <span>자산 배분</span>
+            </button>
+
+            <button
+              id="tab-paper-btn"
+              onClick={() => setActiveTab('paper')}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'paper'
+                  ? 'bg-slate-800 text-cyan-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              <span>모의투자 & 적중률</span>
+            </button>
           </nav>
 
           {/* Action Trigger */}
@@ -205,6 +232,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             매크로 & 실적
+          </button>
+          <button
+            onClick={() => setActiveTab('portfolio')}
+            className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium transition-all ${
+              activeTab === 'portfolio' ? 'bg-purple-500 text-slate-950 font-bold' : 'text-slate-400 bg-slate-950/40'
+            }`}
+          >
+            자산 배분
+          </button>
+          <button
+            onClick={() => setActiveTab('paper')}
+            className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium transition-all ${
+              activeTab === 'paper' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 bg-slate-950/40'
+            }`}
+          >
+            모의투자
           </button>
         </div>
       </div>

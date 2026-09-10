@@ -47,6 +47,8 @@ interface DashboardViewProps {
   onPreviewTelegram: (ticker: string) => void;
   onNavigateToWatchlist: (mode?: 'MOMENTUM' | 'DCA_DIP') => void;
   onNavigateToMacro?: () => void;
+  onNavigateToPortfolio?: () => void;
+  onNavigateToPaper?: () => void;
   onRecalculate?: () => void;
   isRecalculating?: boolean;
 }
@@ -59,6 +61,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onPreviewTelegram,
   onNavigateToWatchlist,
   onNavigateToMacro,
+  onNavigateToPortfolio,
+  onNavigateToPaper,
   onRecalculate,
   isRecalculating = false,
 }) => {
@@ -279,6 +283,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium border border-slate-700 transition-all active:scale-95"
               >
                 <span>매크로·실적 센터</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onNavigateToPortfolio && (
+              <button
+                id="dashboard-goto-portfolio-btn"
+                onClick={onNavigateToPortfolio}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-purple-200 text-xs font-medium border border-purple-500/30 transition-all active:scale-95"
+              >
+                <span>자산 배분</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onNavigateToPaper && (
+              <button
+                id="dashboard-goto-paper-btn"
+                onClick={onNavigateToPaper}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 hover:text-cyan-200 text-xs font-medium border border-cyan-500/30 transition-all active:scale-95"
+              >
+                <span>모의투자 & 성과</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}

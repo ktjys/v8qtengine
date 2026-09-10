@@ -527,4 +527,215 @@ export interface EarningsEvent {
   isImminent: boolean; // true if daysUntil <= 7 && daysUntil >= 0
 }
 
+// ==========================================
+// Phase 2: Portfolio Allocation, Sector Matrix & Rebalancing
+// ==========================================
 
+export type MarketSector =
+  | 'Technology'
+  | 'Semiconductors'
+  | 'Consumer Discretionary'
+  | 'Communication Services'
+  | 'Broad Market Index ETF'
+  | 'Cash & Equivalents';
+
+export interface SectorExposure {
+  sector: MarketSector;
+  currentWeightPct: number;
+  maxCapPct: number;
+  status: 'OPTIMAL' | 'ELEVATED' | 'OVERWEIGHT_BREACH';
+  tickerCount: number;
+  tickers: string[];
+}
+
+export interface CorrelationPair {
+  ticker1: string;
+  ticker2: string;
+  correlation: number; // -1.0 ~ +1.0
+  level: 'HIGH_CORRELATION' | 'MODERATE' | 'DIVERSIFIED' | 'INVERSE';
+  label: string;
+}
+
+export interface DynamicStrategySplit {
+  strategyA_MomentumPct: number;
+  strategyB_DipDcaPct: number;
+  cashBufferPct: number;
+  regime: MarketRegimeType;
+  regimeName: string;
+  adjustmentReason: string;
+}
+
+export interface PortfolioPosition {
+  ticker: string;
+  companyName: string;
+  sector: MarketSector;
+  strategyAssigned: 'STRATEGY_A' | 'STRATEGY_B' | 'CORE_INDEX';
+  shares: number;
+  currentPrice: number;
+  marketValue: number;
+  currentWeightPct: number;
+  targetWeightPct: number;
+  weightDeltaPct: number; // target - current
+  rebalanceAction: 'INCREASE' | 'TRIM' | 'BALANCED';
+  recommendedSharesDelta: number;
+  recommendedCashDelta: number;
+}
+
+export interface PortfolioRebalanceState {
+  totalCapital: number;
+  totalInvested: number;
+  cashBalance: number;
+  cashWeightPct: number;
+  strategySplit: DynamicStrategySplit;
+  sectorExposures: SectorExposure[];
+  positions: PortfolioPosition[];
+  correlationMatrix: {
+    tickers: string[];
+    matrix: number[][];
+  };
+  highCorrelationPairs: CorrelationPair[];
+  maxConcentrationAlert: string | null;
+  lastUpdated: string;
+}
+
+// ==========================================
+// Phase 3: Paper Trading & Signal Accuracy Tracker
+// ==========================================
+
+export type OrderType = 'BUY' | 'SELL';
+export type TradeStrategySource = 'STRATEGY_A' | 'STRATEGY_B' | 'MANUAL';
+
+export interface PaperTradeOrder {
+  id: string;
+  ticker: string;
+  companyName: string;
+  orderType: OrderType;
+  strategySource: TradeStrategySource;
+  shares: number;
+  requestedPrice: number;
+  executedPrice: number;
+  totalAmount: number;
+  fee: number;
+  executedAt: string;
+  reason?: string;
+}
+
+export interface PaperTradePosition {
+  ticker: string;
+  companyName: string;
+  shares: number;
+  avgCostBasis: number;
+  currentPrice: number;
+  totalCost: number;
+  marketValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPct: number;
+  strategySource: TradeStrategySource;
+  firstBoughtAt: string;
+}
+
+export interface PaperAccountSummary {
+  initialBalance: number;
+  cashBalance: number;
+  portfolioValue: number;
+  totalEquity: number;
+  realizedPnL: number;
+  unrealizedPnL: number;
+  totalPnL: number;
+  totalReturnPct: number;
+  winRate: number; // 0 ~ 100
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  positions: PaperTradePosition[];
+  tradeHistory: PaperTradeOrder[];
+  lastUpdated: string;
+}
+
+export interface ForwardSignalTrackRecord {
+  id: string;
+  ticker: string;
+  companyName: string;
+  strategyType: 'STRATEGY_A' | 'STRATEGY_B';
+  signalDate: string;
+  signalPrice: number;
+  currentPrice: number;
+  daysElapsed: number;
+  currentReturnPct: number;
+  mfePct: number; // Max Favorable Excursion (최고 도달 수익률)
+  maePct: number; // Max Adverse Excursion (최대 하락 낙폭)
+  returnT5?: number | null;
+  returnT10?: number | null;
+  returnT20?: number | null;
+  hitStatus: 'WIN' | 'LOSS' | 'IN_PROGRESS';
+  notes: string;
+}
+
+export interface SignalPerformanceSummary {
+  totalSignals: number;
+  winCount: number;
+  lossCount: number;
+  winRatePct: number;
+  avgReturnPct: number;
+  strategyA: {
+    total: number;
+    winRatePct: number;
+    avgReturnPct: number;
+  };
+  strategyB: {
+    total: number;
+    winRatePct: number;
+    avgReturnPct: number;
+  };
+  bestSignal: {
+    ticker: string;
+    returnPct: number;
+  };
+  worstSignal: {
+    ticker: string;
+    returnPct: number;
+  };
+  records: ForwardSignalTrackRecord[];
+}
+
+// ==========================================
+// ATR Dynamic Stop-Loss & Position Sizing
+// ==========================================
+
+export type ATRRiskLevel = 'AGGRESSIVE' | 'STANDARD' | 'CONSERVATIVE';
+
+export interface ATRRiskProfile {
+  ticker: string;
+  price: number;
+  atr14: number;
+  atrPct: number;
+  volatilityRank: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+  selectedRiskLevel: ATRRiskLevel;
+  stopLossMultiplier: number;
+  stopLossPrice: number;
+  stopLossPct: number;
+  takeProfit1Price: number;
+  takeProfit1Pct: number;
+  takeProfit2Price: number;
+  takeProfit2Pct: number;
+  trailingStopPrice: number;
+  riskRewardRatio: string;
+}
+
+export interface PositionSizingCalculation {
+  ticker: string;
+  accountEquity: number;
+  riskTolerancePct: number; // e.g. 1.0 means 1%
+  riskAmountDollars: number;
+  entryPrice: number;
+  stopLossPrice: number;
+  riskPerShare: number;
+  recommendedShares: number;
+  totalPositionCost: number;
+  accountAllocationPct: number;
+  maxLossDollars: number;
+  expectedGain1Dollars: number;
+  expectedGain2Dollars: number;
+  isCappedByAccountLimit: boolean;
+  capWarning: string | null;
+}

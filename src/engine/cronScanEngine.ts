@@ -8,6 +8,7 @@ import { telegramNotifier, escapeTelegramHtml } from '../notification/telegramNo
 import { createSignalSnapshot } from './signalEngine';
 import { ensureDipEvaluation } from './dipBuyEngine';
 import { MacroEarningsEngine } from './macroEarningsEngine';
+import { PortfolioEngine } from './portfolioEngine';
 import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types/v8';
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
@@ -217,6 +218,31 @@ export async function executeCronScan(options: CronScanOptions = {}): Promise<Cr
       reportText += `   ℹ️ 현재 우량주 중 최적의 과매도 눌림목 구간에 도달한 종목 없음 (정기 일정 유지)\n`;
     }
     reportText += `\n`;
+
+    // Phase 2: 포트폴리오 리밸런싱 및 섹터 쏠림 가이드
+    try {
+      const macro = await MacroEarningsEngine.getMacroMarketRegime();
+      const portState = PortfolioEngine.calculatePortfolioState(100000, macro);
+      const rebalanceTrims = portState.positions.filter((p) => p.rebalanceAction === 'TRIM');
+      const rebalanceAdds = portState.positions.filter((p) => p.rebalanceAction === 'INCREASE');
+
+      if (rebalanceTrims.length > 0 || rebalanceAdds.length > 0 || portState.maxConcentrationAlert) {
+        reportText += `💼 <b>[포트폴리오 동적 자산배분 & 리밸런싱]</b>\n`;
+        reportText += `• <b>배분 비율:</b> 전략 A ${portState.strategySplit.strategyA_MomentumPct}% | 전략 B ${portState.strategySplit.strategyB_DipDcaPct}% | 현금 ${portState.strategySplit.cashBufferPct}%\n`;
+        if (portState.maxConcentrationAlert) {
+          reportText += `• ⚠️ ${escapeTelegramHtml(portState.maxConcentrationAlert)}\n`;
+        }
+        if (rebalanceTrims.length > 0) {
+          reportText += `• <b>비중축소(Trim):</b> ${rebalanceTrims.map((p) => `${p.ticker}(${p.recommendedSharesDelta}주)`).join(', ')}\n`;
+        }
+        if (rebalanceAdds.length > 0) {
+          reportText += `• <b>비중확대(Add):</b> ${rebalanceAdds.map((p) => `${p.ticker}(+${p.recommendedSharesDelta}주)`).join(', ')}\n`;
+        }
+        reportText += `\n`;
+      }
+    } catch (portErr) {
+      console.warn('[CronScan] Portfolio state summary skipped:', portErr);
+    }
 
     if (options.sourceUrl) {
       const safeUrl = options.sourceUrl.replace(/[<>"']/g, '').trim();

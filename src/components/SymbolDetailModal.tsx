@@ -40,13 +40,15 @@ import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { buildSignalTelegramMessage, buildDipBuyTelegramMessage } from '../notification/templates';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
+import { PaperTradingEngine } from '../engine/paperTradingEngine';
+import { PositionSizingCalculator } from './PositionSizingCalculator';
 import { SymbolDailyScoreChart } from './SymbolDailyScoreChart';
 import { AlertHistoryView } from './AlertHistoryView';
 
 interface SymbolDetailModalProps {
   evaluation: FullTickerEvaluation | null;
   historicalSignals: SignalSnapshot[];
-  initialTab?: 'overview' | 'chart' | 'dip_buy' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals' | 'alerts';
+  initialTab?: 'overview' | 'chart' | 'dip_buy' | 'sizing' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals' | 'alerts';
   onClose: () => void;
   onSaveOverride: (
     ticker: string,
@@ -68,7 +70,7 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
 }) => {
   if (!evaluation) return null;
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'dip_buy' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'dip_buy' | 'sizing' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals' | 'alerts'>(initialTab);
   const [copiedTelegram, setCopiedTelegram] = useState(false);
   const [copiedDipTelegram, setCopiedDipTelegram] = useState(false);
 
@@ -77,6 +79,30 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   const [editStrategy, setEditStrategy] = useState<StrategyType>(evaluation.classification.strategy_type);
   const [editConfidence, setEditConfidence] = useState<number>(evaluation.classification.confidence);
   const [editReason, setEditReason] = useState<string>(evaluation.classification.reason);
+
+  const [paperBuySuccess, setPaperBuySuccess] = useState(false);
+  const [isPaperBuying, setIsPaperBuying] = useState(false);
+
+  const handleQuickPaperBuy = () => {
+    setIsPaperBuying(true);
+    const strat = evaluation.classification.strategy_type === 'MOMENTUM_BREAKOUT' ? 'STRATEGY_A' : 'STRATEGY_B';
+    const res = PaperTradingEngine.executeOrder({
+      ticker: evaluation.ticker,
+      companyName: evaluation.name,
+      orderType: 'BUY',
+      shares: 10,
+      price: evaluation.price,
+      strategySource: strat,
+      reason: `${strat} 종목 상세 진단창에서 원클릭 가상 매수 체결`,
+    });
+    setIsPaperBuying(false);
+    if (res.success) {
+      setPaperBuySuccess(true);
+      setTimeout(() => setPaperBuySuccess(false), 2500);
+    } else {
+      alert(res.error || '가상 매수 실패');
+    }
+  };
 
   const tickerSignals = useMemo(() => {
     const raw = (historicalSignals || []).filter((s) => s.ticker === evaluation.ticker);
@@ -189,12 +215,27 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors shrink-0 ml-2"
-          >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
+          <div className="flex items-center space-x-2 shrink-0 ml-2">
+            <button
+              onClick={handleQuickPaperBuy}
+              disabled={isPaperBuying}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                paperBuySuccess
+                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                  : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+              }`}
+              title="현재가로 10주 가상 모의투자 매수 체결"
+            >
+              {paperBuySuccess ? <Check className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5 text-cyan-400" />}
+              <span>{paperBuySuccess ? '가상 매수 완료!' : '모의 매수 (+10주)'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors shrink-0"
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Diagnostic Tabs */}
@@ -230,6 +271,17 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
           >
             <LineChart className="w-3.5 h-3.5 text-cyan-400" />
             <span>차트 분석</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('sizing')}
+            className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+              activeTab === 'sizing'
+                ? 'border-cyan-400 text-cyan-400 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5 text-cyan-400" />
+            <span>ATR 손절 & 포지션 사이징</span>
           </button>
           <button
             onClick={() => setActiveTab('opportunity')}
@@ -744,6 +796,35 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                 </div>
               </div>
 
+              {/* ATR & Dynamic Position Sizing Banner */}
+              <div className="bg-gradient-to-r from-cyan-950/40 via-slate-900 to-slate-950 border border-cyan-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+                    <Scale className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center space-x-2">
+                      <span>ATR 동적 손절선 & 계좌위험 기반 포지션 사이징</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 font-mono">
+                        NEW
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      종목 고유 변동폭(ATR)에 맞춘 2.0x ATR 손절선 및 1회 거래 손실 감수율(1%) 기준 최적 주문 주수를 계산합니다.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('sizing')}
+                  className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition-all active:scale-95 shrink-0 flex items-center justify-center space-x-1.5 shadow-md shadow-cyan-500/20"
+                >
+                  <span>사이징 계산기 열기</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               {/* Telegram Preview Box */}
               <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -763,6 +844,19 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                   {telegramMessage}
                 </pre>
               </div>
+            </div>
+          )}
+
+          {/* TAB: ATR DYNAMIC RISK & POSITION SIZING */}
+          {activeTab === 'sizing' && (
+            <div className="space-y-6 animate-fadeIn">
+              <PositionSizingCalculator
+                ticker={evaluation.ticker}
+                currentPrice={evaluation.price}
+                companyName={evaluation.name}
+                strategyType={evaluation.classification.strategy_type}
+                initialAccountEquity={PaperTradingEngine.getAccountSummary().totalEquity}
+              />
             </div>
           )}
 

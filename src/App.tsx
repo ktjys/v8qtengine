@@ -14,6 +14,8 @@ import { BacktestView } from './components/BacktestView';
 import { ClassificationView } from './components/ClassificationView';
 import { ScanRunsView } from './components/ScanRunsView';
 import { MacroEarningsView } from './components/MacroEarningsView';
+import { PortfolioAllocationView } from './components/PortfolioAllocationView';
+import { PaperTradingView } from './components/PaperTradingView';
 import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
@@ -26,7 +28,7 @@ const initialSeed = runPipelineOnSeedData();
 const initialSummary = calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper'>('dashboard');
   const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(initialSeed.evaluations);
   const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(initialSummary);
@@ -305,6 +307,8 @@ export default function App() {
               setActiveTab('watchlist');
             }}
             onNavigateToMacro={() => setActiveTab('macro')}
+            onNavigateToPortfolio={() => setActiveTab('portfolio')}
+            onNavigateToPaper={() => setActiveTab('paper')}
             onRecalculate={handleRecalculateEvaluations}
             isRecalculating={isRecalculating}
           />
@@ -353,6 +357,18 @@ export default function App() {
 
         {activeTab === 'macro' && (
           <MacroEarningsView
+            onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
+          />
+        )}
+
+        {activeTab === 'portfolio' && (
+          <PortfolioAllocationView
+            onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
+          />
+        )}
+
+        {activeTab === 'paper' && (
+          <PaperTradingView
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
           />
         )}
