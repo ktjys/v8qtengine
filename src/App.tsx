@@ -16,6 +16,7 @@ import { ScanRunsView } from './components/ScanRunsView';
 import { MacroEarningsView } from './components/MacroEarningsView';
 import { PortfolioAllocationView } from './components/PortfolioAllocationView';
 import { PaperTradingView } from './components/PaperTradingView';
+import { StrategyGuideView } from './components/StrategyGuideView';
 import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
@@ -23,18 +24,43 @@ import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runPipelineOnSeedData } from './data/seed/initialData';
 import { calculateBacktestMetrics } from './engine/backtestEngine';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './constants/limits';
+import {
+  DEFAULT_STRATEGY_CONFIG,
+  recalculateEvaluationsWithConfig,
+  StrategyOptimizationConfig,
+} from './engine/strategyOptimizerEngine';
 
 const initialSeed = runPipelineOnSeedData();
 const initialSummary = calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper'>('dashboard');
-  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(initialSeed.evaluations);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide'>('dashboard');
+  const [strategyConfig, setStrategyConfig] = useState<StrategyOptimizationConfig>(() => {
+    try {
+      const saved = localStorage.getItem('quant_strategy_config_v8');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_STRATEGY_CONFIG;
+  });
+
   const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
   const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(initialSummary);
   const [runs, setRuns] = useState<ScanRunLog[]>(INITIAL_SCAN_RUNS);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialSeed.watchlist);
   const [watchlistStrategyMode, setWatchlistStrategyMode] = useState<ActiveStrategyMode>('MOMENTUM');
+
+  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(() => {
+    try {
+      const savedConfig = localStorage.getItem('quant_strategy_config_v8');
+      if (savedConfig) {
+        const parsed = JSON.parse(savedConfig);
+        if (parsed?.id && parsed.id !== DEFAULT_STRATEGY_CONFIG.id) {
+          return recalculateEvaluationsWithConfig(initialSeed.evaluations, parsed);
+        }
+      }
+    } catch (e) {}
+    return initialSeed.evaluations;
+  });
 
   // Modals
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -53,6 +79,21 @@ export default function App() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleApplyStrategyConfig = (newConfig: StrategyOptimizationConfig) => {
+    setStrategyConfig(newConfig);
+    try {
+      localStorage.setItem('quant_strategy_config_v8', JSON.stringify(newConfig));
+    } catch (e) {}
+
+    const updated = recalculateEvaluationsWithConfig(evaluations, newConfig);
+    setEvaluations(updated);
+    try {
+      localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(updated));
+    } catch (e) {}
+
+    showToast(`전략 [${newConfig.name}]이(가) 적용되어 ${updated.length}개 모니터링 종목의 평가 및 신호가 즉시 갱신되었습니다.`);
   };
 
   const handleRecalculateEvaluations = async () => {
@@ -138,7 +179,11 @@ export default function App() {
       }
 
       if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) && loadedEvals.evaluations.length > 0) {
-        setEvaluations(loadedEvals.evaluations);
+        if (strategyConfig.id !== DEFAULT_STRATEGY_CONFIG.id) {
+          setEvaluations(recalculateEvaluationsWithConfig(loadedEvals.evaluations, strategyConfig));
+        } else {
+          setEvaluations(loadedEvals.evaluations);
+        }
       }
 
       if (latestSignals?.success && Array.isArray(latestSignals.signals) && latestSignals.signals.length > 0) {
@@ -300,6 +345,8 @@ export default function App() {
             evaluations={evaluations}
             recentSignals={signals}
             backtestSummary={backtestSummary}
+            currentConfig={strategyConfig}
+            onApplyConfig={handleApplyStrategyConfig}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onPreviewTelegram={(t) => handleOpenSymbolDetail(t, 'overview')}
             onNavigateToWatchlist={(mode) => {
@@ -309,6 +356,7 @@ export default function App() {
             onNavigateToMacro={() => setActiveTab('macro')}
             onNavigateToPortfolio={() => setActiveTab('portfolio')}
             onNavigateToPaper={() => setActiveTab('paper')}
+            onNavigateToGuide={() => setActiveTab('guide')}
             onRecalculate={handleRecalculateEvaluations}
             isRecalculating={isRecalculating}
           />
@@ -319,6 +367,8 @@ export default function App() {
             key={watchlistStrategyMode}
             evaluations={evaluations}
             initialStrategyMode={watchlistStrategyMode}
+            currentConfig={strategyConfig}
+            onApplyConfig={handleApplyStrategyConfig}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onPreviewTelegram={(t) => handleOpenSymbolDetail(t, 'overview')}
             onAddTicker={handleAddTicker}
@@ -333,6 +383,9 @@ export default function App() {
           <BacktestView
             summary={backtestSummary}
             allSignals={signals}
+            evaluations={evaluations}
+            currentConfig={strategyConfig}
+            onApplyConfig={handleApplyStrategyConfig}
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
             onOpenBackfillModal={() => setIsBackfillModalOpen(true)}
           />
@@ -370,6 +423,18 @@ export default function App() {
         {activeTab === 'paper' && (
           <PaperTradingView
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
+          />
+        )}
+
+        {activeTab === 'guide' && (
+          <StrategyGuideView
+            evaluations={evaluations}
+            onNavigateToWatchlist={(mode) => {
+              if (mode) setWatchlistStrategyMode(mode);
+              setActiveTab('watchlist');
+            }}
+            onNavigateToMacro={() => setActiveTab('macro')}
+            onNavigateToPaper={() => setActiveTab('paper')}
           />
         )}
       </main>

@@ -10,11 +10,12 @@ import {
   Sliders,
   TrendingUp,
   Scale,
+  BookOpen,
 } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper';
-  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper') => void;
+  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide';
+  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide') => void;
   onOpenScanModal: () => void;
   onOpenScheduleModal: () => void;
   totalCount: number;
@@ -158,6 +159,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <TrendingUp className="w-4 h-4 text-cyan-400" />
               <span>모의투자 & 적중률</span>
             </button>
+
+            <button
+              id="tab-guide-btn"
+              onClick={() => setActiveTab('guide')}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'guide'
+                  ? 'bg-slate-800 text-emerald-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+              }`}
+            >
+              <BookOpen className="w-4 h-4 text-emerald-400" />
+              <span>전략 매매 가이드</span>
+            </button>
           </nav>
 
           {/* Action Trigger */}
@@ -248,6 +262,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             모의투자
+          </button>
+          <button
+            id="tab-mobile-guide-btn"
+            onClick={() => setActiveTab('guide')}
+            className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium transition-all ${
+              activeTab === 'guide' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 bg-slate-950/40'
+            }`}
+          >
+            전략 매매 가이드
           </button>
         </div>
       </div>

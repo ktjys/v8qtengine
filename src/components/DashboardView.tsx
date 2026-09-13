@@ -21,12 +21,20 @@ import {
   Sparkles,
   TrendingUp,
   Zap,
+  BookOpen,
 } from 'lucide-react';
 import { BacktestSummary, FullTickerEvaluation, SignalSnapshot, MacroMarketRegime, EarningsEvent } from '../types/v8';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { SortableHeader } from './SortableHeader';
+import { SectorPerformanceTreemap } from './SectorPerformanceTreemap';
+import { StrategyOptimizationBanner } from './StrategyOptimizationBanner';
+import { StrategyOptimizationModal } from './StrategyOptimizationModal';
+import {
+  DEFAULT_STRATEGY_CONFIG,
+  StrategyOptimizationConfig,
+} from '../engine/strategyOptimizerEngine';
 
 export type DashboardSignalSortField =
   | 'signal_date'
@@ -49,8 +57,11 @@ interface DashboardViewProps {
   onNavigateToMacro?: () => void;
   onNavigateToPortfolio?: () => void;
   onNavigateToPaper?: () => void;
+  onNavigateToGuide?: () => void;
   onRecalculate?: () => void;
   isRecalculating?: boolean;
+  currentConfig?: StrategyOptimizationConfig;
+  onApplyConfig?: (config: StrategyOptimizationConfig) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -63,9 +74,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToMacro,
   onNavigateToPortfolio,
   onNavigateToPaper,
+  onNavigateToGuide,
   onRecalculate,
   isRecalculating = false,
+  currentConfig = DEFAULT_STRATEGY_CONFIG,
+  onApplyConfig,
 }) => {
+  const [isOptimizerModalOpen, setIsOptimizerModalOpen] = useState(false);
   const [showAllWatch, setShowAllWatch] = useState(false);
   const [showAllSignals, setShowAllSignals] = useState(false);
   const [macroRegime, setMacroRegime] = useState<MacroMarketRegime | null>(null);
@@ -306,9 +321,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
+            {onNavigateToGuide && (
+              <button
+                id="dashboard-goto-guide-btn"
+                onClick={onNavigateToGuide}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 text-xs font-medium border border-emerald-500/30 transition-all active:scale-95"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                <span>매매 가이드</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       )}
+
+      {/* 1.8 Strategy Diagnosis & Optimization Recommendation Banner */}
+      <StrategyOptimizationBanner
+        evaluations={evaluations}
+        currentConfig={currentConfig}
+        onOpenModal={() => setIsOptimizerModalOpen(true)}
+        onApplyConfig={onApplyConfig || (() => {})}
+      />
 
       {/* 2. Closed-Loop Pipeline Architecture Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
@@ -370,6 +404,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 2.5 D3 Sector Performance Treemap Visualization */}
+      <SectorPerformanceTreemap
+        evaluations={evaluations}
+        onSelectTicker={onSelectTicker}
+      />
 
       {/* 3. Today's Watch (Opportunity / Watch / Risk) */}
       <div>
@@ -931,6 +971,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Strategy Optimization & Diagnostics Modal */}
+      <StrategyOptimizationModal
+        isOpen={isOptimizerModalOpen}
+        onClose={() => setIsOptimizerModalOpen(false)}
+        evaluations={evaluations}
+        currentConfig={currentConfig}
+        onApplyConfig={onApplyConfig || (() => {})}
+      />
     </div>
   );
 };

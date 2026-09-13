@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   BarChart3,
@@ -13,10 +13,22 @@ import {
   ShieldCheck,
   TrendingUp,
   Zap,
+  Sparkles,
+  Award,
 } from 'lucide-react';
 import { BacktestSummary, RiskLevel, SignalSnapshot } from '../types/v8';
 import { calculateBacktestMetrics } from '../engine/backtestEngine';
 import { SortableHeader } from './SortableHeader';
+import { EquityCurveChart } from './EquityCurveChart';
+import { MarketRegimeAnalysis } from './MarketRegimeAnalysis';
+import { EquityCurveEngine, EquityCurveResult } from '../engine/equityCurveEngine';
+import { RegimeAnalysisEngine, RegimeAnalysisResult } from '../engine/regimeAnalysisEngine';
+import { StrategyOptimizerView } from './StrategyOptimizerView';
+import {
+  DEFAULT_STRATEGY_CONFIG,
+  StrategyOptimizationConfig,
+} from '../engine/strategyOptimizerEngine';
+import { FullTickerEvaluation } from '../types/v8';
 
 export type BacktestSortField =
   | 'signal_date'
@@ -36,6 +48,9 @@ interface BacktestViewProps {
   allSignals?: SignalSnapshot[];
   onSelectTicker: (ticker: string) => void;
   onOpenBackfillModal?: () => void;
+  evaluations?: FullTickerEvaluation[];
+  currentConfig?: StrategyOptimizationConfig;
+  onApplyConfig?: (config: StrategyOptimizationConfig) => void;
 }
 
 export const BacktestView: React.FC<BacktestViewProps> = ({
@@ -43,12 +58,22 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
   allSignals = [],
   onSelectTicker,
   onOpenBackfillModal,
+  evaluations = [],
+  currentConfig = DEFAULT_STRATEGY_CONFIG,
+  onApplyConfig,
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<string>('ALL');
   const [selectedRisk, setSelectedRisk] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortField, setSortField] = useState<BacktestSortField>('signal_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Sub-tab Navigation
+  const [activeSubTab, setActiveSubTab] = useState<'equity' | 'regime' | 'signals' | 'optimizer'>('equity');
+  const [equityData, setEquityData] = useState<EquityCurveResult | null>(null);
+  const [regimeData, setRegimeData] = useState<RegimeAnalysisResult | null>(null);
+  const [isLoadingEquity, setIsLoadingEquity] = useState<boolean>(false);
+  const [isLoadingRegimes, setIsLoadingRegimes] = useState<boolean>(false);
 
   const handleSort = (field: BacktestSortField) => {
     if (sortField === field) {
@@ -260,6 +285,57 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
   const medRiskStats = stats.by_risk?.MEDIUM || { count: 3, win_rate_20d: 100, avg_return_20d: 13.0 };
   const highRiskStats = stats.by_risk?.HIGH || { count: 0, win_rate_20d: 0, avg_return_20d: 0 };
 
+  const loadEquityData = async () => {
+    setIsLoadingEquity(true);
+    try {
+      const res = await fetch('/api/v8/backtest/equity-curve?_t=' + Date.now());
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setEquityData(json.data);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('API equity fetch failed, falling back to client computation:', e);
+    } finally {
+      setIsLoadingEquity(false);
+    }
+
+    if (safeSignals.length > 0) {
+      const fallbackResult = EquityCurveEngine.calculateEquityCurve(safeSignals);
+      setEquityData(fallbackResult);
+    }
+  };
+
+  const loadRegimeData = async () => {
+    setIsLoadingRegimes(true);
+    try {
+      const res = await fetch('/api/v8/backtest/regimes?_t=' + Date.now());
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setRegimeData(json.data);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('API regime fetch failed, falling back to client computation:', e);
+    } finally {
+      setIsLoadingRegimes(false);
+    }
+
+    if (safeSignals.length > 0) {
+      const fallbackResult = RegimeAnalysisEngine.analyzeRegimes(safeSignals);
+      setRegimeData(fallbackResult);
+    }
+  };
+
+  useEffect(() => {
+    loadEquityData();
+    loadRegimeData();
+  }, [safeSignals.length]);
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-fadeIn pb-12">
       {/* 1. Header & Verification Status */}
@@ -295,6 +371,87 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
         </div>
       </div>
 
+      {/* Sub Navigation Tabs */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+        <button
+          onClick={() => setActiveSubTab('equity')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeSubTab === 'equity'
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/10 font-bold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>누적 수익 곡선 & SPY 알파 (Equity Curve)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('regime')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeSubTab === 'regime'
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/10 font-bold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>시장 국면별 성과 (Market Regime)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('signals')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeSubTab === 'signals'
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/10 font-bold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>개별 신호 & 지평별 통계 ({safeSignals.length}건)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('optimizer')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeSubTab === 'optimizer'
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/10 font-bold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-emerald-400" />
+          <span>전략 진단 및 최적화 추천 (Optimizer)</span>
+        </button>
+      </div>
+
+      {/* SUBTAB 4: Strategy Optimizer & Diagnostics */}
+      {activeSubTab === 'optimizer' && (
+        <StrategyOptimizerView
+          evaluations={evaluations}
+          currentConfig={currentConfig}
+          onApplyConfig={onApplyConfig}
+          onSelectTicker={onSelectTicker}
+        />
+      )}
+
+      {/* SUBTAB 1: Equity Curve & SPY Benchmark */}
+      {activeSubTab === 'equity' && (
+        <EquityCurveChart
+          data={equityData}
+          isLoading={isLoadingEquity}
+          onRefresh={loadEquityData}
+        />
+      )}
+
+      {/* SUBTAB 2: Market Regime Cross-Analysis */}
+      {activeSubTab === 'regime' && (
+        <MarketRegimeAnalysis
+          data={regimeData}
+          isLoading={isLoadingRegimes}
+        />
+      )}
+
+      {/* SUBTAB 3: Detailed Signals & Horizon Breakdown */}
+      {activeSubTab === 'signals' && (
+        <>
       {/* 2. Core KPI Matrix */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-2">
@@ -795,6 +952,8 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 };

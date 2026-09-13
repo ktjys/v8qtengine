@@ -1215,6 +1215,7 @@ export function runPipelineOnSeedData(
       risk,
       decision,
       signal_generated: isSignal,
+      raw_metadata: item.metadata,
       data_quality: {
         data_quality_score: 85,
         data_freshness: 'FRESH',

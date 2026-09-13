@@ -9,6 +9,8 @@ import {
   finalizeBackfill,
 } from '../engine/backfillEngine';
 import { dbClient } from '../db/supabaseClient';
+import { EquityCurveEngine } from '../engine/equityCurveEngine';
+import { RegimeAnalysisEngine } from '../engine/regimeAnalysisEngine';
 
 export const backtestRouter = Router();
 
@@ -208,3 +210,47 @@ backtestRouter.post('/replay', async (req, res) => {
     res.status(500).json({ success: false, error: (err as Error).message });
   }
 });
+
+// GET /api/v8/backtest/equity-curve - Equity Curve & SPY Benchmark Alpha Comparison
+backtestRouter.get('/equity-curve', async (req, res) => {
+  try {
+    const signals = await signalRepository.getAll();
+    const initialCapital = req.query.initialCapital ? Number(req.query.initialCapital) : 100000;
+    const startDate = (req.query.startDate as string) || undefined;
+    const endDate = (req.query.endDate as string) || undefined;
+
+    const result = EquityCurveEngine.calculateEquityCurve(signals, {
+      initialCapital,
+      startDate,
+      endDate,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      equityCurve: result.dataPoints,
+      metrics: result.metrics,
+    });
+  } catch (err) {
+    console.error('[backtestRouter] Equity curve error:', err);
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
+});
+
+// GET /api/v8/backtest/regime-analysis & /api/v8/backtest/regimes - Market Regime Cross-Analysis
+const handleRegimeAnalysis = async (req: any, res: any) => {
+  try {
+    const signals = await signalRepository.getAll();
+    const result = RegimeAnalysisEngine.analyzeRegimes(signals);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[backtestRouter] Regime analysis error:', err);
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
+};
+
+backtestRouter.get('/regime-analysis', handleRegimeAnalysis);
+backtestRouter.get('/regimes', handleRegimeAnalysis);

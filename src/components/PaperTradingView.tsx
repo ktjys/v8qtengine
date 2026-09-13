@@ -40,6 +40,8 @@ import {
 import { PaperTradingEngine } from '../engine/paperTradingEngine';
 import { RiskSizingEngine } from '../engine/riskSizingEngine';
 import { PositionSizingCalculator } from './PositionSizingCalculator';
+import { EquityCurveChart } from './EquityCurveChart';
+import { EquityCurveEngine, EquityCurveResult } from '../engine/equityCurveEngine';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 
 interface PaperTradingViewProps {
@@ -47,9 +49,11 @@ interface PaperTradingViewProps {
 }
 
 export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTicker }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'positions' | 'accuracy' | 'history' | 'sizing'>('positions');
+  const [activeSubTab, setActiveSubTab] = useState<'positions' | 'equity' | 'accuracy' | 'history' | 'sizing'>('positions');
   const [accountSummary, setAccountSummary] = useState<PaperAccountSummary | null>(null);
   const [performanceSummary, setPerformanceSummary] = useState<SignalPerformanceSummary | null>(null);
+  const [equityData, setEquityData] = useState<EquityCurveResult | null>(null);
+  const [isLoadingEquity, setIsLoadingEquity] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Sizing Subtab State
@@ -70,6 +74,24 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   // Signal Tracker filter
   const [signalStrategyFilter, setSignalStrategyFilter] = useState<'ALL' | 'STRATEGY_A' | 'STRATEGY_B'>('ALL');
 
+  const loadEquityCurve = async () => {
+    setIsLoadingEquity(true);
+    try {
+      const res = await fetch('/api/v8/backtest/equity-curve?_t=' + Date.now());
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setEquityData(json.data);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[PaperTradingView] Equity fetch error, fallback:', e);
+    } finally {
+      setIsLoadingEquity(false);
+    }
+  };
+
   const loadData = () => {
     setIsLoading(true);
     try {
@@ -86,6 +108,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
 
   useEffect(() => {
     loadData();
+    loadEquityCurve();
   }, []);
 
   const handleOpenOrderModal = (ticker?: string, type: OrderType = 'BUY', price?: number, strategy?: TradeStrategySource) => {
@@ -296,6 +319,18 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
         </button>
 
         <button
+          onClick={() => setActiveSubTab('equity')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+            activeSubTab === 'equity'
+              ? 'bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4 text-cyan-400" />
+          <span>누적 수익 곡선 & SPY 알파</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('accuracy')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
             activeSubTab === 'accuracy'
@@ -455,6 +490,15 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
             )}
           </div>
         </div>
+      )}
+
+      {/* SUBTAB: Cumulative Equity Curve & SPY Benchmark */}
+      {activeSubTab === 'equity' && (
+        <EquityCurveChart
+          data={equityData}
+          isLoading={isLoadingEquity}
+          onRefresh={loadEquityCurve}
+        />
       )}
 
       {/* SUBTAB 2: Signal Accuracy & Forward Track Record */}

@@ -35,6 +35,12 @@ import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 import { SortableHeader } from './SortableHeader';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
 import { DipBuyMatrix } from './DipBuyMatrix';
+import { StrategyOptimizationBanner } from './StrategyOptimizationBanner';
+import { StrategyOptimizationModal } from './StrategyOptimizationModal';
+import {
+  DEFAULT_STRATEGY_CONFIG,
+  StrategyOptimizationConfig,
+} from '../engine/strategyOptimizerEngine';
 
 export type WatchlistSortField =
   | 'ticker'
@@ -60,6 +66,8 @@ interface WatchlistViewProps {
   onToggleActive: (ticker: string, active: boolean) => void;
   onRecalculate?: () => void;
   isRecalculating?: boolean;
+  currentConfig?: StrategyOptimizationConfig;
+  onApplyConfig?: (config: StrategyOptimizationConfig) => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
@@ -72,8 +80,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   onToggleActive,
   onRecalculate,
   isRecalculating = false,
+  currentConfig = DEFAULT_STRATEGY_CONFIG,
+  onApplyConfig,
 }) => {
   const [strategyMode, setStrategyMode] = useState<ActiveStrategyMode>(initialStrategyMode);
+  const [isOptimizerModalOpen, setIsOptimizerModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAssetType, setFilterAssetType] = useState<string>('ALL');
   const [filterStrategy, setFilterStrategy] = useState<string>('ALL');
@@ -258,6 +269,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* 0. Strategy Optimization Banner */}
+      <StrategyOptimizationBanner
+        evaluations={evaluations}
+        currentConfig={currentConfig}
+        onOpenModal={() => setIsOptimizerModalOpen(true)}
+        onApplyConfig={onApplyConfig || (() => {})}
+      />
+
       {/* 1. Header with Controls */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -705,7 +724,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
                     {/* Decision */}
                     <td className="py-3 px-3 font-sans">
-                      {getDecisionBadge(item.decision.decision)}
+                      <div className="flex flex-col gap-1 items-start">
+                        {getDecisionBadge(item.decision.decision)}
+                        {item.decision.reason?.includes('[최적화 전략]') && (
+                          <span className="text-[10px] text-cyan-400 font-mono font-semibold flex items-center gap-0.5">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>최적화 룰 반영</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Signal Indicator */}
@@ -869,6 +896,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Strategy Optimization & Diagnostics Modal */}
+      <StrategyOptimizationModal
+        isOpen={isOptimizerModalOpen}
+        onClose={() => setIsOptimizerModalOpen(false)}
+        evaluations={evaluations}
+        currentConfig={currentConfig}
+        onApplyConfig={onApplyConfig || (() => {})}
+      />
     </div>
   );
 };
