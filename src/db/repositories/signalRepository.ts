@@ -91,10 +91,6 @@ export class SignalRepository {
       }
     }
 
-    if (dbClient.signals.size === 0) {
-      dbClient.seedInMemoryState();
-    }
-
     // Deduplicate in-memory cache
     const memDedup = new Map<string, SignalSnapshot>();
     for (const s of dbClient.signals.values()) {

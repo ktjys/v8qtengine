@@ -14,8 +14,11 @@ export class WatchlistRepository {
 
         if (error) {
           dbClient.handleDbError('watchlist', 'getAll', error);
-        } else if (Array.isArray(data) && data.length > 0) {
+        } else if (Array.isArray(data)) {
           dbClient.watchlist.clear();
+          if (data.length === 0) {
+            return [];
+          }
           const list: WatchlistItem[] = data.map((row: any) => {
             const assetName = dbClient.assets.get(row.ticker)?.name;
             return {
@@ -36,9 +39,6 @@ export class WatchlistRepository {
       }
     }
 
-    if (dbClient.watchlist.size === 0) {
-      dbClient.seedInMemoryState();
-    }
     return Array.from(dbClient.watchlist.values());
   }
 
@@ -77,7 +77,7 @@ export class WatchlistRepository {
       }
     }
 
-    return null;
+    return dbClient.watchlist.get(clean) || null;
   }
 
   async add(item: { ticker: string; name?: string; memo?: string; is_active?: boolean }): Promise<WatchlistItem> {
@@ -230,6 +230,71 @@ export class WatchlistRepository {
     dbClient.evaluations.delete(clean);
     const res = dbClient.watchlist.delete(clean);
     return res;
+  }
+
+  async removeMany(tickers: string[]): Promise<number> {
+    const cleanTickers = tickers.map((t) => t.toUpperCase().trim()).filter(Boolean);
+    if (cleanTickers.length === 0) return 0;
+
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
+      try {
+        const { error } = await dbClient.supabase
+          .from('watchlist')
+          .delete()
+          .in('ticker', cleanTickers);
+        if (error) {
+          dbClient.handleDbError('watchlist', 'removeMany', error);
+        }
+      } catch (err) {
+        dbClient.handleDbError('watchlist', 'removeMany', err);
+      }
+    }
+
+    if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
+      try {
+        await dbClient.supabase.from('evaluations').delete().in('ticker', cleanTickers);
+      } catch (err) {
+        // Silently ignore
+      }
+    }
+
+    let removed = 0;
+    for (const t of cleanTickers) {
+      dbClient.evaluations.delete(t);
+      if (dbClient.watchlist.delete(t)) {
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  async removeAll(): Promise<boolean> {
+    const allTickers = Array.from(dbClient.watchlist.keys());
+    if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
+      try {
+        const { error } = await dbClient.supabase
+          .from('watchlist')
+          .delete()
+          .neq('ticker', '___NEVER_MATCH___');
+        if (error) {
+          dbClient.handleDbError('watchlist', 'removeAll', error);
+        }
+      } catch (err) {
+        dbClient.handleDbError('watchlist', 'removeAll', err);
+      }
+    }
+
+    if (dbClient.isTableAvailable('evaluations') && dbClient.supabase && allTickers.length > 0) {
+      try {
+        await dbClient.supabase.from('evaluations').delete().in('ticker', allTickers);
+      } catch (err) {}
+    }
+
+    for (const t of allTickers) {
+      dbClient.evaluations.delete(t);
+    }
+    dbClient.watchlist.clear();
+    return true;
   }
 }
 

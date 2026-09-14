@@ -90,8 +90,11 @@ export class EvaluationRepository {
 
         if (error) {
           dbClient.handleDbError('evaluations', 'getAll', error);
-        } else if (Array.isArray(data) && data.length > 0) {
+        } else if (Array.isArray(data)) {
           dbClient.evaluations.clear();
+          if (data.length === 0) {
+            return [];
+          }
           const map = new Map<string, FullTickerEvaluation>();
           const now = new Date().toISOString();
 
@@ -182,9 +185,6 @@ export class EvaluationRepository {
       }
     }
 
-    if (dbClient.evaluations.size === 0) {
-      dbClient.seedInMemoryState();
-    }
     return Array.from(dbClient.evaluations.values());
   }
 

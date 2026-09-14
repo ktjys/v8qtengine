@@ -73,6 +73,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
 
   // Signal Tracker filter
   const [signalStrategyFilter, setSignalStrategyFilter] = useState<'ALL' | 'STRATEGY_A' | 'STRATEGY_B'>('ALL');
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState<boolean>(false);
 
   const loadEquityCurve = async () => {
     setIsLoadingEquity(true);
@@ -148,10 +149,13 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   };
 
   const handleResetAccount = () => {
-    if (confirm('가상 계좌를 초기 상태($100,000)로 리셋하시겠습니까? 모든 체결 내역이 초기화됩니다.')) {
-      PaperTradingEngine.resetAccount(100000);
-      loadData();
-    }
+    setIsResetConfirmOpen(true);
+  };
+
+  const handleExecuteReset = () => {
+    PaperTradingEngine.resetAccount(100000);
+    setIsResetConfirmOpen(false);
+    loadData();
   };
 
   const filteredSignalRecords = useMemo(() => {
@@ -988,6 +992,49 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Reset Account Confirmation Modal */}
+      {isResetConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <RotateCcw className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">가상 계좌 리셋</h3>
+                <p className="text-xs text-slate-400">초기 투자 자금으로 원복합니다.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl text-xs space-y-1.5 text-slate-300">
+              <p className="leading-relaxed">
+                가상 계좌 잔고를 <span className="font-bold text-emerald-400 font-mono">$100,000</span>으로 리셋하시겠습니까?
+              </p>
+              <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 leading-relaxed">
+                현재 보유 중인 포지션과 주문 체결 내역이 모두 초기화됩니다.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteReset}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold shadow-lg shadow-amber-500/20 transition-all"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>계좌 리셋 실행</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

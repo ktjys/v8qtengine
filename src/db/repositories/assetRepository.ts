@@ -80,8 +80,11 @@ export class AssetRepository {
 
         if (error) {
           console.warn('[AssetRepository] Supabase error:', error);
-        } else if (Array.isArray(data) && data.length > 0) {
+        } else if (Array.isArray(data)) {
           dbClient.assets.clear();
+          if (data.length === 0) {
+            return [];
+          }
           // Sync all to in-memory
           data.forEach((row: any) => {
             if (row.ticker) {
@@ -97,9 +100,6 @@ export class AssetRepository {
       }
     }
 
-    if (dbClient.assets.size === 0) {
-      dbClient.seedInMemoryState();
-    }
     return Array.from(dbClient.assets.values());
   }
 

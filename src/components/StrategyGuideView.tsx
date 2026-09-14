@@ -58,42 +58,54 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
 
   // Strategy A (Momentum) Qualified Recommendations:
   // 1. STRONG_OPPORTUNITY or OPPORTUNITY
-  // 2. Or high composite score >= 65 with positive trend
+  // 2. Or high score >= 60 with positive action
   const momentumCandidates = React.useMemo(() => {
+    if (!Array.isArray(evaluations)) return [];
     return evaluations
       .filter((ev) => {
+        if (!ev) return false;
+        const decision = ev.decision?.decision || (ev as any).decision?.action;
+        const score = ev.opportunity?.opportunity_score ?? (ev as any).opportunity?.compositeScore ?? 0;
         const isActionable =
-          ev.opportunity.level === 'STRONG_OPPORTUNITY' ||
-          ev.opportunity.level === 'OPPORTUNITY' ||
-          (ev.opportunity.compositeScore >= 60 && ev.decision.action !== 'SELL');
+          decision === 'STRONG_OPPORTUNITY' ||
+          decision === 'OPPORTUNITY' ||
+          (score >= 60 && decision !== 'AVOID' && decision !== 'SELL');
         return isActionable;
       })
-      .sort((a, b) => b.opportunity.compositeScore - a.opportunity.compositeScore);
+      .sort((a, b) => {
+        const scoreA = a.opportunity?.opportunity_score ?? (a as any).opportunity?.compositeScore ?? 0;
+        const scoreB = b.opportunity?.opportunity_score ?? (b as any).opportunity?.compositeScore ?? 0;
+        return scoreB - scoreA;
+      });
   }, [evaluations]);
 
   // Strategy B (DCA / Dip Buy) Qualified Recommendations:
   // Evaluated through ensureDipEvaluation
   const dcaCandidates = React.useMemo(() => {
+    if (!Array.isArray(evaluations)) return [];
     return evaluations
+      .filter(Boolean)
       .map((ev) => {
         const dip = ev.dip_evaluation || ensureDipEvaluation(ev);
         return { ev, dip };
       })
       .filter(({ dip }) => {
+        if (!dip) return false;
         // High quality Tier S or Tier A with dip buying suitability
+        const tier = dip.suitability?.tier;
         return (
-          dip.tier === 'TIER_S_SECULAR' ||
-          dip.tier === 'TIER_A_QUALITY' ||
+          tier === 'S' ||
+          tier === 'A' ||
           dip.actionable ||
-          dip.current_stage !== 'STAGE_0_NORMAL'
+          dip.timing?.score >= 50
         );
       })
       .sort((a, b) => {
-        // Sort actionable first, then by dip score / mdd discount
+        // Sort actionable first, then by dip score
         if (a.dip.actionable !== b.dip.actionable) {
           return a.dip.actionable ? -1 : 1;
         }
-        return b.dip.composite_dip_score - a.dip.composite_dip_score;
+        return (b.dip?.dip_score ?? 0) - (a.dip?.dip_score ?? 0);
       });
   }, [evaluations]);
 
@@ -531,11 +543,11 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                             <div className="flex items-center space-x-1.5">
                               <span className="font-mono font-bold text-xs">{cand.ticker}</span>
                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-400 font-mono">
-                                점수 {cand.opportunity.compositeScore}
+                                점수 {cand.opportunity?.opportunity_score ?? (cand as any).opportunity?.compositeScore ?? 0}
                               </span>
                             </div>
                             <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                              {formatStockPrice(cand.indicators.price, cand.ticker)}
+                              {formatStockPrice(cand.price ?? (cand as any).indicators?.price ?? 0, cand.ticker)}
                             </div>
                           </div>
                         </button>
@@ -547,9 +559,14 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                 {/* Selected Ticker Detailed Trading Guide Card */}
                 {activeMomentumItem && (() => {
                   const item = activeMomentumItem;
-                  const price = item.indicators.price;
+                  const price = Number(item.price ?? item.indicators?.price ?? 100) || 100;
+                  const rawRsi = item.opportunity?.technical_details?.rsi14 ?? item.indicators?.rsi14;
+                  const rsiVal = typeof rawRsi === 'number' && !isNaN(rawRsi) ? rawRsi : null;
+                  const ma20Val = Number(item.opportunity?.technical_details?.priceAboveMa20 !== undefined
+                    ? (item.indicators?.ma20 ?? price)
+                    : (item.indicators?.ma20 ?? price)) || price;
                   // ATR proxy: estimate 2.2% of price if ATR not directly stored, or derive from volatility
-                  const estimatedAtr = item.risk?.riskScore ? Math.max(0.5, price * 0.022) : Math.max(0.5, price * 0.02);
+                  const estimatedAtr = item.risk?.risk_score ? Math.max(0.5, price * 0.022) : Math.max(0.5, price * 0.02);
                   const stopLoss = Math.max(0, price - (estimatedAtr * 2.0));
                   const target1 = price + (estimatedAtr * 3.5);
                   const target2 = price + (estimatedAtr * 5.0);
@@ -579,15 +596,15 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                               <span className="font-bold text-white text-base">{item.ticker}</span>
                               <span className="text-xs text-slate-400 truncate max-w-[180px] sm:max-w-xs">{item.name}</span>
                               <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-semibold">
-                                {item.opportunity.level === 'STRONG_OPPORTUNITY' ? '강력 추천' : '추세 신호'}
+                                {item.decision?.decision === 'STRONG_OPPORTUNITY' || (item as any).opportunity?.level === 'STRONG_OPPORTUNITY' ? '강력 추천' : '추세 신호'}
                               </span>
                             </div>
                             <div className="text-xs text-slate-400 mt-0.5 flex items-center space-x-2">
                               <span>현재가: <b className="text-white font-mono">{formatStockPrice(price, item.ticker)}</b></span>
                               <span>•</span>
-                              <span>RSI: <b className="text-slate-200 font-mono">{item.indicators.rsi14?.toFixed(1) ?? 'N/A'}</b></span>
+                              <span>RSI: <b className="text-slate-200 font-mono">{rsiVal ? rsiVal.toFixed(1) : 'N/A'}</b></span>
                               <span>•</span>
-                              <span>20MA: <b className="text-slate-200 font-mono">{formatStockPrice(item.indicators.ma20, item.ticker)}</b></span>
+                              <span>20MA: <b className="text-slate-200 font-mono">{formatStockPrice(ma20Val, item.ticker)}</b></span>
                             </div>
                           </div>
                         </div>
@@ -906,12 +923,12 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                                 </span>
                               ) : (
                                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
-                                  {dip.tier === 'TIER_S_SECULAR' ? '💎 Tier S' : '🥇 Tier A'}
+                                  {dip.suitability?.tier === 'S' ? '💎 Tier S' : '🥇 Tier A'}
                                 </span>
                               )}
                             </div>
                             <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                              {formatStockPrice(ev.indicators.price, ev.ticker)}
+                              {formatStockPrice(ev.price ?? ev.indicators?.price ?? 0, ev.ticker)}
                             </div>
                           </div>
                         </button>
@@ -923,7 +940,7 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                 {/* Selected DCA Ticker Guide Card */}
                 {activeDcaItem && (() => {
                   const { ev: item, dip } = activeDcaItem;
-                  const price = item.indicators.price;
+                  const price = item.price ?? item.indicators?.price ?? 100;
 
                   // Derive 3-tranche DCA target prices
                   // Tranche 1: Current price or mild dip (-3% to 0%)
@@ -943,11 +960,18 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                   const t2Qty = Math.floor(t2Krw / (t2Price * 1350));
                   const t3Qty = Math.floor(t3Krw / (t3Price * 1350));
 
-                  const tierName = dip.tier === 'TIER_S_SECULAR'
-                    ? '💎 Tier S (영구 보유 초우량주)'
-                    : dip.tier === 'TIER_A_QUALITY'
-                    ? '🥇 Tier A (산업 선도 고수익주)'
-                    : 'Tier B (경기민감 대형주)';
+                  const tierName = dip.suitability?.tierLabel ||
+                    (dip.suitability?.tier === 'S'
+                      ? '💎 Tier S (영구 보유 초우량주)'
+                      : dip.suitability?.tier === 'A'
+                      ? '🥇 Tier A (산업 선도 고수익주)'
+                      : 'Tier B (경기민감 대형주)');
+
+                  const dipScoreVal = typeof dip.dip_score === 'number'
+                    ? dip.dip_score
+                    : (typeof (dip as any).composite_dip_score === 'number' ? (dip as any).composite_dip_score : 50);
+
+                  const signalStageLabel = dip.signalLabel || dip.actionSignal || '정기 적립';
 
                   return (
                     <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4">
@@ -968,9 +992,9 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                             <div className="text-xs text-slate-400 mt-0.5 flex items-center space-x-2">
                               <span>현재가: <b className="text-white font-mono">{formatStockPrice(price, item.ticker)}</b></span>
                               <span>•</span>
-                              <span>눌림목 점수: <b className="text-emerald-400 font-mono">{dip.composite_dip_score.toFixed(0)}점</b></span>
+                              <span>눌림목 점수: <b className="text-emerald-400 font-mono">{dipScoreVal.toFixed(0)}점</b></span>
                               <span>•</span>
-                              <span>단계: <b className="text-slate-200 font-mono">{dip.current_stage.replace('STAGE_', '').replace('_', ' ')}</b></span>
+                              <span>시그널: <b className="text-slate-200 font-mono">{signalStageLabel}</b></span>
                             </div>
                           </div>
                         </div>

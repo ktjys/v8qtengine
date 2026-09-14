@@ -105,6 +105,57 @@ watchlistRouter.patch('/:ticker', async (req, res) => {
   }
 });
 
+// Known initial dummy/sample tickers that were pre-seeded in the database
+const INITIAL_DUMMY_TICKERS = new Set([
+  'AAPL', 'AMD', 'AMZN', 'GOOGL', 'HOOD', 'JNJ', 'META', 'MSFT', 'NVDA',
+  'OKLO', 'ORCL', 'PLTR', 'SCHD', 'SMH', 'SPCX', 'TSLA', 'V', 'VOO',
+  'AVGO', 'QCOM', 'TSM', 'NFLX', 'CRWD', 'PANW', 'COST', 'LLY', 'NVO', 'SPY'
+]);
+
+const handleBulkDelete = async (req: any, res: any) => {
+  try {
+    const mode = (req.query.mode as string) || req.body?.mode;
+    const bodyTickers = Array.isArray(req.body?.tickers) ? req.body.tickers : [];
+
+    if (bodyTickers.length > 0) {
+      const removedCount = await watchlistRepository.removeMany(bodyTickers);
+      return res.json({ success: true, count: removedCount, message: `${removedCount}개 종목 삭제 완료` });
+    }
+
+    if (mode === 'dummy') {
+      const currentList = await watchlistRepository.getAll();
+      const dummyTickers = currentList
+        .map((w) => w.ticker.toUpperCase())
+        .filter((t) => INITIAL_DUMMY_TICKERS.has(t));
+
+      const removedCount = await watchlistRepository.removeMany(dummyTickers);
+      return res.json({
+        success: true,
+        count: removedCount,
+        removed_tickers: dummyTickers,
+        message: `더미(샘플) 종목 ${removedCount}개가 정리되었습니다.`,
+      });
+    }
+
+    if (mode === 'all') {
+      await watchlistRepository.removeAll();
+      return res.json({ success: true, message: '워치리스트가 완전히 비워졌습니다.' });
+    }
+
+    res.status(400).json({
+      success: false,
+      error: 'mode=dummy, mode=all, 또는 tickers 배열을 제공해야 합니다.',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
+};
+
+// DELETE /api/v8/watchlist (Bulk delete, clear all, or clear dummy tickers)
+watchlistRouter.delete('/', handleBulkDelete);
+watchlistRouter.post('/clear', handleBulkDelete);
+watchlistRouter.delete('/bulk', handleBulkDelete);
+
 // DELETE /api/v8/watchlist/:ticker
 watchlistRouter.delete('/:ticker', async (req, res) => {
   try {

@@ -34,9 +34,6 @@ export class ScanRunRepository {
       }
     }
 
-    if (dbClient.scan_runs.size === 0) {
-      dbClient.seedInMemoryState();
-    }
     return Array.from(dbClient.scan_runs.values());
   }
 

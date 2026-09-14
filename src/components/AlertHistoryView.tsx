@@ -66,8 +66,9 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
     setTimeout(() => setCopiedAlertId(null), 2000);
   };
 
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+
   const handleClearHistory = async () => {
-    if (!confirm('발송된 알림 기록을 모두 초기화하시겠습니까?')) return;
     setIsClearing(true);
     try {
       const res = await fetch('/api/v8/alerts', { method: 'DELETE' });
@@ -78,6 +79,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
       console.error('Failed to clear alerts:', err);
     } finally {
       setIsClearing(false);
+      setIsConfirmingClear(false);
     }
   };
 
@@ -376,14 +378,33 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
           </button>
 
           {alerts.length > 0 && (
-            <button
-              onClick={handleClearHistory}
-              disabled={isClearing}
-              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-rose-950 hover:text-rose-300 text-slate-400 text-xs border border-slate-800 transition-all active:scale-95"
-              title="알림 기록 전체 비우기"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            isConfirmingClear ? (
+              <div className="flex items-center space-x-1.5 animate-fadeIn">
+                <span className="text-[11px] text-rose-400 font-semibold">전체 비우기?</span>
+                <button
+                  onClick={handleClearHistory}
+                  disabled={isClearing}
+                  className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-semibold transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isClearing ? '비우는 중...' : '확인'}
+                </button>
+                <button
+                  onClick={() => setIsConfirmingClear(false)}
+                  disabled={isClearing}
+                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold transition-all"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsConfirmingClear(true)}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-rose-950 hover:text-rose-300 text-slate-400 text-xs border border-slate-800 transition-all active:scale-95"
+                title="알림 기록 전체 비우기"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )
           )}
         </div>
       </div>

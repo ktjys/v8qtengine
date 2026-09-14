@@ -210,7 +210,10 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     return sortOrder === 'desc' ? -diff : diff;
   });
 
-  const isCapacityReached = (evaluations || []).length >= MAX_WATCHLIST_CAPACITY;
+  const currentCount = (evaluations || []).length;
+  const isCapacityReached = currentCount >= MAX_WATCHLIST_CAPACITY;
+  const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - currentCount);
+  const capacityPercent = Math.min(100, Math.round((currentCount / MAX_WATCHLIST_CAPACITY) * 100));
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -281,23 +284,39 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center space-x-2">
-              <span>워치리스트 전종목 평가 매트릭스</span>
-              <span
-                className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold border ${
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-lg font-bold text-slate-100">
+                워치리스트 전종목 평가 매트릭스
+              </h2>
+              {/* Watchlist Slot Badge */}
+              <div
+                className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono border ${
                   isCapacityReached
                     ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                    : evaluations.length >= 25
+                    : currentCount >= 25
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                    : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                    : 'bg-slate-800/90 text-slate-300 border-slate-700'
                 }`}
-                title="Cloudflare 환경 안정성을 위해 최대 30개 종목으로 용량을 제한합니다."
+                title="실시간 주가 수집 및 4대 팩터 스캔 엔진의 성능을 최적으로 유지하기 위해 제공되는 관심종목 관리 슬롯입니다."
               >
-                {evaluations.length} / {MAX_WATCHLIST_CAPACITY}개
+                <span className="text-[11px] text-slate-400 font-sans">등록 슬롯:</span>
+                <span className="font-bold text-cyan-400">{currentCount}</span>
+                <span className="text-slate-500">/</span>
+                <span className="text-slate-400">{MAX_WATCHLIST_CAPACITY}개</span>
+                <span className="border-l border-slate-700 pl-1.5 ml-0.5 text-[11px] font-sans">
+                  {isCapacityReached ? (
+                    <span className="text-rose-400 font-semibold">슬롯 가득 참</span>
+                  ) : (
+                    <span className="text-emerald-400 font-medium">{remainingSlots}개 추가 가능</span>
+                  )}
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              관심종목에 등록된 전종목에 대해 4대 팩터(기술/모멘텀/펀더멘털/밸류)와 독립 리스크를 실시간 산출합니다.
+              <span className="text-slate-500 ml-1">
+                (최대 {MAX_WATCHLIST_CAPACITY}개 슬롯 한도 · 잔여 {remainingSlots}개)
               </span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              전체 종목에 대해 4대 서브 스코어(기술/모멘텀/펀더멘털/밸류)와 독립 리스크를 동시 산출합니다. (최대 {MAX_WATCHLIST_CAPACITY}개 한도)
             </p>
           </div>
 
@@ -335,14 +354,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               }`}
               title={
                 isCapacityReached
-                  ? `워치리스트 한도(${MAX_WATCHLIST_CAPACITY}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
-                  : `워치리스트에 새 종목 추가 (${evaluations.length}/${MAX_WATCHLIST_CAPACITY})`
+                  ? `워치리스트 등록 한도(${MAX_WATCHLIST_CAPACITY}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
+                  : `워치리스트에 새 종목 추가 (현재 ${currentCount}/${MAX_WATCHLIST_CAPACITY}개 슬롯 사용 중, ${remainingSlots}개 추가 가능)`
               }
             >
               <Plus className="w-3.5 h-3.5" />
               <span>종목 추가</span>
-              <span className="text-[10px] opacity-80 font-mono">
-                ({evaluations.length}/{MAX_WATCHLIST_CAPACITY})
+              <span className="text-[10px] opacity-90 font-mono px-1.5 py-0.5 rounded bg-black/25">
+                {isCapacityReached ? '가득 참' : `${remainingSlots}자리 남음`}
               </span>
             </button>
           </div>
@@ -624,9 +643,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                       </div>
                       <div className="text-[10px] text-slate-400 flex items-center space-x-1">
                         <span className="uppercase text-[9px] px-1 rounded bg-slate-800 text-slate-400">
-                          {item.classification.asset_type}
+                          {item.classification?.asset_type || 'EQUITY'}
                         </span>
-                        <span>신뢰도 {(item.classification.confidence * 100).toFixed(0)}%</span>
+                        <span>신뢰도 {typeof item.classification?.confidence === 'number' ? (item.classification.confidence * 100).toFixed(0) : '80'}%</span>
                       </div>
                     </td>
 
@@ -718,7 +737,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
-                        Beta: {item.risk.components.beta.toFixed(2)}
+                        Beta: {typeof item.risk?.components?.beta === 'number' ? item.risk.components.beta.toFixed(2) : '1.00'}
                       </div>
                     </td>
 
@@ -802,13 +821,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </h3>
               <div className="flex items-center space-x-2">
                 <span
-                  className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full border ${
+                  className={`text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full border ${
                     isCapacityReached
                       ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                      : currentCount >= 25
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                       : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
                   }`}
                 >
-                  {evaluations.length} / {MAX_WATCHLIST_CAPACITY}개
+                  슬롯: {currentCount} / {MAX_WATCHLIST_CAPACITY}개 ({isCapacityReached ? '가득 참' : `${remainingSlots}개 가능`})
                 </span>
                 <button
                   onClick={() => setShowAddModal(false)}
@@ -819,16 +840,28 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </div>
             </div>
 
-            {isCapacityReached && (
+            {isCapacityReached ? (
               <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-start space-x-2.5 text-rose-300 text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
                 <div>
                   <p className="font-semibold text-rose-200">
-                    최대 등록 한도({MAX_WATCHLIST_CAPACITY}개)에 도달했습니다.
+                    워치리스트 등록 슬롯({MAX_WATCHLIST_CAPACITY}개)이 모두 찼습니다.
                   </p>
                   <p className="text-[11px] text-rose-300/90 mt-0.5 leading-relaxed">
-                    Cloudflare Workers의 무료 서브리퀘스트 한도(50회) 및 실시간 스캔 속도를 안정적으로 유지하기 위해 관리 종목을 최대 {MAX_WATCHLIST_CAPACITY}개로 제한하고 있습니다. 신규 종목을 등록하시려면 기존 종목을 삭제해 주세요.
+                    실시간 스캔 속도 및 Yahoo Finance API 안정성을 유지하기 위해 워치리스트는 최대 {MAX_WATCHLIST_CAPACITY}개까지 관리됩니다. 새 종목을 등록하시려면 기존 종목을 삭제해 주세요.
                   </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 bg-slate-950/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs text-slate-400">
+                <span>등록 가능 슬롯: <b className="text-cyan-400 font-mono">{remainingSlots}개</b> 남음</span>
+                <div className="w-28 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      currentCount >= 25 ? 'bg-amber-400' : 'bg-cyan-500'
+                    }`}
+                    style={{ width: `${capacityPercent}%` }}
+                  />
                 </div>
               </div>
             )}

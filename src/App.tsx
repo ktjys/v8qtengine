@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Trash2, RefreshCw } from 'lucide-react';
 import {
   ActiveStrategyMode,
   BacktestSummary,
@@ -70,6 +71,8 @@ export default function App() {
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [deleteTargetTicker, setDeleteTargetTicker] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenSymbolDetail = (ticker: string, initialTab: 'overview' | 'chart' | 'dip_buy' = 'overview') => {
     setSelectedTicker(ticker);
@@ -174,16 +177,21 @@ export default function App() {
         safeFetchJson('/api/v8/runs'),
       ]);
 
-      if (currentWl?.success && Array.isArray(currentWl.watchlist) && currentWl.watchlist.length > 0) {
+      if (currentWl?.success && Array.isArray(currentWl.watchlist)) {
         setWatchlist(currentWl.watchlist);
+        try {
+          localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(currentWl.watchlist));
+        } catch {}
       }
 
-      if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations) && loadedEvals.evaluations.length > 0) {
-        if (strategyConfig.id !== DEFAULT_STRATEGY_CONFIG.id) {
-          setEvaluations(recalculateEvaluationsWithConfig(loadedEvals.evaluations, strategyConfig));
-        } else {
-          setEvaluations(loadedEvals.evaluations);
-        }
+      if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations)) {
+        const evalsToSet = strategyConfig.id !== DEFAULT_STRATEGY_CONFIG.id
+          ? recalculateEvaluationsWithConfig(loadedEvals.evaluations, strategyConfig)
+          : loadedEvals.evaluations;
+        setEvaluations(evalsToSet);
+        try {
+          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(evalsToSet));
+        } catch {}
       }
 
       if (latestSignals?.success && Array.isArray(latestSignals.signals) && latestSignals.signals.length > 0) {
@@ -284,19 +292,91 @@ export default function App() {
     }
   };
 
-  const handleDeleteTicker = async (ticker: string) => {
-    const cleanTicker = ticker.toUpperCase().trim();
-    if (!confirm(`${cleanTicker} 종목을 워치리스트에서 삭제하시겠습니까?`)) return;
+  const handleDeleteTicker = (ticker: string) => {
+    setDeleteTargetTicker(ticker.toUpperCase().trim());
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetTicker) return;
+    const cleanTicker = deleteTargetTicker.toUpperCase().trim();
+    setIsDeleting(true);
 
     try {
-      await fetch(`/api/v8/watchlist/${cleanTicker}`, {
+      // 1. Optimistic local state update for instant UI feedback
+      setEvaluations((prev) => {
+        const updated = prev.filter((e) => e.ticker.toUpperCase() !== cleanTicker);
+        try {
+          localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setWatchlist((prev) => prev.filter((w) => w.ticker.toUpperCase() !== cleanTicker));
+
+      // 2. Server delete request
+      const res = await fetch(`/api/v8/watchlist/${cleanTicker}`, {
         method: 'DELETE',
       });
 
-      showToast(`${cleanTicker} 종목이 삭제되었습니다.`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || '삭제 요청 처리에 실패했습니다.');
+      }
+
+      showToast(`${cleanTicker} 종목이 워치리스트에서 삭제되었습니다.`);
+      setDeleteTargetTicker(null);
       await loadAllData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete ticker', err);
+      showToast(`삭제 실패: ${err.message}`);
+      await loadAllData();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleClearDummyTickers = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await fetch('/api/v8/watchlist/clear?mode=dummy', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || '더미 종목 정리에 실패했습니다.');
+      }
+      showToast(data.message || '더미(샘플) 종목이 모두 정리되었습니다.');
+      await loadAllData();
+    } catch (err: any) {
+      console.error('Failed to clear dummy tickers', err);
+      showToast(`더미 종목 정리 실패: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleClearAllWatchlist = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await fetch('/api/v8/watchlist/clear?mode=all', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || '워치리스트 비우기에 실패했습니다.');
+      }
+      showToast('워치리스트가 완전히 비워졌습니다.');
+      setWatchlist([]);
+      setEvaluations([]);
+      try {
+        localStorage.removeItem('quant_watchlist_cache_v8');
+        localStorage.removeItem('quant_evaluations_cache_v8');
+      } catch {}
+      await loadAllData();
+    } catch (err: any) {
+      console.error('Failed to clear all watchlist', err);
+      showToast(`비우기 실패: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -376,6 +456,8 @@ export default function App() {
             onToggleActive={handleToggleActive}
             onRecalculate={handleRecalculateEvaluations}
             isRecalculating={isRecalculating}
+            onClearDummyTickers={handleClearDummyTickers}
+            onClearAllWatchlist={handleClearAllWatchlist}
           />
         )}
 
@@ -439,6 +521,66 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTargetTicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                <Trash2 className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">워치리스트 종목 삭제</h3>
+                <p className="text-xs text-slate-400">등록된 관심종목을 목록에서 제외합니다.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">삭제 대상 티커</span>
+                <span className="font-mono font-bold text-white text-base px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+                  {deleteTargetTicker}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/60 leading-relaxed">
+                삭제 시 실시간 4대 팩터(기술·모멘텀·펀더멘털·밸류) 평가 및 알림 추적 대상에서 제외되며, 워치리스트 슬롯이 1개 확보됩니다.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isDeleting) setDeleteTargetTicker(null);
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 active:scale-95 text-white shadow-lg shadow-rose-600/30 transition-all disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>삭제 처리 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>삭제 확인</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Symbol Detail Modal (Debug / Diagnostics) */}
       {selectedTicker && (

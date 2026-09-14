@@ -19,10 +19,11 @@ evaluationRouter.get('/', async (req, res) => {
 
     const watchlistTickerSet = new Set(watchlist.map((w) => w.ticker.toUpperCase()));
     
-    // Filter evaluations strictly to registered watchlist items if watchlist exists
-    const finalEvaluations = watchlistTickerSet.size > 0
-      ? evaluations.filter((e) => watchlistTickerSet.has(e.ticker.toUpperCase()))
-      : evaluations;
+    // Filter evaluations strictly to registered watchlist items.
+    // If watchlist is empty, returned evaluations must be empty.
+    const finalEvaluations = watchlist.length === 0
+      ? []
+      : evaluations.filter((e) => watchlistTickerSet.has(e.ticker.toUpperCase()));
 
     res.json({
       success: true,

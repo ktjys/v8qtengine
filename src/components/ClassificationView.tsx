@@ -274,7 +274,7 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
                     </td>
 
                     <td className="py-3 px-3 text-center">
-                      <span className="font-bold text-slate-200">{(c.confidence * 100).toFixed(0)}%</span>
+                      <span className="font-bold text-slate-200">{typeof c.confidence === 'number' ? (c.confidence * 100).toFixed(0) : '80'}%</span>
                     </td>
 
                     <td className="py-3 px-3">
