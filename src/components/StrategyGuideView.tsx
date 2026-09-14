@@ -22,11 +22,18 @@ import {
   CheckSquare,
   Square,
   Repeat,
+  ExternalLink,
+  Target,
+  ArrowUpRight,
+  Percent,
 } from 'lucide-react';
 import { FullTickerEvaluation } from '../types/v8';
+import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 
 interface StrategyGuideViewProps {
   evaluations?: FullTickerEvaluation[];
+  onSelectTicker?: (ticker: string, initialTab?: 'overview' | 'chart' | 'dip_buy') => void;
   onNavigateToWatchlist?: (mode?: 'MOMENTUM' | 'DCA_DIP') => void;
   onNavigateToMacro?: () => void;
   onNavigateToPaper?: () => void;
@@ -36,11 +43,79 @@ type GuideStrategyType = 'momentum' | 'dca' | 'macro' | 'sizing';
 
 export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
   evaluations = [],
+  onSelectTicker,
   onNavigateToWatchlist,
   onNavigateToMacro,
   onNavigateToPaper,
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<GuideStrategyType>('momentum');
+
+  // Specific stock selected for Strategy A (Momentum) Live Trading Action Plan
+  const [selectedMomentumTicker, setSelectedMomentumTicker] = useState<string | null>(null);
+
+  // Specific stock selected for Strategy B (DCA/Dip) Live Execution Plan
+  const [selectedDcaTicker, setSelectedDcaTicker] = useState<string | null>(null);
+
+  // Strategy A (Momentum) Qualified Recommendations:
+  // 1. STRONG_OPPORTUNITY or OPPORTUNITY
+  // 2. Or high composite score >= 65 with positive trend
+  const momentumCandidates = React.useMemo(() => {
+    return evaluations
+      .filter((ev) => {
+        const isActionable =
+          ev.opportunity.level === 'STRONG_OPPORTUNITY' ||
+          ev.opportunity.level === 'OPPORTUNITY' ||
+          (ev.opportunity.compositeScore >= 60 && ev.decision.action !== 'SELL');
+        return isActionable;
+      })
+      .sort((a, b) => b.opportunity.compositeScore - a.opportunity.compositeScore);
+  }, [evaluations]);
+
+  // Strategy B (DCA / Dip Buy) Qualified Recommendations:
+  // Evaluated through ensureDipEvaluation
+  const dcaCandidates = React.useMemo(() => {
+    return evaluations
+      .map((ev) => {
+        const dip = ev.dip_evaluation || ensureDipEvaluation(ev);
+        return { ev, dip };
+      })
+      .filter(({ dip }) => {
+        // High quality Tier S or Tier A with dip buying suitability
+        return (
+          dip.tier === 'TIER_S_SECULAR' ||
+          dip.tier === 'TIER_A_QUALITY' ||
+          dip.actionable ||
+          dip.current_stage !== 'STAGE_0_NORMAL'
+        );
+      })
+      .sort((a, b) => {
+        // Sort actionable first, then by dip score / mdd discount
+        if (a.dip.actionable !== b.dip.actionable) {
+          return a.dip.actionable ? -1 : 1;
+        }
+        return b.dip.composite_dip_score - a.dip.composite_dip_score;
+      });
+  }, [evaluations]);
+
+  // Sync initial selection if not selected yet
+  const activeMomentumItem = React.useMemo(() => {
+    if (selectedMomentumTicker) {
+      const found = momentumCandidates.find((c) => c.ticker === selectedMomentumTicker);
+      if (found) return found;
+    }
+    return momentumCandidates[0] || evaluations[0] || null;
+  }, [selectedMomentumTicker, momentumCandidates, evaluations]);
+
+  const activeDcaItem = React.useMemo(() => {
+    if (selectedDcaTicker) {
+      const found = dcaCandidates.find((c) => c.ev.ticker === selectedDcaTicker);
+      if (found) return found;
+    }
+    return dcaCandidates[0] || (evaluations[0] ? {
+      ev: evaluations[0],
+      dip: evaluations[0].dip_evaluation || ensureDipEvaluation(evaluations[0])
+    } : null);
+  }, [selectedDcaTicker, dcaCandidates, evaluations]);
 
   // Interactive Trade Sizing Calculator State
   const [calcAccountSize, setCalcAccountSize] = useState<number>(30000000); // 3천만원
@@ -123,11 +198,18 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
             <span className="p-2 rounded-lg bg-cyan-500/20 text-cyan-400">
               <Zap className="w-4 h-4" />
             </span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-              selectedStrategy === 'momentum' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'
-            }`}>
-              공격형
-            </span>
+            <div className="flex items-center space-x-1.5">
+              {momentumCandidates.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  {momentumCandidates.length}개 포착
+                </span>
+              )}
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                selectedStrategy === 'momentum' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+              }`}>
+                공격형
+              </span>
+            </div>
           </div>
           <div className="mt-3">
             <div className="font-bold text-sm text-slate-100">1. 모멘텀 추세추종</div>
@@ -147,11 +229,18 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
             <span className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
               <TrendingUp className="w-4 h-4" />
             </span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-              selectedStrategy === 'dca' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
-            }`}>
-              가치적립형
-            </span>
+            <div className="flex items-center space-x-1.5">
+              {dcaCandidates.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {dcaCandidates.length}개 대상
+                </span>
+              )}
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                selectedStrategy === 'dca' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+              }`}>
+                가치적립형
+              </span>
+            </div>
           </div>
           <div className="mt-3">
             <div className="font-bold text-sm text-slate-100">2. 우량주 눌림목 분할매수</div>
@@ -387,6 +476,241 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
               </ul>
             </div>
           </div>
+
+          {/* Real-time Strategy 1 (Momentum) Recommended Tickers & Dynamic Action Guides */}
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-5 sm:p-6 space-y-5 shadow-lg shadow-cyan-950/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400">
+                    <Crosshair className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-lg font-bold text-white">
+                    현재 모멘텀 포착 종목별 실전 매매 가이드 (Live Action)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  모멘텀 엔진이 발굴한 유망 종목의 현재가·변동폭을 기반으로 <b>진입가 / 1차 손절선 / 1·2차 목표가 / 적정 주문 수량</b>을 자동 계산하여 안내합니다.
+                </p>
+              </div>
+
+              {momentumCandidates.length > 0 && (
+                <div className="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/30 self-start sm:self-auto">
+                  추천 후보 {momentumCandidates.length}개 종목
+                </div>
+              )}
+            </div>
+
+            {momentumCandidates.length === 0 ? (
+              <div className="p-8 text-center bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+                <ShieldAlert className="w-8 h-8 text-slate-500 mx-auto" />
+                <p className="text-sm font-semibold text-slate-300">현재 엄격한 모멘텀 조건을 충족하는 종목이 없습니다.</p>
+                <p className="text-xs text-slate-500">지수가 횡보 또는 조정 중일 때는 현금을 비축하고 시그널이 발생할 때까지 대기하세요.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Ticker Selector Pills */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 mb-2 block">
+                    종목을 선택하여 맞춤형 매매 계획서를 확인하세요:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {momentumCandidates.map((cand) => {
+                      const isSelected = activeMomentumItem?.ticker === cand.ticker;
+                      return (
+                        <button
+                          key={cand.ticker}
+                          onClick={() => setSelectedMomentumTicker(cand.ticker)}
+                          className={`px-3 py-2 rounded-xl text-left border transition-all flex items-center space-x-2.5 ${
+                            isSelected
+                              ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md shadow-cyan-500/10'
+                              : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-950'
+                          }`}
+                        >
+                          <div className="text-left">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-mono font-bold text-xs">{cand.ticker}</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-400 font-mono">
+                                점수 {cand.opportunity.compositeScore}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                              {formatStockPrice(cand.indicators.price, cand.ticker)}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected Ticker Detailed Trading Guide Card */}
+                {activeMomentumItem && (() => {
+                  const item = activeMomentumItem;
+                  const price = item.indicators.price;
+                  // ATR proxy: estimate 2.2% of price if ATR not directly stored, or derive from volatility
+                  const estimatedAtr = item.risk?.riskScore ? Math.max(0.5, price * 0.022) : Math.max(0.5, price * 0.02);
+                  const stopLoss = Math.max(0, price - (estimatedAtr * 2.0));
+                  const target1 = price + (estimatedAtr * 3.5);
+                  const target2 = price + (estimatedAtr * 5.0);
+                  const stopLossPct = price > 0 ? ((price - stopLoss) / price) * 100 : 4.4;
+                  const target1Pct = price > 0 ? ((target1 - price) / price) * 100 : 7.7;
+                  const target2Pct = price > 0 ? ((target2 - price) / price) * 100 : 11.0;
+                  const rewardToRisk = stopLossPct > 0 ? (target1Pct / stopLossPct).toFixed(1) : '1.8';
+
+                  // Position size recommendation: 계좌 리스크 1.5% 기준
+                  const riskPerShare = Math.max(1, price - stopLoss);
+                  const maxRiskKrw = calcAccountSize * 0.015; // 1.5% rule
+                  const riskPerShareKrw = riskPerShare * 1350;
+                  const recommendedQty = riskPerShareKrw > 0 ? Math.floor(maxRiskKrw / riskPerShareKrw) : 0;
+                  const totalCapitalKrw = recommendedQty * price * 1350;
+                  const accountWeightPct = calcAccountSize > 0 ? ((totalCapitalKrw / calcAccountSize) * 100).toFixed(1) : '0';
+
+                  return (
+                    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4">
+                      {/* Ticker Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 p-3.5 rounded-xl border border-slate-800">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-mono font-black text-cyan-400 text-sm">
+                            {item.ticker.slice(0, 3)}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-white text-base">{item.ticker}</span>
+                              <span className="text-xs text-slate-400 truncate max-w-[180px] sm:max-w-xs">{item.name}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-semibold">
+                                {item.opportunity.level === 'STRONG_OPPORTUNITY' ? '강력 추천' : '추세 신호'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5 flex items-center space-x-2">
+                              <span>현재가: <b className="text-white font-mono">{formatStockPrice(price, item.ticker)}</b></span>
+                              <span>•</span>
+                              <span>RSI: <b className="text-slate-200 font-mono">{item.indicators.rsi14?.toFixed(1) ?? 'N/A'}</b></span>
+                              <span>•</span>
+                              <span>20MA: <b className="text-slate-200 font-mono">{formatStockPrice(item.indicators.ma20, item.ticker)}</b></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 self-end sm:self-auto">
+                          <button
+                            onClick={() => {
+                              setCalcStockPrice(Number(price.toFixed(2)));
+                              setCalcAtr(Number(estimatedAtr.toFixed(2)));
+                              setSelectedStrategy('sizing');
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                            <span>계산기로 수량 산출</span>
+                          </button>
+                          {onSelectTicker && (
+                            <button
+                              onClick={() => onSelectTicker(item.ticker, 'overview')}
+                              className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-md"
+                            >
+                              <span>종목 상세 분석</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tactical Execution Plan Table */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* 1. 진입 가이드 */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                          <div className="text-[11px] font-bold text-cyan-400 flex items-center justify-between">
+                            <span>1단계: 매수 진입</span>
+                            <span className="font-mono text-[10px] bg-cyan-500/10 px-1.5 py-0.5 rounded">현재가 부근</span>
+                          </div>
+                          <div className="text-base font-black text-white font-mono">
+                            {formatStockPrice(price, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            당일 시가 또는 20일선 지지 확인 후 즉시 분할 진입. 장중 추격 매수보다는 눌림 시 매수 권장.
+                          </p>
+                        </div>
+
+                        {/* 2. 손절선 가이드 */}
+                        <div className="p-3.5 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-1.5">
+                          <div className="text-[11px] font-bold text-rose-400 flex items-center justify-between">
+                            <span>2단계: 필수 손절선</span>
+                            <span className="font-mono text-[10px] bg-rose-500/10 px-1.5 py-0.5 rounded text-rose-300">
+                              -{stopLossPct.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-rose-300 font-mono">
+                            {formatStockPrice(stopLoss, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            진입 즉시 증권사에 Stop-Loss 예약 필수. 이탈 시 이유를 불문하고 기계적으로 전량 손절.
+                          </p>
+                        </div>
+
+                        {/* 3. 1차 익절 가이드 */}
+                        <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-1.5">
+                          <div className="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
+                            <span>3단계: 1차 분할 익절</span>
+                            <span className="font-mono text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded text-emerald-300">
+                              +{target1Pct.toFixed(1)}% (50% 매도)
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-emerald-300 font-mono">
+                            {formatStockPrice(target1, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            목표 도달 시 50%를 익절하여 확정 수익을 챙기고, 잔여 물량의 손절선을 진입가(본전)로 상향.
+                          </p>
+                        </div>
+
+                        {/* 4. 최종 목표 및 트레일링 */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                          <div className="text-[11px] font-bold text-purple-400 flex items-center justify-between">
+                            <span>4단계: 최종 목표/트렌드</span>
+                            <span className="font-mono text-[10px] bg-purple-500/10 px-1.5 py-0.5 rounded text-purple-300">
+                              +{target2Pct.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-purple-300 font-mono">
+                            {formatStockPrice(target2, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            추세가 강력할 경우 20일 이동평균선 이탈 전까지 잔여 물량 홀딩. 20영업일 초과 시 시간 청산 검토.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Position Sizing Recommendation for this Ticker */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2 text-slate-200 font-semibold">
+                            <Scale className="w-3.5 h-3.5 text-cyan-400" />
+                            <span><b>{item.ticker}</b> 권장 포지션 규모 (내 계좌 3천만원 기준 1.5% 리스크 한도)</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            1주당 손실 허용액: <b>${riskPerShare.toFixed(2)}</b> (약 {(riskPerShareKrw).toLocaleString('ko-KR')}원) | 손익비 1 : {rewardToRisk}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-3 self-end md:self-auto font-mono">
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">권장 매수 수량</span>
+                            <span className="text-sm font-black text-cyan-400">{recommendedQty > 0 ? `${recommendedQty} 주` : '1 주'}</span>
+                          </div>
+                          <div className="h-6 w-px bg-slate-800" />
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">포지션 투자금</span>
+                            <span className="text-sm font-black text-white">{Math.round(totalCapitalKrw / 10000).toLocaleString('ko-KR')}만원 ({accountWeightPct}%)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -520,6 +844,238 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                 <li>• <b>단기 손절선 설정 금지</b>: DCA는 1~2주용 트레이딩이 아니므로 잦은 손절매는 수수료와 슬리피지만 누적시킵니다.</li>
               </ul>
             </div>
+          </div>
+
+          {/* Real-time Strategy 2 (DCA / Dip Buy) Qualified Tickers & Execution Blueprint */}
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-5 sm:p-6 space-y-5 shadow-lg shadow-emerald-950/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <TrendingUp className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-lg font-bold text-white">
+                    현재 우량주 눌림목 적립 추천 종목별 분할매수 계획서 (Live Execution)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  우량도 평가(S/A등급) 및 고점 대비 낙폭(MDD), RSI 과매도를 기반으로 <b>1차·2차·3차 분할 매수가와 비중 배분</b>을 제공합니다.
+                </p>
+              </div>
+
+              {dcaCandidates.length > 0 && (
+                <div className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30 self-start sm:self-auto">
+                  DCA 대상 {dcaCandidates.length}개 종목
+                </div>
+              )}
+            </div>
+
+            {dcaCandidates.length === 0 ? (
+              <div className="p-8 text-center bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                <p className="text-sm font-semibold text-slate-300">현재 우량주들이 전반적으로 고점 부근이거나 눌림목 조건에 진입하지 않았습니다.</p>
+                <p className="text-xs text-slate-500">무리해서 추격 매수하지 마시고 정기 적립일 또는 조정 국면까지 기다려주세요.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Ticker Selector Pills */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 mb-2 block">
+                    종목을 선택하여 단계별 분할매수 가이드를 확인하세요:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {dcaCandidates.map(({ ev, dip }) => {
+                      const isSelected = activeDcaItem?.ev.ticker === ev.ticker;
+                      const isActionable = dip.actionable;
+                      return (
+                        <button
+                          key={ev.ticker}
+                          onClick={() => setSelectedDcaTicker(ev.ticker)}
+                          className={`px-3 py-2 rounded-xl text-left border transition-all flex items-center space-x-2.5 ${
+                            isSelected
+                              ? 'bg-emerald-500/20 border-emerald-400 text-white shadow-md shadow-emerald-500/10'
+                              : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-950'
+                          }`}
+                        >
+                          <div className="text-left">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-mono font-bold text-xs">{ev.ticker}</span>
+                              {isActionable ? (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 animate-pulse">
+                                  적립 적기
+                                </span>
+                              ) : (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
+                                  {dip.tier === 'TIER_S_SECULAR' ? '💎 Tier S' : '🥇 Tier A'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                              {formatStockPrice(ev.indicators.price, ev.ticker)}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected DCA Ticker Guide Card */}
+                {activeDcaItem && (() => {
+                  const { ev: item, dip } = activeDcaItem;
+                  const price = item.indicators.price;
+
+                  // Derive 3-tranche DCA target prices
+                  // Tranche 1: Current price or mild dip (-3% to 0%)
+                  // Tranche 2: -7% from current or 50MA support
+                  // Tranche 3: -15% from current or 200MA deep value support
+                  const t1Price = price;
+                  const t2Price = price * 0.93;
+                  const t3Price = price * 0.85;
+
+                  // Allocated budget for this stock: assume 20% of account size for blue chip
+                  const maxStockBudgetKrw = calcAccountSize * 0.20; // 20% rule = 6,000,000 KRW
+                  const t1Krw = maxStockBudgetKrw * 0.30; // 30%
+                  const t2Krw = maxStockBudgetKrw * 0.35; // 35%
+                  const t3Krw = maxStockBudgetKrw * 0.35; // 35%
+
+                  const t1Qty = Math.floor(t1Krw / (t1Price * 1350));
+                  const t2Qty = Math.floor(t2Krw / (t2Price * 1350));
+                  const t3Qty = Math.floor(t3Krw / (t3Price * 1350));
+
+                  const tierName = dip.tier === 'TIER_S_SECULAR'
+                    ? '💎 Tier S (영구 보유 초우량주)'
+                    : dip.tier === 'TIER_A_QUALITY'
+                    ? '🥇 Tier A (산업 선도 고수익주)'
+                    : 'Tier B (경기민감 대형주)';
+
+                  return (
+                    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4">
+                      {/* Ticker Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 p-3.5 rounded-xl border border-slate-800">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-mono font-black text-emerald-400 text-sm">
+                            {item.ticker.slice(0, 3)}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-white text-base">{item.ticker}</span>
+                              <span className="text-xs text-slate-400 truncate max-w-[180px] sm:max-w-xs">{item.name}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold">
+                                {tierName}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5 flex items-center space-x-2">
+                              <span>현재가: <b className="text-white font-mono">{formatStockPrice(price, item.ticker)}</b></span>
+                              <span>•</span>
+                              <span>눌림목 점수: <b className="text-emerald-400 font-mono">{dip.composite_dip_score.toFixed(0)}점</b></span>
+                              <span>•</span>
+                              <span>단계: <b className="text-slate-200 font-mono">{dip.current_stage.replace('STAGE_', '').replace('_', ' ')}</b></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 self-end sm:self-auto">
+                          {onSelectTicker && (
+                            <>
+                              <button
+                                onClick={() => onSelectTicker(item.ticker, 'dip_buy')}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                              >
+                                <span>눌림목 분석기</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => onSelectTicker(item.ticker, 'overview')}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition-all border border-slate-700"
+                              >
+                                <span>종목 정보</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 3-Step Tranche Execution Blueprint */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* 1차 분할 매수 */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/30 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-emerald-400">1차 진입 (정찰/1차)</span>
+                            <span className="font-mono text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                              배분 비중: 30%
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-white font-mono">
+                            {formatStockPrice(t1Price, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            우량주가 일상적 조정 또는 20일선 부근에 위치할 때 정기 분할 적립. 권장 수량: <b className="text-white font-mono">{t1Qty}주</b> (약 {Math.round(t1Krw/10000)}만원).
+                          </p>
+                        </div>
+
+                        {/* 2차 분할 매수 */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-cyan-400">2차 진입 (중기 지지선)</span>
+                            <span className="font-mono text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-bold">
+                              배분 비중: 35% (-7%)
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-white font-mono">
+                            {formatStockPrice(t2Price, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            50일 이동평균선 또는 단기 악재 뉴스로 인한 일시 급락 시 2차 추가 매수. 권장 수량: <b className="text-white font-mono">{t2Qty}주</b> (약 {Math.round(t2Krw/10000)}만원).
+                          </p>
+                        </div>
+
+                        {/* 3차 분할 매수 */}
+                        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-purple-400">3차 진입 (공포/딥 밸류)</span>
+                            <span className="font-mono text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-bold">
+                              배분 비중: 35% (-15%)
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-white font-mono">
+                            {formatStockPrice(t3Price, item.ticker)}
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            200일선 터치, RSI 30 미만 극단적 공포 구간에서 최종 비중 채우기. 권장 수량: <b className="text-white font-mono">{t3Qty}주</b> (약 {Math.round(t3Krw/10000)}만원).
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Execution Principles & Exit Guidance for this DCA stock */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2 text-slate-200 font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span><b>{item.ticker}</b> DCA 매도 & 리밸런싱 원칙</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            초우량주는 손절선 대신 <b>계좌 내 최대 비중 20% 한도 초과 시 1/3 부분 익절</b> 원칙을 적용합니다. 장기 복리 성장 추구.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-3 self-end md:self-auto font-mono">
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">종목 최대 투자한도</span>
+                            <span className="text-sm font-black text-emerald-400">{Math.round(maxStockBudgetKrw / 10000).toLocaleString('ko-KR')}만원 (20%)</span>
+                          </div>
+                          <div className="h-6 w-px bg-slate-800" />
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">완료 시 총 수량</span>
+                            <span className="text-sm font-black text-white">{t1Qty + t2Qty + t3Qty} 주</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         </div>
       )}

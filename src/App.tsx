@@ -429,6 +429,7 @@ export default function App() {
         {activeTab === 'guide' && (
           <StrategyGuideView
             evaluations={evaluations}
+            onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onNavigateToWatchlist={(mode) => {
               if (mode) setWatchlistStrategyMode(mode);
               setActiveTab('watchlist');
