@@ -121,12 +121,21 @@ export default {
 
     if (path === '/api/v8/evaluations') {
       try {
-        const existingEvaluations = await evaluationRepository.getAll();
+        const [existingEvaluations, watchlist] = await Promise.all([
+          evaluationRepository.getAll(),
+          watchlistRepository.getAll(),
+        ]);
+
+        const watchlistTickerSet = new Set(watchlist.map((w) => w.ticker.toUpperCase()));
+        const finalEvaluations = watchlist.length === 0
+          ? []
+          : existingEvaluations.filter((e) => watchlistTickerSet.has(e.ticker.toUpperCase()));
 
         return jsonResponse({
           success: true,
-          count: existingEvaluations.length,
-          evaluations: existingEvaluations,
+          timestamp: new Date().toISOString(),
+          count: finalEvaluations.length,
+          evaluations: finalEvaluations,
           provider: evaluationService.getProviderName(),
         });
       } catch (err: any) {
@@ -179,6 +188,57 @@ export default {
 
     // Watchlist
     if (path === '/api/v8/watchlist' || path.startsWith('/api/v8/watchlist/')) {
+      // Bulk Delete / Clear / Clear Dummy
+      if (
+        path === '/api/v8/watchlist/clear' ||
+        path === '/api/v8/watchlist/bulk' ||
+        (path === '/api/v8/watchlist' && method === 'DELETE')
+      ) {
+        try {
+          let body: any = {};
+          try { body = await request.json(); } catch {}
+          const mode = url.searchParams.get('mode') || body?.mode;
+          const bodyTickers = Array.isArray(body?.tickers) ? body.tickers : [];
+
+          if (bodyTickers.length > 0) {
+            const removedCount = await watchlistRepository.removeMany(bodyTickers);
+            return jsonResponse({ success: true, count: removedCount, message: `${removedCount}개 종목 삭제 완료` });
+          }
+
+          if (mode === 'dummy') {
+            const INITIAL_DUMMY_TICKERS = new Set([
+              'AAPL', 'AMD', 'AMZN', 'GOOGL', 'HOOD', 'JNJ', 'META', 'MSFT', 'NVDA',
+              'OKLO', 'ORCL', 'PLTR', 'SCHD', 'SMH', 'SPCX', 'TSLA', 'V', 'VOO',
+              'AVGO', 'QCOM', 'TSM', 'NFLX', 'CRWD', 'PANW', 'COST', 'LLY', 'NVO', 'SPY'
+            ]);
+            const currentList = await watchlistRepository.getAll();
+            const dummyTickers = currentList
+              .map((w) => w.ticker.toUpperCase())
+              .filter((t) => INITIAL_DUMMY_TICKERS.has(t) || t.startsWith('DUMMY'));
+
+            const removedCount = await watchlistRepository.removeMany(dummyTickers);
+            return jsonResponse({
+              success: true,
+              count: removedCount,
+              removed_tickers: dummyTickers,
+              message: `더미(샘플) 종목 ${removedCount}개가 정리되었습니다.`,
+            });
+          }
+
+          if (mode === 'all') {
+            await watchlistRepository.removeAll();
+            return jsonResponse({ success: true, message: '워치리스트가 완전히 비워졌습니다.' });
+          }
+
+          return jsonResponse({
+            success: false,
+            error: 'mode=dummy, mode=all, 또는 tickers 배열을 제공해야 합니다.',
+          }, 400);
+        } catch (err: any) {
+          return jsonResponse({ success: false, error: err.message }, 500);
+        }
+      }
+
       if (method === 'POST') {
         try {
           const body: any = await request.json();
@@ -237,10 +297,11 @@ export default {
 
       if (method === 'DELETE') {
         const ticker = path.split('/').pop()?.toUpperCase();
-        if (ticker) {
+        if (ticker && ticker !== 'WATCHLIST') {
           await watchlistRepository.remove(ticker);
+          return jsonResponse({ success: true, message: `${ticker} removed` });
         }
-        return jsonResponse({ success: true, message: `${ticker} removed` });
+        return jsonResponse({ success: false, error: 'Ticker is required' }, 400);
       }
 
       if (method === 'PATCH') {
