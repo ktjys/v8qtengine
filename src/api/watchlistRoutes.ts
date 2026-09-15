@@ -16,19 +16,117 @@ watchlistRouter.get('/', async (req, res) => {
   }
 });
 
-// POST /api/v8/watchlist
+// Ticker format validation: 1 to 6 uppercase letters, optional dot or hyphen followed by 1 to 3 letters (e.g. AAPL, BRK.B, BF-B)
+export const TICKER_REGEX = /^[A-Z]{1,6}([.-][A-Z]{1,3})?$/;
+
+export function parseRawTickers(rawInput: string | string[]): string[] {
+  if (Array.isArray(rawInput)) {
+    return Array.from(new Set(rawInput.map((t) => String(t).trim().toUpperCase()).filter(Boolean)));
+  }
+  if (typeof rawInput !== 'string') return [];
+  // Split by commas, spaces, slashes, tabs, or newlines
+  const tokens = rawInput.split(/[,\s\n\r/]+/);
+  return Array.from(new Set(tokens.map((t) => t.trim().toUpperCase()).filter(Boolean)));
+}
+
+async function validateSingleTickerWithYahoo(ticker: string): Promise<{ valid: boolean; symbol: string; name?: string; reason?: string }> {
+  if (!TICKER_REGEX.test(ticker)) {
+    return { valid: false, symbol: ticker, reason: '티커 기호 형식 오류 (1~6자 영문)' };
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const searchRes = await fetch(
+      `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&quotesCount=3&newsCount=0`,
+      {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      }
+    );
+    clearTimeout(timeoutId);
+    if (searchRes.ok) {
+      const data = (await searchRes.json()) as any;
+      const quotes = data.quotes || [];
+      if (quotes.length === 0) {
+        return { valid: false, symbol: ticker, reason: '시장에 상장되지 않은 종목 코드' };
+      }
+      const exactMatch = quotes.find((q: any) => (q.symbol || '').toUpperCase() === ticker);
+      if (exactMatch) {
+        return { valid: true, symbol: ticker, name: exactMatch.shortname || exactMatch.longname || ticker };
+      }
+      const first = quotes[0];
+      const firstSym = (first.symbol || '').toUpperCase();
+      if (firstSym === ticker) {
+        return { valid: true, symbol: ticker, name: first.shortname || first.longname || ticker };
+      }
+      return {
+        valid: false,
+        symbol: ticker,
+        reason: `정확한 티커와 불일치 (유사 추천: ${firstSym})`,
+      };
+    }
+  } catch (e: any) {
+    console.warn(`[WatchlistRouter] Yahoo validation network fallback for ${ticker}:`, e.message);
+  }
+  return { valid: true, symbol: ticker };
+}
+
+// POST /api/v8/watchlist (Supports single ticker or comma-separated/batch tickers)
 watchlistRouter.post('/', async (req, res) => {
   try {
-    const { ticker, name, memo } = req.body;
-    if (!ticker) {
-      return res.status(400).json({ success: false, error: 'Ticker is required' });
-    }
-    const cleanTicker = ticker.toUpperCase().trim();
+    const rawInput = req.body.tickers || req.body.ticker;
+    const memo = req.body.memo || '';
+    const customName = req.body.name || '';
 
-    // 0. Hard Limit Enforcement (Max 30 items)
+    if (!rawInput) {
+      return res.status(400).json({ success: false, error: '추가할 티커가 입력되지 않았습니다.' });
+    }
+
+    const candidateTickers = parseRawTickers(rawInput);
+    if (candidateTickers.length === 0) {
+      return res.status(400).json({ success: false, error: '유효한 티커가 감지되지 않았습니다.' });
+    }
+
     const existingList = await watchlistRepository.getAll();
-    const isAlreadyInWatchlist = existingList.some((w) => w.ticker === cleanTicker);
-    if (!isAlreadyInWatchlist && existingList.length >= MAX_WATCHLIST_CAPACITY) {
+    const existingTickerSet = new Set(existingList.map((w) => w.ticker.toUpperCase()));
+
+    const alreadyExists: string[] = [];
+    const rejected: Array<{ ticker: string; reason: string }> = [];
+    const validCandidates: Array<{ ticker: string; name: string }> = [];
+
+    for (const ticker of candidateTickers) {
+      if (existingTickerSet.has(ticker)) {
+        alreadyExists.push(ticker);
+        continue;
+      }
+
+      const validation = await validateSingleTickerWithYahoo(ticker);
+      if (!validation.valid) {
+        rejected.push({ ticker, reason: validation.reason || '유효하지 않은 티커' });
+      } else {
+        validCandidates.push({
+          ticker,
+          name: candidateTickers.length === 1 && customName ? customName : (validation.name || ticker),
+        });
+      }
+    }
+
+    if (validCandidates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: rejected.length > 0 
+          ? `입력하신 종목(${rejected.map(r => `${r.ticker}: ${r.reason}`).join(', ')})은 유효하지 않아 제외되었습니다.`
+          : '입력하신 모든 종목이 이미 워치리스트에 등록되어 있습니다.',
+        already_exists: alreadyExists,
+        rejected,
+      });
+    }
+
+    // Capacity Check
+    const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - existingList.length);
+    if (remainingSlots <= 0) {
       return res.status(400).json({
         success: false,
         error: WATCHLIST_CAPACITY_ERROR_MESSAGE,
@@ -37,54 +135,56 @@ watchlistRouter.post('/', async (req, res) => {
       });
     }
 
-    // 1. Ticker Validation with Yahoo Finance Search API
-    try {
-      const searchRes = await fetch(
-        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanTicker)}&quotesCount=1&newsCount=0`,
-        {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          }
+    const toAdd = validCandidates.slice(0, remainingSlots);
+    const capacityOverflow = validCandidates.slice(remainingSlots);
+    for (const overflowItem of capacityOverflow) {
+      rejected.push({ ticker: overflowItem.ticker, reason: '워치리스트 슬롯 한도(최대 30개) 초과' });
+    }
+
+    const addedItems: any[] = [];
+    const newEvaluations: any[] = [];
+
+    for (const item of toAdd) {
+      const added = await watchlistRepository.add({
+        ticker: item.ticker,
+        name: item.name,
+        memo: memo || '사용자 추가 감시 종목',
+        is_active: true,
+      });
+      addedItems.push(added);
+
+      try {
+        const evalResult = await evaluationService.evaluateTicker(item.ticker);
+        if (evalResult) {
+          newEvaluations.push(evalResult);
         }
-      );
-      if (searchRes.ok) {
-        const data = await searchRes.json();
-        const quotes = data.quotes || [];
-        
-        if (quotes.length === 0) {
-          return res.status(400).json({ success: false, error: `'${cleanTicker}'은(는) 존재하지 않는 종목 코드입니다.` });
-        }
-        
-        const topMatch = quotes[0];
-        const foundSymbol = topMatch.symbol.toUpperCase();
-        
-        if (foundSymbol !== cleanTicker) {
-          const assetName = topMatch.shortname || topMatch.longname || '해당 기업/자산';
-          return res.status(400).json({ 
-            success: false, 
-            error: `잘못된 종목 코드입니다. 혹시 [${assetName}]의 올바른 티커인 '${foundSymbol}'을(를) 찾으시나요?` 
-          });
-        }
+      } catch (evalErr) {
+        console.warn(`[WatchlistRouter] Could not evaluate added ticker ${item.ticker}:`, (evalErr as Error).message);
       }
-    } catch (searchErr) {
-      console.warn('[WatchlistRouter] Ticker validation request failed, proceeding anyway:', searchErr);
     }
 
-    // 새 종목은 항상 is_active: true로 생성
-    const item = await watchlistRepository.add({ ticker: cleanTicker, name, memo, is_active: true });
-
-    // Evaluate the new item and save to DB
-    try {
-      const evalResult = await evaluationService.evaluateTicker(cleanTicker);
-      const allEvals = await evaluationRepository.getAll();
-      const filtered = allEvals.filter((e) => e.ticker !== cleanTicker);
-      filtered.push(evalResult);
-      await evaluationRepository.saveAll(filtered);
-    } catch (evalErr) {
-      console.warn(`[WatchlistRouter] Could not evaluate added ticker ${cleanTicker}:`, (evalErr as Error).message);
+    // Save evaluations
+    if (newEvaluations.length > 0) {
+      try {
+        const allEvals = await evaluationRepository.getAll();
+        const newTickerSet = new Set(newEvaluations.map((e) => e.ticker));
+        const keptEvals = allEvals.filter((e) => !newTickerSet.has(e.ticker));
+        await evaluationRepository.saveAll([...keptEvals, ...newEvaluations]);
+      } catch (saveErr) {
+        console.warn('[WatchlistRouter] Failed to save batch evaluations:', saveErr);
+      }
     }
 
-    res.json({ success: true, item });
+    res.json({
+      success: true,
+      count: addedItems.length,
+      added_tickers: addedItems.map((i) => i.ticker),
+      item: addedItems[0],
+      items: addedItems,
+      already_exists: alreadyExists,
+      rejected,
+      message: `${addedItems.length}개 종목 추가 완료${rejected.length > 0 ? ` (제외 ${rejected.length}개)` : ''}`,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message });
   }

@@ -256,16 +256,8 @@ export default function App() {
     }
   };
 
-  const handleAddTicker = async (ticker: string, name: string, memo: string) => {
-    const cleanTicker = ticker.toUpperCase().trim();
-    if (!cleanTicker) return;
-
-    // Hard limit enforcement: max 30 items
-    const isAlreadyIn = watchlist.some((w) => w.ticker === cleanTicker);
-    if (!isAlreadyIn && watchlist.length >= MAX_WATCHLIST_CAPACITY) {
-      showToast(WATCHLIST_CAPACITY_ERROR_MESSAGE);
-      return;
-    }
+  const handleAddTicker = async (tickerInput: string, name: string, memo: string) => {
+    if (!tickerInput || !tickerInput.trim()) return;
 
     try {
       if (typeof window !== 'undefined') {
@@ -275,7 +267,7 @@ export default function App() {
       const res = await fetch('/api/v8/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker: cleanTicker, name, memo, is_active: true }),
+        body: JSON.stringify({ ticker: tickerInput.trim(), name, memo, is_active: true }),
       });
 
       const data = await res.json();
@@ -284,7 +276,19 @@ export default function App() {
         return;
       }
 
-      showToast(`${cleanTicker} 종목이 워치리스트에 추가되고 즉시 퀀트 평가가 완료되었습니다.`);
+      const addedList = data.added_tickers || (data.item ? [data.item.ticker] : []);
+      const rejectedList = data.rejected || [];
+      const alreadyList = data.already_exists || [];
+
+      let msg = `${addedList.join(', ')} (${addedList.length}개) 추가 및 평가 완료`;
+      if (rejectedList.length > 0) {
+        msg += ` | 제외: ${rejectedList.map((r: any) => `${r.ticker}(${r.reason})`).join(', ')}`;
+      }
+      if (alreadyList.length > 0) {
+        msg += ` | 이미 존재: ${alreadyList.join(', ')}`;
+      }
+
+      showToast(msg);
       await loadAllData();
     } catch (err: any) {
       console.error('Failed to add ticker', err);

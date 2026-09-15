@@ -310,9 +310,151 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
         </div>
       </div>
 
-      {/* Main Table */}
+      {/* Main Table & Mobile Cards */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View (Optimized for small screens) */}
+        <div className="block md:hidden divide-y divide-slate-800/60 font-sans">
+          {sorted.map((item, idx) => {
+            const dip = item.dip;
+            const arrow = (item.change1d ?? 0) >= 0 ? '▲' : '▼';
+            const changeColor =
+              (item.change1d ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400';
+
+            return (
+              <div
+                key={item.ticker}
+                onClick={() => onSelectTicker(item.ticker, 'dip_buy')}
+                className="p-4 space-y-3 hover:bg-slate-800/40 transition-colors cursor-pointer active:bg-slate-800/60"
+              >
+                {/* Top row: Rank, Ticker, Tier, Name & Price */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <span className="text-[11px] font-mono font-bold text-emerald-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 min-w-[26px] text-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-bold font-mono text-slate-100 text-sm">
+                          {item.ticker}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                            dip.suitability.tier === 'S'
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                              : dip.suitability.tier === 'A'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : dip.suitability.tier === 'B'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                          }`}
+                        >
+                          {dip.suitability.tier}등급
+                        </span>
+                        {item.classification.asset_type === 'etf' && (
+                          <span className="text-[9px] bg-slate-800 text-slate-400 px-1 rounded">
+                            ETF
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 truncate max-w-[180px]">
+                        {item.name}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div className="font-bold font-mono text-slate-100 text-sm">
+                      {formatStockPrice(item.price)}
+                    </div>
+                    <div className={`text-xs font-semibold font-mono flex items-center justify-end space-x-0.5 ${changeColor}`}>
+                      <span>{arrow}</span>
+                      <span>{formatChangePercent(item.change1d)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Signal Badge & Suggested DCA Ratio */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border whitespace-nowrap ${
+                      dip.actionSignal === 'STRONG_DIP_BUY'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : dip.actionSignal === 'MODERATE_DCA'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : dip.actionSignal === 'OVERBOUGHT_WAIT'
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                        : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    }`}
+                  >
+                    {dip.signalLabel}
+                  </span>
+                  <span className="text-xs text-slate-300 font-medium">
+                    {dip.suggestedDcaRatio}
+                  </span>
+                </div>
+
+                {/* Scores & Timing Card */}
+                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">우량 체급 적합도 ({dip.suitability.score}점)</span>
+                    <span className="text-emerald-400 font-mono font-bold text-sm">
+                      눌림목 {dip.dip_score}점
+                    </span>
+                  </div>
+                  {/* Dip Score Bar */}
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        dip.dip_score >= 75
+                          ? 'bg-emerald-400'
+                          : dip.dip_score >= 55
+                          ? 'bg-amber-400'
+                          : 'bg-slate-500'
+                      }`}
+                      style={{ width: `${dip.dip_score}%` }}
+                    />
+                  </div>
+                  {/* Breakdown & RSI */}
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-0.5">
+                    <span>RSI {dip.timing.rsi.toFixed(1)}</span>
+                    <span className="text-rose-400">{dip.timing.drawdownLabel}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div
+                  className="flex items-center justify-end space-x-2 pt-1 border-t border-slate-800/50"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={(e) => handleCopyTelegram(item, e)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold flex items-center space-x-1"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{copiedTicker === item.ticker ? '복사완료!' : '알림복사'}</span>
+                  </button>
+                  <button
+                    onClick={() => onSelectTicker(item.ticker, 'dip_buy')}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center space-x-1"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    <span>진단</span>
+                  </button>
+                  <button
+                    onClick={() => onDeleteTicker(item.ticker)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-600/80 text-rose-400 hover:text-white text-xs font-semibold flex items-center space-x-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>삭제</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop Table View (Hidden on mobile) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400 font-sans select-none">

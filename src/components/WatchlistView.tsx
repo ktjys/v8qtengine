@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -222,17 +222,56 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - currentCount);
   const capacityPercent = Math.min(100, Math.round((currentCount / MAX_WATCHLIST_CAPACITY) * 100));
 
+  // Real-time multi-ticker input parser & validator
+  const parsedTickers = useMemo(() => {
+    if (!newTicker.trim()) {
+      return { valid: [], invalid: [], alreadyExists: [] };
+    }
+    const TICKER_REGEX = /^[A-Z]{1,6}([.-][A-Z]{1,3})?$/;
+    const tokens: string[] = newTicker
+      .split(/[,\s\n\r/]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    const unique: string[] = Array.from(new Set<string>(tokens));
+
+    const existingSet = new Set((evaluations || []).map((e) => e.ticker.toUpperCase()));
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    const alreadyExists: string[] = [];
+
+    for (const token of unique) {
+      if (!TICKER_REGEX.test(token)) {
+        invalid.push(token);
+      } else if (existingSet.has(token)) {
+        alreadyExists.push(token);
+      } else {
+        valid.push(token);
+      }
+    }
+
+    return { valid, invalid, alreadyExists };
+  }, [newTicker, evaluations]);
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTicker.trim()) return;
-    const clean = newTicker.toUpperCase().trim();
-    const alreadyExists = (evaluations || []).some((ev) => ev.ticker === clean);
-    if (!alreadyExists && isCapacityReached) {
+
+    if (parsedTickers.valid.length === 0) {
+      if (parsedTickers.alreadyExists.length > 0) {
+        alert('입력하신 종목이 이미 워치리스트에 모두 등록되어 있습니다.');
+      } else if (parsedTickers.invalid.length > 0) {
+        alert(`유효하지 않은 티커 형식입니다: ${parsedTickers.invalid.join(', ')}\n(예: AAPL, NVDA, TSLA와 같은 영문 티커 심볼을 콤마로 구분하여 입력해주세요)`);
+      }
+      return;
+    }
+
+    if (remainingSlots <= 0) {
       alert(WATCHLIST_CAPACITY_ERROR_MESSAGE);
       return;
     }
 
-    onAddTicker(clean, newName.trim(), newMemo.trim());
+    // Call onAddTicker with the comma-separated list of valid tickers
+    onAddTicker(parsedTickers.valid.join(','), newName.trim(), newMemo.trim());
     setNewTicker('');
     setNewName('');
     setNewMemo('');
@@ -288,11 +327,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       />
 
       {/* 1. Header with Controls */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h2 className="text-lg font-bold text-slate-100">
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="w-full lg:w-auto">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-slate-100">
                 워치리스트 전종목 평가 매트릭스
               </h2>
               {/* Watchlist Slot Badge */}
@@ -312,23 +351,23 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <span className="text-slate-400">{MAX_WATCHLIST_CAPACITY}개</span>
                 <span className="border-l border-slate-700 pl-1.5 ml-0.5 text-[11px] font-sans">
                   {isCapacityReached ? (
-                    <span className="text-rose-400 font-semibold">슬롯 가득 참</span>
+                    <span className="text-rose-400 font-semibold">가득 참</span>
                   ) : (
-                    <span className="text-emerald-400 font-medium">{remainingSlots}개 추가 가능</span>
+                    <span className="text-emerald-400 font-medium">+{remainingSlots}개 가능</span>
                   )}
                 </span>
               </div>
             </div>
             <p className="text-xs text-slate-400 mt-1">
               관심종목에 등록된 전종목에 대해 4대 팩터(기술/모멘텀/펀더멘털/밸류)와 독립 리스크를 실시간 산출합니다.
-              <span className="text-slate-500 ml-1">
-                (최대 {MAX_WATCHLIST_CAPACITY}개 슬롯 한도 · 잔여 {remainingSlots}개)
+              <span className="text-slate-500 ml-1 hidden sm:inline">
+                (최대 {MAX_WATCHLIST_CAPACITY}개 슬롯 · 잔여 {remainingSlots}개)
               </span>
             </p>
           </div>
 
-          <div className="flex items-center space-x-2 w-full md:w-auto">
-            <div className="relative flex-1 md:w-64">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+            <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -339,63 +378,67 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               />
             </div>
 
-            {onRestoreDefaultSeed && (
-              <button
-                onClick={() => {
-                  if (confirm('기본 대표 종목(AAPL, NVDA, TSLA, MSFT, VOO 등 18개)을 워치리스트에 복원하시겠습니까?\n(현재 등록된 종목은 그대로 유지되며 기본 종목들이 함께 채워집니다)')) {
-                    onRestoreDefaultSeed();
-                  }
-                }}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
-                title="초기 기본 18개 대표 우량주 및 지수 ETF 유니버스를 복원합니다."
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-                <span>기본 종목 복원</span>
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {onRestoreDefaultSeed && (
+                <button
+                  onClick={() => {
+                    if (confirm('기본 대표 종목(AAPL, NVDA, TSLA, MSFT, VOO 등 18개)을 워치리스트에 복원하시겠습니까?\n(현재 등록된 종목은 그대로 유지되며 기본 종목들이 함께 채워집니다)')) {
+                      onRestoreDefaultSeed();
+                    }
+                  }}
+                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                  title="초기 기본 18개 대표 우량주 및 지수 ETF 유니버스를 복원합니다."
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">기본 종목 복원</span>
+                  <span className="sm:hidden">기본 복원</span>
+                </button>
+              )}
 
-            {onRecalculate && (
-              <button
-                onClick={onRecalculate}
-                disabled={isRecalculating}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap disabled:opacity-50"
-                title="Yahoo Finance 실시간 시세 및 4대 팩터 점수를 다시 계산합니다."
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRecalculating ? 'animate-spin' : ''}`} />
-                <span>{isRecalculating ? '시세 갱신 중...' : '시세/평가 새로고침'}</span>
-              </button>
-            )}
+              {onRecalculate && (
+                <button
+                  onClick={onRecalculate}
+                  disabled={isRecalculating}
+                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap disabled:opacity-50"
+                  title="Yahoo Finance 실시간 시세 및 4대 팩터 점수를 다시 계산합니다."
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRecalculating ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{isRecalculating ? '시세 갱신 중...' : '시세/평가 새로고침'}</span>
+                  <span className="sm:hidden">{isRecalculating ? '갱신 중...' : '새로고침'}</span>
+                </button>
+              )}
 
-            <button
-              id="watchlist-add-ticker-btn"
-              onClick={() => setShowAddModal(true)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-md transition-all active:scale-95 whitespace-nowrap ${
-                isCapacityReached
-                  ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-750'
-                  : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/30'
-              }`}
-              title={
-                isCapacityReached
-                  ? `워치리스트 등록 한도(${MAX_WATCHLIST_CAPACITY}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
-                  : `워치리스트에 새 종목 추가 (현재 ${currentCount}/${MAX_WATCHLIST_CAPACITY}개 슬롯 사용 중, ${remainingSlots}개 추가 가능)`
-              }
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>종목 추가</span>
-              <span className="text-[10px] opacity-90 font-mono px-1.5 py-0.5 rounded bg-black/25">
-                {isCapacityReached ? '가득 참' : `${remainingSlots}자리 남음`}
-              </span>
-            </button>
+              <button
+                id="watchlist-add-ticker-btn"
+                onClick={() => setShowAddModal(true)}
+                className={`flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-md transition-all active:scale-95 whitespace-nowrap ${
+                  isCapacityReached
+                    ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-750'
+                    : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/30'
+                }`}
+                title={
+                  isCapacityReached
+                    ? `워치리스트 등록 한도(${MAX_WATCHLIST_CAPACITY}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
+                    : `워치리스트에 새 종목 추가 (현재 ${currentCount}/${MAX_WATCHLIST_CAPACITY}개 슬롯 사용 중, ${remainingSlots}개 추가 가능)`
+                }
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>종목 추가</span>
+                <span className="text-[10px] opacity-90 font-mono px-1.5 py-0.5 rounded bg-black/25">
+                  {isCapacityReached ? '가득 참' : `${remainingSlots}자리`}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Dual Strategy Mode Switcher */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
-          <div className="flex items-center p-1 bg-slate-950/80 rounded-xl border border-slate-800 w-fit">
+          <div className="grid grid-cols-1 sm:grid-cols-2 p-1 bg-slate-950/80 rounded-xl border border-slate-800 w-full sm:w-fit gap-1">
             <button
               id="strategy-tab-momentum"
               onClick={() => setStrategyMode('MOMENTUM')}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center justify-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 strategyMode === 'MOMENTUM'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -407,14 +450,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <button
               id="strategy-tab-dipbuy"
               onClick={() => setStrategyMode('DCA_DIP')}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center justify-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 strategyMode === 'DCA_DIP'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>전략 B: 우량대형주 적립 & 눌림목 추매 (DCA)</span>
+              <span>전략 B: 우량대형주 적립 & 눌림목 (DCA)</span>
             </button>
           </div>
 
@@ -542,7 +585,152 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         />
       ) : (
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View (Optimized for small screens) */}
+          <div className="block md:hidden divide-y divide-slate-800/60 font-sans">
+            {sorted.map((item, idx) => {
+              const sub = item.opportunity.sub_scores;
+              const isSignal = item.signal_generated;
+
+              return (
+                <div
+                  key={item.ticker}
+                  onClick={() => onSelectTicker(item.ticker)}
+                  className="p-4 space-y-3 hover:bg-slate-800/40 transition-colors cursor-pointer active:bg-slate-800/60"
+                >
+                  {/* Top row: Rank, Ticker, Name & Price */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <span className="text-[11px] font-mono font-bold text-cyan-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 min-w-[26px] text-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-bold text-slate-100 text-sm font-mono">
+                            {item.ticker}
+                          </span>
+                          <span className="uppercase text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-medium">
+                            {item.classification?.asset_type || 'EQUITY'}
+                          </span>
+                          {item.classification.classification_source === 'manual' && (
+                            <span className="px-1 py-0.2 text-[8px] rounded bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                              MANUAL
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-400 truncate max-w-[180px]">
+                          {item.name}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="font-bold font-mono text-slate-100 text-sm">
+                        {formatStockPrice(item.price, item.ticker)}
+                      </div>
+                      <div
+                        className={`text-xs font-semibold font-mono ${
+                          item.change1d >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {formatChangePercent(item.change1d)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Badges row: Decision, Signal, Risk */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {getDecisionBadge(item.decision.decision)}
+                    {isSignal && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                        신호 활성
+                      </span>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                        item.risk.risk_level === 'LOW'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : item.risk.risk_level === 'MEDIUM'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}
+                    >
+                      리스크 {item.risk.risk_level} ({item.risk.risk_score}pt)
+                    </span>
+                  </div>
+
+                  {/* Opportunity Score & Factor Bars */}
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">기회 점수 (Opportunity)</span>
+                      <div className="font-mono">
+                        <span className="text-sm font-bold text-cyan-400">
+                          {item.opportunity.opportunity_score}
+                        </span>
+                        <span className="text-[10px] text-slate-500"> / 100</span>
+                      </div>
+                    </div>
+                    {/* Score Bar */}
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-cyan-500 h-full rounded-full transition-all"
+                        style={{ width: `${item.opportunity.opportunity_score}%` }}
+                      />
+                    </div>
+                    {/* 4 factors */}
+                    <div className="grid grid-cols-4 gap-1 pt-1 text-[10px] text-slate-400 font-mono">
+                      <div className="text-center bg-slate-900/80 py-0.5 rounded">
+                        <span className="text-slate-500 block text-[8px]">기술</span>
+                        <span className="text-blue-300 font-bold">{sub.technical_score}</span>
+                      </div>
+                      <div className="text-center bg-slate-900/80 py-0.5 rounded">
+                        <span className="text-slate-500 block text-[8px]">모멘텀</span>
+                        <span className="text-cyan-300 font-bold">{sub.momentum_score}</span>
+                      </div>
+                      <div className="text-center bg-slate-900/80 py-0.5 rounded">
+                        <span className="text-slate-500 block text-[8px]">펀더</span>
+                        <span className="text-emerald-300 font-bold">{sub.fundamental_score ?? '-'}</span>
+                      </div>
+                      <div className="text-center bg-slate-900/80 py-0.5 rounded">
+                        <span className="text-slate-500 block text-[8px]">밸류</span>
+                        <span className="text-amber-300 font-bold">{sub.valuation_score ?? '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Row */}
+                  <div
+                    className="flex items-center justify-end space-x-2 pt-1 border-t border-slate-800/50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => onSelectTicker(item.ticker, 'chart')}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600/30 text-cyan-400 text-xs font-semibold flex items-center space-x-1"
+                    >
+                      <LineChart className="w-3.5 h-3.5" />
+                      <span>차트</span>
+                    </button>
+                    <button
+                      onClick={() => onPreviewTelegram(item.ticker)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white text-xs font-semibold flex items-center space-x-1"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>텔레그램</span>
+                    </button>
+                    <button
+                      onClick={() => onDeleteTicker(item.ticker)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-600/80 text-rose-400 hover:text-white text-xs font-semibold flex items-center space-x-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>삭제</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View (Hidden on mobile) */}
+          <div className="hidden md:block overflow-x-auto w-full">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400">
@@ -834,8 +1022,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
       {/* Add Ticker Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-base font-bold text-slate-100 flex items-center space-x-2">
                 <Plus className="w-4 h-4 text-cyan-400" />
@@ -862,6 +1050,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </div>
             </div>
 
+            {/* Capacity Status */}
             {isCapacityReached ? (
               <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-start space-x-2.5 text-rose-300 text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
@@ -890,43 +1079,129 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
             <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  티커 심볼 (Ticker) *
-                </label>
-                <input
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-300 font-semibold">
+                    티커 심볼 (Ticker) *
+                  </label>
+                  <span className="text-[11px] text-cyan-400 font-medium">
+                    콤마(,)로 여러 개 동시 입력 가능
+                  </span>
+                </div>
+                <textarea
                   id="watchlist-new-ticker-input"
-                  type="text"
-                  placeholder="예: META, CRM, IVV, SOXX"
+                  placeholder="예: AAPL, MSFT, NVDA, TSLA, VOO (쉼표로 구분하여 여러 종목을 한 번에 입력)"
                   value={newTicker}
                   onChange={(e) => setNewTicker(e.target.value)}
                   disabled={isCapacityReached}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-mono uppercase focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  rows={2}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-mono uppercase focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
                   required
                 />
+
+                {/* Real-time Ticker Parsing Preview */}
+                {newTicker.trim() && (
+                  <div className="mt-2 p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                    {/* Valid parsed tickers */}
+                    {parsedTickers.valid.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            <span>추가 예정 유효 종목 ({parsedTickers.valid.length}개):</span>
+                          </span>
+                          {parsedTickers.valid.length > remainingSlots && (
+                            <span className="text-rose-400 font-semibold">
+                              슬롯 초과! 상위 {remainingSlots}개만 추가됨
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {parsedTickers.valid.map((t, i) => (
+                            <span
+                              key={t}
+                              className={`px-2 py-0.5 rounded font-mono font-bold text-xs border ${
+                                i < remainingSlots
+                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                  : 'bg-rose-500/15 text-rose-300 border-rose-500/30 line-through opacity-75'
+                              }`}
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Invalid / excluded tickers */}
+                    {parsedTickers.invalid.length > 0 && (
+                      <div className="space-y-1 pt-1 border-t border-slate-800/80">
+                        <div className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>형식 오류로 제외되는 항목 ({parsedTickers.invalid.length}개):</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {parsedTickers.invalid.map((t) => (
+                            <span
+                              key={t}
+                              className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 font-mono text-xs line-through"
+                              title="1~6자의 올바른 영문 티커 심볼이 아닙니다."
+                            >
+                              {t} (제외)
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          * 특수문자나 한글, 긴 단어는 배제되며 올바른 티커만 등록됩니다.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Already in watchlist */}
+                    {parsedTickers.alreadyExists.length > 0 && (
+                      <div className="space-y-1 pt-1 border-t border-slate-800/80">
+                        <div className="text-[11px] text-slate-400 font-medium">
+                          이미 등록되어 있는 종목 ({parsedTickers.alreadyExists.length}개):
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {parsedTickers.alreadyExists.map((t) => (
+                            <span
+                              key={t}
+                              className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-xs"
+                            >
+                              {t} (기등록)
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">종목명 (선택)</label>
-                <input
-                  id="watchlist-new-name-input"
-                  type="text"
-                  placeholder="예: Meta Platforms, Inc."
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  disabled={isCapacityReached}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-              </div>
+              {parsedTickers.valid.length <= 1 && (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">종목명 (단일 등록 시 선택)</label>
+                  <input
+                    id="watchlist-new-name-input"
+                    type="text"
+                    placeholder="예: Meta Platforms, Inc. (비워두면 자동 조회)"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    disabled={isCapacityReached}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+              )}
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">관찰 메모</label>
+                <label className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
                 <textarea
                   id="watchlist-new-memo-input"
                   placeholder="관찰 목적 및 전략 메모..."
                   value={newMemo}
                   onChange={(e) => setNewMemo(e.target.value)}
                   disabled={isCapacityReached}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-20 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-16 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -941,10 +1216,16 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <button
                   id="watchlist-submit-ticker-btn"
                   type="submit"
-                  disabled={isCapacityReached}
-                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                  disabled={isCapacityReached || (newTicker.trim().length > 0 && parsedTickers.valid.length === 0)}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center space-x-1.5"
                 >
-                  {isCapacityReached ? '한도 초과 (추가 불가)' : '워치리스트 추가 및 즉시 평가'}
+                  {isCapacityReached ? (
+                    '한도 초과 (추가 불가)'
+                  ) : parsedTickers.valid.length > 1 ? (
+                    <span>유효 종목 {parsedTickers.valid.length}개 일괄 등록 및 평가</span>
+                  ) : (
+                    <span>워치리스트 추가 및 즉시 평가</span>
+                  )}
                 </button>
               </div>
             </form>
