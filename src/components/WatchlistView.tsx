@@ -12,6 +12,7 @@ import {
   Plus,
   Radio,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   Shield,
@@ -68,6 +69,9 @@ interface WatchlistViewProps {
   isRecalculating?: boolean;
   currentConfig?: StrategyOptimizationConfig;
   onApplyConfig?: (config: StrategyOptimizationConfig) => void;
+  onClearDummyTickers?: () => void;
+  onClearAllWatchlist?: () => void;
+  onRestoreDefaultSeed?: () => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
@@ -82,6 +86,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   isRecalculating = false,
   currentConfig = DEFAULT_STRATEGY_CONFIG,
   onApplyConfig,
+  onClearDummyTickers,
+  onClearAllWatchlist,
+  onRestoreDefaultSeed,
 }) => {
   const [strategyMode, setStrategyMode] = useState<ActiveStrategyMode>(initialStrategyMode);
   const [isOptimizerModalOpen, setIsOptimizerModalOpen] = useState(false);
@@ -331,6 +338,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950/70 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
             </div>
+
+            {onRestoreDefaultSeed && (
+              <button
+                onClick={() => {
+                  if (confirm('기본 대표 종목(AAPL, NVDA, TSLA, MSFT, VOO 등 18개)을 워치리스트에 복원하시겠습니까?\n(현재 등록된 종목은 그대로 유지되며 기본 종목들이 함께 채워집니다)')) {
+                    onRestoreDefaultSeed();
+                  }
+                }}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                title="초기 기본 18개 대표 우량주 및 지수 ETF 유니버스를 복원합니다."
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>기본 종목 복원</span>
+              </button>
+            )}
 
             {onRecalculate && (
               <button

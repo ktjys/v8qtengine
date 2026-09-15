@@ -380,6 +380,26 @@ export default function App() {
     }
   };
 
+  const handleRestoreDefaultSeed = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await fetch('/api/v8/system/db/seed', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || '기본 종목 복원에 실패했습니다.');
+      }
+      showToast(data.message || '기본 대표 종목(18개)이 성공적으로 복원되었습니다.');
+      await loadAllData();
+    } catch (err: any) {
+      console.error('Failed to restore default seed', err);
+      showToast(`기본 종목 복원 실패: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleToggleActive = async (ticker: string, is_active: boolean) => {
     try {
       await fetch(`/api/v8/watchlist/${ticker}`, {
@@ -458,6 +478,7 @@ export default function App() {
             isRecalculating={isRecalculating}
             onClearDummyTickers={handleClearDummyTickers}
             onClearAllWatchlist={handleClearAllWatchlist}
+            onRestoreDefaultSeed={handleRestoreDefaultSeed}
           />
         )}
 
