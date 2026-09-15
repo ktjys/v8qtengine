@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, RefreshCw } from 'lucide-react';
+import { Trash2, RefreshCw, Database } from 'lucide-react';
 import {
   ActiveStrategyMode,
   BacktestSummary,
@@ -22,17 +22,12 @@ import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
-import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runPipelineOnSeedData } from './data/seed/initialData';
-import { calculateBacktestMetrics } from './engine/backtestEngine';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './constants/limits';
 import {
   DEFAULT_STRATEGY_CONFIG,
   recalculateEvaluationsWithConfig,
   StrategyOptimizationConfig,
 } from './engine/strategyOptimizerEngine';
-
-const initialSeed = runPipelineOnSeedData();
-const initialSummary = calculateBacktestMetrics(INITIAL_HISTORICAL_SIGNALS);
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide'>('dashboard');
@@ -44,24 +39,13 @@ export default function App() {
     return DEFAULT_STRATEGY_CONFIG;
   });
 
-  const [signals, setSignals] = useState<SignalSnapshot[]>(INITIAL_HISTORICAL_SIGNALS);
-  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(initialSummary);
-  const [runs, setRuns] = useState<ScanRunLog[]>(INITIAL_SCAN_RUNS);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialSeed.watchlist);
+  const [signals, setSignals] = useState<SignalSnapshot[]>([]);
+  const [backtestSummary, setBacktestSummary] = useState<BacktestSummary | null>(null);
+  const [runs, setRuns] = useState<ScanRunLog[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [watchlistStrategyMode, setWatchlistStrategyMode] = useState<ActiveStrategyMode>('MOMENTUM');
-
-  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>(() => {
-    try {
-      const savedConfig = localStorage.getItem('quant_strategy_config_v8');
-      if (savedConfig) {
-        const parsed = JSON.parse(savedConfig);
-        if (parsed?.id && parsed.id !== DEFAULT_STRATEGY_CONFIG.id) {
-          return recalculateEvaluationsWithConfig(initialSeed.evaluations, parsed);
-        }
-      }
-    } catch (e) {}
-    return initialSeed.evaluations;
-  });
+  const [evaluations, setEvaluations] = useState<FullTickerEvaluation[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   // Modals
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -135,6 +119,8 @@ export default function App() {
   };
 
   const safeFetchJson = async (url: string) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
     try {
       // Add cache buster and no-store to prevent aggressive browser caching of API results
       const separator = url.includes('?') ? '&' : '?';
@@ -146,7 +132,9 @@ export default function App() {
           'Pragma': 'no-cache',
         },
         cache: 'no-store',
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         return null;
       }
@@ -161,6 +149,7 @@ export default function App() {
         return null;
       }
     } catch (e) {
+      clearTimeout(timeoutId);
       console.warn(`Fetch error for ${url}:`, e);
       return null;
     }
@@ -182,6 +171,8 @@ export default function App() {
         try {
           localStorage.setItem('quant_watchlist_cache_v8', JSON.stringify(currentWl.watchlist));
         } catch {}
+      } else {
+        setWatchlist([]);
       }
 
       if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations)) {
@@ -192,9 +183,11 @@ export default function App() {
         try {
           localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(evalsToSet));
         } catch {}
+      } else {
+        setEvaluations([]);
       }
 
-      if (latestSignals?.success && Array.isArray(latestSignals.signals) && latestSignals.signals.length > 0) {
+      if (latestSignals?.success && Array.isArray(latestSignals.signals)) {
         const sigMap = new Map<string, SignalSnapshot>();
         for (const s of latestSignals.signals) {
           const key = `${s.ticker}_${s.signal_date}`;
@@ -206,7 +199,7 @@ export default function App() {
         setSignals(dedupedSignals);
       }
 
-      if (currentRuns?.success && Array.isArray(currentRuns.runs) && currentRuns.runs.length > 0) {
+      if (currentRuns?.success && Array.isArray(currentRuns.runs)) {
         setRuns(currentRuns.runs);
       }
 
@@ -215,6 +208,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to load initial data', err);
+    } finally {
+      setIsInitialLoading(false);
     }
   };
 
@@ -440,31 +435,55 @@ export default function App() {
         onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         totalCount={evaluations.length}
         signalsCount={signals.length}
+        isInitialLoading={isInitialLoading}
       />
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'dashboard' && (
-          <DashboardView
-            evaluations={evaluations}
-            recentSignals={signals}
-            backtestSummary={backtestSummary}
-            currentConfig={strategyConfig}
-            onApplyConfig={handleApplyStrategyConfig}
-            onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
-            onPreviewTelegram={(t) => handleOpenSymbolDetail(t, 'overview')}
-            onNavigateToWatchlist={(mode) => {
-              if (mode) setWatchlistStrategyMode(mode);
-              setActiveTab('watchlist');
-            }}
-            onNavigateToMacro={() => setActiveTab('macro')}
-            onNavigateToPortfolio={() => setActiveTab('portfolio')}
-            onNavigateToPaper={() => setActiveTab('paper')}
-            onNavigateToGuide={() => setActiveTab('guide')}
-            onRecalculate={handleRecalculateEvaluations}
-            isRecalculating={isRecalculating}
-          />
-        )}
+        {isInitialLoading ? (
+          <div className="flex flex-col items-center justify-center min-h-[460px] py-20 px-4 animate-fadeIn">
+            <div className="relative flex items-center justify-center mb-6">
+              <div className="absolute w-20 h-20 rounded-3xl bg-cyan-500/10 animate-ping opacity-60" />
+              <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/10 relative z-10">
+                <RefreshCw className="w-7 h-7 text-cyan-400 animate-spin" />
+              </div>
+            </div>
+            <div className="text-center max-w-sm space-y-2 font-sans">
+              <h3 className="text-base sm:text-lg font-bold text-slate-100 flex items-center justify-center gap-2">
+                <Database className="w-4 h-4 text-cyan-400" />
+                데이터베이스 조회 중...
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+                Supabase DB에서 등록된 워치리스트와 최신 퀀트 시그널 데이터를 안전하게 불러오고 있습니다.
+              </p>
+              <div className="w-40 h-1.5 bg-slate-800 rounded-full overflow-hidden mx-auto mt-4">
+                <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full animate-pulse w-3/4" />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                evaluations={evaluations}
+                recentSignals={signals}
+                backtestSummary={backtestSummary}
+                currentConfig={strategyConfig}
+                onApplyConfig={handleApplyStrategyConfig}
+                onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
+                onPreviewTelegram={(t) => handleOpenSymbolDetail(t, 'overview')}
+                onNavigateToWatchlist={(mode) => {
+                  if (mode) setWatchlistStrategyMode(mode);
+                  setActiveTab('watchlist');
+                }}
+                onNavigateToMacro={() => setActiveTab('macro')}
+                onNavigateToPortfolio={() => setActiveTab('portfolio')}
+                onNavigateToPaper={() => setActiveTab('paper')}
+                onNavigateToGuide={() => setActiveTab('guide')}
+                onRecalculate={handleRecalculateEvaluations}
+                isRecalculating={isRecalculating}
+              />
+            )}
 
         {activeTab === 'watchlist' && (
           <WatchlistView
@@ -544,6 +563,8 @@ export default function App() {
             onNavigateToMacro={() => setActiveTab('macro')}
             onNavigateToPaper={() => setActiveTab('paper')}
           />
+        )}
+          </>
         )}
       </main>
 

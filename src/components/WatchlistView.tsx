@@ -587,7 +587,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           {/* Mobile Card View (Optimized for small screens) */}
           <div className="block md:hidden divide-y divide-slate-800/60 font-sans">
-            {sorted.map((item, idx) => {
+            {sorted.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs">
+                {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 상단에서 종목을 추가해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+              </div>
+            ) : (
+              sorted.map((item, idx) => {
               const sub = item.opportunity.sub_scores;
               const isSignal = item.signal_generated;
 
@@ -726,7 +731,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   </div>
                 </div>
               );
-            })}
+            })
+          )}
           </div>
 
           {/* Desktop Table View (Hidden on mobile) */}
@@ -812,7 +818,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {sorted.map((item, idx) => {
+              {sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-slate-500 font-sans text-xs">
+                    {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 상단에서 종목을 추가해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+                  </td>
+                </tr>
+              ) : (
+                sorted.map((item, idx) => {
                 const sub = item.opportunity.sub_scores;
                 const isSignal = item.signal_generated;
 
@@ -1013,7 +1026,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>

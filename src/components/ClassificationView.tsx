@@ -307,6 +307,15 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
                   </tr>
                 );
               })}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400 font-sans text-sm">
+                    {evaluations.length === 0
+                      ? '등록된 워치리스트 종목이 없습니다. 종목을 추가해주세요.'
+                      : '검색 또는 필터 조건과 일치하는 종목이 없습니다.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

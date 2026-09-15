@@ -351,13 +351,22 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
       <div
         ref={containerRef}
         className="relative bg-slate-950 border border-slate-800/90 rounded-2xl overflow-hidden select-none"
-        style={{ height: dimensions.height }}
+        style={{ height: sectorGroups.length === 0 ? 'auto' : dimensions.height }}
       >
-        <svg
-          width={dimensions.width}
-          height={dimensions.height}
-          className="w-full h-full block"
-        >
+        {sectorGroups.length === 0 ? (
+          <div className="h-[260px] flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-2 font-sans">
+            <Layers className="w-8 h-8 text-slate-600 mb-1" />
+            <div className="font-semibold text-sm text-slate-300">표시할 섹터 데이터가 없습니다</div>
+            <p className="text-xs text-slate-500 max-w-sm">
+              워치리스트에 종목이 등록되면 실시간 섹터별 시가총액 비중 및 등락률 트리맵이 시각화됩니다.
+            </p>
+          </div>
+        ) : (
+          <svg
+            width={dimensions.width}
+            height={dimensions.height}
+            className="w-full h-full block"
+          >
           <defs>
             <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="110%">
               <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.3" />
@@ -534,6 +543,7 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
             );
           })}
         </svg>
+        )}
 
         {/* 4. Interactive Floating Tooltip */}
         {hoveredItem && (

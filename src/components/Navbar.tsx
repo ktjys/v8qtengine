@@ -20,6 +20,7 @@ interface NavbarProps {
   onOpenScheduleModal: () => void;
   totalCount: number;
   signalsCount: number;
+  isInitialLoading?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenScheduleModal,
   totalCount,
   signalsCount,
+  isInitialLoading = false,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-slate-100">
@@ -79,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <ListFilter className="w-4 h-4" />
-              <span>워치리스트 ({totalCount})</span>
+              <span>워치리스트 {isInitialLoading ? '(…)' : `(${totalCount})`}</span>
             </button>
 
             <button
@@ -213,7 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               activeTab === 'watchlist' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 bg-slate-950/40'
             }`}
           >
-            워치리스트 ({totalCount})
+            워치리스트 {isInitialLoading ? '(…)' : `(${totalCount})`}
           </button>
           <button
             onClick={() => setActiveTab('backtest')}

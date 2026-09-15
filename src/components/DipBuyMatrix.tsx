@@ -314,7 +314,12 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         {/* Mobile Card View (Optimized for small screens) */}
         <div className="block md:hidden divide-y divide-slate-800/60 font-sans">
-          {sorted.map((item, idx) => {
+          {sorted.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-xs">
+              {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 종목을 등록해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+            </div>
+          ) : (
+            sorted.map((item, idx) => {
             const dip = item.dip;
             const arrow = (item.change1d ?? 0) >= 0 ? '▲' : '▼';
             const changeColor =
@@ -450,7 +455,8 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                 </div>
               </div>
             );
-          })}
+          })
+        )}
         </div>
 
         {/* Desktop Table View (Hidden on mobile) */}
@@ -520,7 +526,14 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
             </thead>
 
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {sorted.map((item, idx) => {
+              {sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-slate-500 font-sans text-xs">
+                    {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 종목을 등록해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+                  </td>
+                </tr>
+              ) : (
+                sorted.map((item, idx) => {
                 const dip = item.dip;
                 const arrow = (item.change1d ?? 0) >= 0 ? '▲' : '▼';
                 const changeColor =
@@ -757,7 +770,8 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>

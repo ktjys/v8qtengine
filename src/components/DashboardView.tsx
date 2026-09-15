@@ -454,54 +454,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1">
-              {opportunities.map((item, idx) => (
-                <div
-                  key={item.ticker}
-                  onClick={() => onSelectTicker(item.ticker)}
-                  className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-emerald-500/40 transition-all cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <span className="text-[10px] font-mono font-bold text-emerald-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-emerald-500/20 min-w-[24px] text-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-100 font-mono group-hover:text-cyan-400 transition-colors">
-                          {item.ticker}
-                        </span>
-                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                          {item.name}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {item.classification.strategy_type}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="flex items-center space-x-2 justify-end">
-                      <span className="text-sm font-bold text-emerald-400 font-mono">
-                        {item.opportunity.opportunity_score}점
-                      </span>
-                      <span
-                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                          item.risk.risk_level === 'LOW'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : item.risk.risk_level === 'MEDIUM'
-                            ? 'bg-amber-500/10 text-amber-400'
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}
-                      >
-                        {item.risk.risk_level}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      {formatStockPrice(item.price, item.ticker)} ({formatChangePercent(item.change1d)})
-                    </div>
-                  </div>
+              {opportunities.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs font-sans">
+                  {evaluations.length === 0 ? '워치리스트가 비어 있습니다.' : '현재 기회 조건에 해당하는 종목이 없습니다.'}
                 </div>
-              ))}
+              ) : (
+                opportunities.map((item, idx) => (
+                  <div
+                    key={item.ticker}
+                    onClick={() => onSelectTicker(item.ticker)}
+                    className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-emerald-500/40 transition-all cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <span className="text-[10px] font-mono font-bold text-emerald-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-emerald-500/20 min-w-[24px] text-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-100 font-mono group-hover:text-cyan-400 transition-colors">
+                            {item.ticker}
+                          </span>
+                          <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {item.classification.strategy_type}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="flex items-center space-x-2 justify-end">
+                        <span className="text-sm font-bold text-emerald-400 font-mono">
+                          {item.opportunity.opportunity_score}점
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            item.risk.risk_level === 'LOW'
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : item.risk.risk_level === 'MEDIUM'
+                              ? 'bg-amber-500/10 text-amber-400'
+                              : 'bg-rose-500/10 text-rose-400'
+                          }`}
+                        >
+                          {item.risk.risk_level}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        {formatStockPrice(item.price, item.ticker)} ({formatChangePercent(item.change1d)})
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -518,54 +524,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1 max-h-[480px] overflow-y-auto pr-1">
-              {displayedWatchItems.map((item, idx) => (
-                <div
-                  key={item.ticker}
-                  onClick={() => onSelectTicker(item.ticker)}
-                  className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-amber-500/40 transition-all cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <span className="text-[10px] font-mono font-bold text-amber-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-amber-500/20 min-w-[24px] text-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-100 font-mono group-hover:text-amber-400 transition-colors">
-                          {item.ticker}
-                        </span>
-                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                          {item.name}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {item.classification.strategy_type}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="flex items-center space-x-2 justify-end">
-                      <span className="text-sm font-bold text-amber-400 font-mono">
-                        {item.opportunity.opportunity_score}점
-                      </span>
-                      <span
-                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                          item.risk.risk_level === 'LOW'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : item.risk.risk_level === 'MEDIUM'
-                            ? 'bg-amber-500/10 text-amber-400'
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}
-                      >
-                        {item.risk.risk_level}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      {formatStockPrice(item.price, item.ticker)}
-                    </div>
-                  </div>
+              {watchListItems.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs font-sans">
+                  {evaluations.length === 0 ? '워치리스트가 비어 있습니다.' : '현재 관찰 조건에 해당하는 종목이 없습니다.'}
                 </div>
-              ))}
+              ) : (
+                displayedWatchItems.map((item, idx) => (
+                  <div
+                    key={item.ticker}
+                    onClick={() => onSelectTicker(item.ticker)}
+                    className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-amber-500/40 transition-all cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <span className="text-[10px] font-mono font-bold text-amber-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-amber-500/20 min-w-[24px] text-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-100 font-mono group-hover:text-amber-400 transition-colors">
+                            {item.ticker}
+                          </span>
+                          <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {item.classification.strategy_type}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="flex items-center space-x-2 justify-end">
+                        <span className="text-sm font-bold text-amber-400 font-mono">
+                          {item.opportunity.opportunity_score}점
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            item.risk.risk_level === 'LOW'
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : item.risk.risk_level === 'MEDIUM'
+                              ? 'bg-amber-500/10 text-amber-400'
+                              : 'bg-rose-500/10 text-rose-400'
+                          }`}
+                        >
+                          {item.risk.risk_level}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        {formatStockPrice(item.price, item.ticker)}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             {watchListItems.length > 10 && (
@@ -601,46 +613,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 space-y-2 flex-1">
-              {highRiskItems.map((item, idx) => (
-                <div
-                  key={item.ticker}
-                  onClick={() => onSelectTicker(item.ticker)}
-                  className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-rose-500/40 transition-all cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <span className="text-[10px] font-mono font-bold text-rose-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-rose-500/20 min-w-[24px] text-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-100 font-mono group-hover:text-rose-400 transition-colors">
-                          {item.ticker}
-                        </span>
-                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                          {item.name}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-rose-400/90 mt-0.5 truncate max-w-[180px]">
-                        {item.risk.risk_reasons[0] || '고위험 제약 적용'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="flex items-center space-x-2 justify-end">
-                      <span className="text-xs text-slate-400 font-mono">
-                        Opp {item.opportunity.opportunity_score}
-                      </span>
-                      <span className="text-xs font-bold text-rose-400 font-mono px-1.5 py-0.5 rounded bg-rose-500/10">
-                        Risk {item.risk.risk_score}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      판단: {item.decision.decision}
-                    </div>
-                  </div>
+              {highRiskItems.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs font-sans">
+                  {evaluations.length === 0 ? '워치리스트가 비어 있습니다.' : '현재 고위험(Risk HIGH)으로 분류된 종목이 없습니다.'}
                 </div>
-              ))}
+              ) : (
+                highRiskItems.map((item, idx) => (
+                  <div
+                    key={item.ticker}
+                    onClick={() => onSelectTicker(item.ticker)}
+                    className="group p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-rose-500/40 transition-all cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <span className="text-[10px] font-mono font-bold text-rose-400/90 bg-slate-950 px-1.5 py-0.5 rounded border border-rose-500/20 min-w-[24px] text-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-100 font-mono group-hover:text-rose-400 transition-colors">
+                            {item.ticker}
+                          </span>
+                          <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-rose-400/90 mt-0.5 truncate max-w-[180px]">
+                          {item.risk.risk_reasons[0] || '고위험 제약 적용'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="flex items-center space-x-2 justify-end">
+                        <span className="text-xs text-slate-400 font-mono">
+                          Opp {item.opportunity.opportunity_score}
+                        </span>
+                        <span className="text-xs font-bold text-rose-400 font-mono px-1.5 py-0.5 rounded bg-rose-500/10">
+                          Risk {item.risk.risk_score}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        판단: {item.decision.decision}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -678,8 +696,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Actionable Dip-Buys or Top Recommendations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {dipItems.slice(0, 4).map((item) => {
+        {dipItems.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-xs font-sans bg-slate-950/40 rounded-xl border border-slate-800/80">
+            {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 종목을 등록해주세요.' : '현재 눌림목 매수 추천 데이터가 없습니다.'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {dipItems.slice(0, 4).map((item) => {
             const d = item.dip;
             return (
               <div
@@ -743,6 +766,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             );
           })}
         </div>
+        )}
       </div>
 
       {/* 4. Recent Signals & Snapshot Timeline */}
@@ -863,7 +887,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
-              {displayedSignals.map((sig, idx) => (
+              {displayedSignals.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-slate-500 font-sans text-xs">
+                    발생한 퀀트 시그널 이력이 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                displayedSignals.map((sig, idx) => (
                 <tr
                   key={sig.id}
                   className="hover:bg-slate-800/40 transition-colors cursor-pointer"
@@ -945,7 +976,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </button>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>
