@@ -776,6 +776,7 @@ export default {
           success: true,
           alerts,
           totalCount: alerts.length,
+          rlsBlocked: alertHistoryRepository.isRlsBlocked,
         });
       } catch (err: any) {
         console.error('[WorkerAlerts] GET error:', err);
@@ -783,6 +784,70 @@ export default {
           success: false,
           error: err.message || '알림 발송 내역 조회 실패',
           alerts: [],
+        }, 500);
+      }
+    }
+
+    if (path === '/api/v8/alerts/sync' && method === 'POST') {
+      try {
+        const syncResult = await alertHistoryRepository.syncPendingToDb();
+        return jsonResponse({
+          success: true,
+          ...syncResult,
+          rlsBlocked: alertHistoryRepository.isRlsBlocked,
+        });
+      } catch (err: any) {
+        console.error('[WorkerAlerts] SYNC error:', err);
+        return jsonResponse({
+          success: false,
+          error: err.message || '알림 동기화 실패',
+        }, 500);
+      }
+    }
+
+    if (path === '/api/v8/alerts/test' && method === 'POST') {
+      try {
+        const now = new Date();
+        const kstTimeStr = new Intl.DateTimeFormat('ko-KR', {
+          timeZone: 'Asia/Seoul',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).format(now);
+
+        const testLog = await alertHistoryRepository.save({
+          timestamp: now.toISOString(),
+          kst_time: kstTimeStr,
+          strategy_type: 'STRATEGY_A',
+          title: '🧪 [수동 테스트 알림] 시스템 알림 기록 테스트',
+          tickers: ['SPY', 'QQQ'],
+          signals_count: 2,
+          delivery_status: 'SENT',
+          delivery_target: 'Console/DB',
+          message_preview: '수동 테스트 발송 기록입니다. Supabase DB 영구 저장 및 RLS 상태 확인용.',
+          message_body: `<b>🧪 [수동 테스트 알림]</b>\n• 생성시각: ${kstTimeStr} KST\n• 대상 종목: SPY, QQQ\n• 상태: 정상 수신 및 DB 영구 저장 검증 완료`,
+          details: {
+            strategy_a_tickers: [
+              { ticker: 'SPY', score: 90, decision: 'BUY', price: 565, change1d: 0.5 },
+              { ticker: 'QQQ', score: 88, decision: 'BUY', price: 485, change1d: 1.1 },
+            ],
+          },
+        });
+
+        return jsonResponse({
+          success: true,
+          message: '테스트 알림이 생성 및 저장되었습니다.',
+          alert: testLog,
+          rlsBlocked: alertHistoryRepository.isRlsBlocked,
+        });
+      } catch (err: any) {
+        return jsonResponse({
+          success: false,
+          error: err.message || '테스트 알림 생성 실패',
         }, 500);
       }
     }

@@ -1,29 +1,49 @@
 import { dbClient } from '../supabaseClient';
 import { AlertNotificationLog } from '../../types/v8';
 
-// Realistic initial seed records for alert notifications
-const INITIAL_ALERT_LOGS: AlertNotificationLog[] = [
-  {
-    id: 'alert-seed-001',
-    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(), // 35 mins ago
-    kst_time: new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(new Date(Date.now() - 1000 * 60 * 35)),
-    strategy_type: 'DUAL_SCAN_REPORT',
-    title: '🚀 [정기 스캔] 듀얼 퀀트 브리핑 (전략 A 모멘텀 + 전략 B 우량주 눌림목)',
-    tickers: ['NVDA', 'SPY', 'QQQ', 'AAPL'],
-    signals_count: 4,
-    delivery_status: 'LOCAL_LOGGED',
-    delivery_target: '682****',
-    message_preview: '전략 A 모멘텀 돌파 2건 & 전략 B 우량주 눌림추매 2건 (NVDA, SPY) 포착',
-    message_body: `<b>🚀 퀀트 스캐너 정기 스캔 브리핑 (듀얼 전략 통합)</b>
+// Safe timestamp helper that guards against top-level Date.now() === 0 in Cloudflare Worker isolates
+function getSafeReferenceTimestamp(offsetMs: number = 0): { iso: string; kst: string } {
+  let now = Date.now();
+  // Cloudflare Workers return 0 for Date.now() during top-level module evaluation to prevent timing attacks.
+  // If now is 0 or before year 2024, fall back to current real 2026 benchmark.
+  if (!now || now < 1700000000000) {
+    now = new Date('2026-09-17T06:00:00.000Z').getTime();
+  }
+  const targetDate = new Date(now - offsetMs);
+  const iso = targetDate.toISOString();
+  const kst = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(targetDate);
+
+  return { iso, kst };
+}
+
+// Realistic initial seed records for alert notifications (fallback only when DB is completely empty)
+export function getInitialAlertLogs(): AlertNotificationLog[] {
+  const seed1 = getSafeReferenceTimestamp(1000 * 60 * 35); // 35 mins ago
+  const seed2 = getSafeReferenceTimestamp(1000 * 60 * 60 * 14); // 14 hours ago
+  const seed3 = getSafeReferenceTimestamp(1000 * 60 * 60 * 36); // 36 hours ago
+
+  return [
+    {
+      id: 'alert-seed-001',
+      timestamp: seed1.iso,
+      kst_time: seed1.kst,
+      strategy_type: 'DUAL_SCAN_REPORT',
+      title: '🚀 [정기 스캔] 듀얼 퀀트 브리핑 (전략 A 모멘텀 + 전략 B 우량주 눌림목)',
+      tickers: ['NVDA', 'SPY', 'QQQ', 'AAPL'],
+      signals_count: 4,
+      delivery_status: 'LOCAL_LOGGED',
+      delivery_target: '682****',
+      message_preview: '전략 A 모멘텀 돌파 2건 & 전략 B 우량주 눌림추매 2건 (NVDA, SPY) 포착',
+      message_body: `<b>🚀 퀀트 스캐너 정기 스캔 브리핑 (듀얼 전략 통합)</b>
 ━━━━━━━━━━━━━━━━━━━━━
 • <b>총 워치리스트:</b> 8개 종목
 • <b>전략 A (모멘텀 돌파):</b> 2건 포착 (QQQ, AAPL)
@@ -56,52 +76,43 @@ const INITIAL_ALERT_LOGS: AlertNotificationLog[] = [
    - 실행신호: <b>MODERATE_DCA</b> (1.2x 정기 적립)
    - <b>💡 권고 분할적립 배수:</b> <b>1.2x 정기 적립 (안정 분할매수)</b>
    - 진단: S&P 500 주요 이동평균선 지지 및 분할매수 유효 구간`,
-    details: {
-      strategy_a_tickers: [
-        { ticker: 'QQQ', score: 85, decision: 'BUY', price: 485.20, change1d: 1.2 },
-        { ticker: 'AAPL', score: 78, decision: 'BUY', price: 232.10, change1d: 0.8 },
-      ],
-      strategy_b_tickers: [
-        {
-          ticker: 'NVDA',
-          tier: 'S',
-          dip_score: 84,
-          rsi: 42.0,
-          drawdown: '-5.4%',
-          suggested_action: '1.5x 적극 적립 (건전 눌림목)',
-        },
-        {
-          ticker: 'SPY',
-          tier: 'S',
-          dip_score: 79,
-          rsi: 44.5,
-          drawdown: '-4.2%',
-          suggested_action: '1.2x 정기 적립 (지수 ETF)',
-        },
-      ],
+      details: {
+        strategy_a_tickers: [
+          { ticker: 'QQQ', score: 85, decision: 'BUY', price: 485.20, change1d: 1.2 },
+          { ticker: 'AAPL', score: 78, decision: 'BUY', price: 232.10, change1d: 0.8 },
+        ],
+        strategy_b_tickers: [
+          {
+            ticker: 'NVDA',
+            tier: 'S',
+            dip_score: 84,
+            rsi: 42.0,
+            drawdown: '-5.4%',
+            suggested_action: '1.5x 적극 적립 (건전 눌림목)',
+          },
+          {
+            ticker: 'SPY',
+            tier: 'S',
+            dip_score: 79,
+            rsi: 44.5,
+            drawdown: '-4.2%',
+            suggested_action: '1.2x 정기 적립 (지수 ETF)',
+          },
+        ],
+      },
     },
-  },
-  {
-    id: 'alert-seed-002',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 14).toISOString(), // 14 hours ago
-    kst_time: new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(new Date(Date.now() - 1000 * 60 * 60 * 14)),
-    strategy_type: 'STRATEGY_B',
-    title: '🛡️ [전략 B 단독 알람] NVDA 우량주 건전 눌림목 분할적립 신호',
-    tickers: ['NVDA'],
-    signals_count: 1,
-    delivery_status: 'SENT',
-    delivery_target: '682****',
-    message_preview: 'NVDA: S등급 우량주 건전 눌림목 진입 (RSI 42.0, 전고점 대비 -5.4%)',
-    message_body: `<b>🛡️ [전략 B] 우량주/지수ETF 눌림목 분할적립 알림</b>
+    {
+      id: 'alert-seed-002',
+      timestamp: seed2.iso,
+      kst_time: seed2.kst,
+      strategy_type: 'STRATEGY_B',
+      title: '🛡️ [전략 B 단독 알람] NVDA 우량주 건전 눌림목 분할적립 신호',
+      tickers: ['NVDA'],
+      signals_count: 1,
+      delivery_status: 'SENT',
+      delivery_target: '682****',
+      message_preview: 'NVDA: S등급 우량주 건전 눌림목 진입 (RSI 42.0, 전고점 대비 -5.4%)',
+      message_body: `<b>🛡️ [전략 B] 우량주/지수ETF 눌림목 분할적립 알림</b>
 ━━━━━━━━━━━━━━━━━━━━━
 <b>NVDA</b> (NVIDIA Corporation)
 • 현재가: $217.55
@@ -115,40 +126,31 @@ const INITIAL_ALERT_LOGS: AlertNotificationLog[] = [
 <b>🎯 실행 권고: MODERATE_DCA</b>
 • 권고 적립 배수: <b>1.5x 적극 분할적립 (정기적립 대비 150%)</b>
 • 매매 가이드: 단기 과열 해소된 얕은 눌림목으로 세금 부담 없는 장기 보유 분할매수 최적 구간`,
-    details: {
-      strategy_b_tickers: [
-        {
-          ticker: 'NVDA',
-          tier: 'S',
-          dip_score: 84,
-          rsi: 42.0,
-          drawdown: '-5.4%',
-          suggested_action: '1.5x 적극 적립',
-        },
-      ],
+      details: {
+        strategy_b_tickers: [
+          {
+            ticker: 'NVDA',
+            tier: 'S',
+            dip_score: 84,
+            rsi: 42.0,
+            drawdown: '-5.4%',
+            suggested_action: '1.5x 적극 적립',
+          },
+        ],
+      },
     },
-  },
-  {
-    id: 'alert-seed-003',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(), // 36 hours ago
-    kst_time: new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(new Date(Date.now() - 1000 * 60 * 60 * 36)),
-    strategy_type: 'STRATEGY_A',
-    title: '🚀 [전략 A 단독 알람] QQQ 신고가 추세 돌파 매수 신호',
-    tickers: ['QQQ'],
-    signals_count: 1,
-    delivery_status: 'SENT',
-    delivery_target: '682****',
-    message_preview: 'QQQ: 나스닥 100 모멘텀 가속 기회점수 85점 매수 신호 도출',
-    message_body: `<b>🚀 [전략 A] 모멘텀 & 추세돌파 매수 알림</b>
+    {
+      id: 'alert-seed-003',
+      timestamp: seed3.iso,
+      kst_time: seed3.kst,
+      strategy_type: 'STRATEGY_A',
+      title: '🚀 [전략 A 단독 알람] QQQ 신고가 추세 돌파 매수 신호',
+      tickers: ['QQQ'],
+      signals_count: 1,
+      delivery_status: 'SENT',
+      delivery_target: '682****',
+      message_preview: 'QQQ: 나스닥 100 모멘텀 가속 기회점수 85점 매수 신호 도출',
+      message_body: `<b>🚀 [전략 A] 모멘텀 & 추세돌파 매수 알림</b>
 ━━━━━━━━━━━━━━━━━━━━━
 <b>QQQ</b> (Invesco QQQ Trust)
 • 현재가: $485.20 (+1.2%)
@@ -158,17 +160,17 @@ const INITIAL_ALERT_LOGS: AlertNotificationLog[] = [
 
 <b>🎯 판정: BUY (목표 비중 15%)</b>
 • 스탑로스: ATR 2.0x 기준 $471.50`,
-    details: {
-      strategy_a_tickers: [
-        { ticker: 'QQQ', score: 85, decision: 'BUY', price: 485.20, change1d: 1.2 },
-      ],
+      details: {
+        strategy_a_tickers: [
+          { ticker: 'QQQ', score: 85, decision: 'BUY', price: 485.20, change1d: 1.2 },
+        ],
+      },
     },
-  },
-];
+  ];
+}
 
 // In-memory alert store
 const inMemoryAlertLogs: Map<string, AlertNotificationLog> = new Map();
-INITIAL_ALERT_LOGS.forEach((item) => inMemoryAlertLogs.set(item.id, item));
 
 export class AlertHistoryRepository {
   public isRlsBlocked: boolean = false;
@@ -183,32 +185,47 @@ export class AlertHistoryRepository {
 
         if (error) {
           dbClient.handleDbError('alert_notifications', 'getAll', error);
-        } else if (Array.isArray(data)) {
-          if (data.length > 0) {
-            const mapped: AlertNotificationLog[] = data.map((r: any) => ({
-              id: r.id,
-              timestamp: r.timestamp,
-              kst_time: r.kst_time,
-              strategy_type: r.strategy_type,
-              title: r.title,
-              tickers: r.tickers || [],
-              signals_count: r.signals_count || 0,
-              delivery_status: r.delivery_status,
-              delivery_target: r.delivery_target,
-              message_preview: r.message_preview,
-              message_body: r.message_body,
-              details: r.details,
-            }));
-            // Merge Supabase rows into memory map
-            mapped.forEach((item) => inMemoryAlertLogs.set(item.id, item));
+        } else if (Array.isArray(data) && data.length > 0) {
+          const mapped: AlertNotificationLog[] = data.map((r: any) => ({
+            id: r.id,
+            timestamp: r.timestamp,
+            kst_time: r.kst_time,
+            strategy_type: r.strategy_type,
+            title: r.title,
+            tickers: r.tickers || [],
+            signals_count: r.signals_count || 0,
+            delivery_status: r.delivery_status,
+            delivery_target: r.delivery_target,
+            message_preview: r.message_preview,
+            message_body: r.message_body,
+            details: r.details,
+          }));
+
+          // When remote DB has records, remote DB is the single source of truth.
+          // Merge any non-seed in-memory items from current session that haven't synced yet.
+          const mergedMap = new Map<string, AlertNotificationLog>();
+          mapped.forEach((item) => mergedMap.set(item.id, item));
+
+          for (const [id, item] of inMemoryAlertLogs.entries()) {
+            if (!id.startsWith('alert-seed-') && !mergedMap.has(id)) {
+              mergedMap.set(id, item);
+            }
           }
+
+          return Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
         }
       } catch (err) {
         dbClient.handleDbError('alert_notifications', 'getAll', err);
       }
     }
 
-    // Return in-memory logs sorted desc (includes both remote DB and current session logs)
+    // Fallback if Supabase table is empty or disconnected:
+    if (inMemoryAlertLogs.size === 0) {
+      getInitialAlertLogs().forEach((item) => inMemoryAlertLogs.set(item.id, item));
+    }
+
     return Array.from(inMemoryAlertLogs.values()).sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
@@ -220,13 +237,14 @@ export class AlertHistoryRepository {
     return all.filter((log) => log.tickers.map((t) => t.toUpperCase()).includes(clean));
   }
 
-  async save(log: AlertNotificationLog): Promise<AlertNotificationLog> {
-    if (!log.id) {
-      log.id = `alert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    }
+  async save(log: Omit<AlertNotificationLog, 'id'> & { id?: string }): Promise<AlertNotificationLog> {
+    const fullLog: AlertNotificationLog = {
+      ...log,
+      id: log.id || `alert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    };
 
-    if (!log.kst_time) {
-      log.kst_time = new Intl.DateTimeFormat('ko-KR', {
+    if (!fullLog.kst_time) {
+      fullLog.kst_time = new Intl.DateTimeFormat('ko-KR', {
         timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: '2-digit',
@@ -235,27 +253,27 @@ export class AlertHistoryRepository {
         minute: '2-digit',
         second: '2-digit',
         hour12: false,
-      }).format(new Date(log.timestamp || Date.now()));
+      }).format(new Date(fullLog.timestamp || Date.now()));
     }
 
     // Always update in-memory state immediately so UI updates in real-time
-    inMemoryAlertLogs.set(log.id, log);
+    inMemoryAlertLogs.set(fullLog.id, fullLog);
 
     if (dbClient.isTableAvailable('alert_notifications') && dbClient.supabase) {
       try {
         const payload = {
-          id: log.id,
-          timestamp: log.timestamp,
-          kst_time: log.kst_time,
-          strategy_type: log.strategy_type,
-          title: log.title,
-          tickers: log.tickers,
-          signals_count: log.signals_count,
-          delivery_status: log.delivery_status,
-          delivery_target: log.delivery_target,
-          message_preview: log.message_preview,
-          message_body: log.message_body,
-          details: log.details,
+          id: fullLog.id,
+          timestamp: fullLog.timestamp,
+          kst_time: fullLog.kst_time,
+          strategy_type: fullLog.strategy_type,
+          title: fullLog.title,
+          tickers: fullLog.tickers,
+          signals_count: fullLog.signals_count,
+          delivery_status: fullLog.delivery_status,
+          delivery_target: fullLog.delivery_target,
+          message_preview: fullLog.message_preview,
+          message_body: fullLog.message_body,
+          details: fullLog.details,
         };
 
         const { error } = await dbClient.supabase
@@ -280,7 +298,7 @@ export class AlertHistoryRepository {
       }
     }
 
-    return log;
+    return fullLog;
   }
 
   async syncPendingToDb(): Promise<{ syncedCount: number; error?: string }> {
