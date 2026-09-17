@@ -122,7 +122,7 @@ async function startServer() {
         (headers['x-telegram-token'] as string) ||
         cfg.botToken ||
         process.env.TELEGRAM_BOT_TOKEN ||
-        '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+        ''
       )?.trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
 
       const chatId = (
@@ -135,7 +135,7 @@ async function startServer() {
         (headers['x-telegram-chat-id'] as string) ||
         cfg.chatId ||
         process.env.TELEGRAM_CHAT_ID ||
-        '7774679329'
+        ''
       )?.trim().replace(/^['"]|['"]$/g, '');
 
       const sourceUrl = `${req.protocol}://${req.get('host')}`;
@@ -218,6 +218,19 @@ async function startServer() {
     });
   });
 
+  app.post('/api/v8/schedule/toggle', (req, res) => {
+    const status = internalScheduler.getStatus();
+    if (status.active) {
+      internalScheduler.stop();
+    } else {
+      internalScheduler.start();
+    }
+    res.json({
+      success: true,
+      ...internalScheduler.getStatus(),
+    });
+  });
+
   app.post('/api/v8/schedule/trigger', async (req, res) => {
     try {
       const result = await internalScheduler.triggerManual();
@@ -293,8 +306,12 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Quant Decision Engine Server running on http://localhost:${PORT}`);
-    // Start automated internal cron scheduler
-    internalScheduler.start();
+    // Start automated internal cron scheduler only if explicitly enabled (prevents duplicate triggers when Cloudflare Cron or external crons are active)
+    if (process.env.ENABLE_INTERNAL_SCHEDULER === 'true') {
+      internalScheduler.start();
+    } else {
+      console.log('[InternalScheduler] Inactive by default (Cloudflare Cron Trigger or external cron takes precedence). Set ENABLE_INTERNAL_SCHEDULER=true or use UI to enable.');
+    }
     // Bootstrap initial evaluation state asynchronously after server is up
     getInitialOrLatestEvaluations().catch((err) => {
       console.error('[Bootstrap Error] Failed to initialize evaluations:', err);

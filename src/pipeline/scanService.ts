@@ -180,7 +180,7 @@ export class ScanService {
           : undefined,
     };
 
-    if (options.saveToDb !== false) {
+    if (options.saveToDb !== false && !options.skipRunLogSave) {
       try {
         await scanRunRepository.save(scanLog);
       } catch {}

@@ -1288,7 +1288,7 @@ export default {
           bodyData.bot_token ||
           bodyData.token ||
           request.headers.get('x-telegram-token') ||
-          '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+          ''
         ).trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
 
         const chatId = (
@@ -1301,7 +1301,7 @@ export default {
           bodyData.chat_id ||
           bodyData.chat ||
           request.headers.get('x-telegram-chat-id') ||
-          '7774679329'
+          ''
         ).trim().replace(/^['"]|['"]$/g, '');
 
         // Check if asynchronous background execution is requested (recommended for external cron services to avoid timeouts)

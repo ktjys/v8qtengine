@@ -11,7 +11,7 @@ not_found_handling = "single-page-application"
 [vars]
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
-TELEGRAM_BOT_TOKEN = "8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E"
+TELEGRAM_BOT_TOKEN = "8979603920:AAFN14IeUrhqcNqqFAkUv2ovkU9W5knPaVk"
 TELEGRAM_CHAT_ID = "7774679329"
 SUPABASE_URL = "https://xuzctskacealvvwlmica.supabase.co"
 SUPABASE_KEY = "sb_publishable__6cC6rZrrlLsIPRcRMQAFg_BknuN793"

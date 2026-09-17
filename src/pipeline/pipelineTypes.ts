@@ -4,6 +4,7 @@ export interface PipelineExecutionOptions {
   providerType?: 'yahoo' | 'seed';
   simulatePartialFailure?: boolean;
   saveToDb?: boolean;
+  skipRunLogSave?: boolean;
   notifyTelegram?: boolean;
 }
 

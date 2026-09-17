@@ -119,7 +119,7 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       });
 
       const scanResult = await Promise.race([
-        scanService.executeScan({ saveToDb: true }),
+        scanService.executeScan({ saveToDb: true, skipRunLogSave: true }),
         timeoutPromise,
       ]);
 
@@ -156,13 +156,13 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       options.botToken ||
       cfg.botToken ||
       process.env.TELEGRAM_BOT_TOKEN ||
-      '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+      ''
     );
     const chat = (
       options.chatId ||
       cfg.chatId ||
       process.env.TELEGRAM_CHAT_ID ||
-      '7774679329'
+      ''
     );
 
     // 전략 B: 우량대형주 적립 & 눌림목 추매 평가

@@ -29,10 +29,10 @@ export class TelegramNotifier {
 
   constructor() {
     this.botToken = sanitizeToken(
-      process.env.TELEGRAM_BOT_TOKEN || '8979603920:AAGoWWVENKOR18zAG-hJRQb0earF-qkqO3E'
+      process.env.TELEGRAM_BOT_TOKEN || null
     );
     this.chatId = sanitizeChatId(
-      process.env.TELEGRAM_CHAT_ID || '7774679329'
+      process.env.TELEGRAM_CHAT_ID || null
     );
   }
 
