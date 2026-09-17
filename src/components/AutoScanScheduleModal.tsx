@@ -211,6 +211,9 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           },
         };
         setScanResult(finalData);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: finalData }));
+        }
         onShowToast(`스캔 완료: ${finalData.actionable_signals_count}개 시그널 도출`);
       } else {
         const errorMsg = data?.error || '스캔 서버에서 오류가 발생했습니다.';

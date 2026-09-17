@@ -28,12 +28,14 @@ interface AlertHistoryViewProps {
   onSelectTicker?: (ticker: string, tab?: string) => void;
   onTriggerScan?: () => void;
   initialTickerFilter?: string;
+  refreshKey?: number;
 }
 
 export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   onSelectTicker,
   onTriggerScan,
   initialTickerFilter = '',
+  refreshKey,
 }) => {
   const [alerts, setAlerts] = useState<AlertNotificationLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +49,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   const [copiedRlsSql, setCopiedRlsSql] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCreatingTestAlert, setIsCreatingTestAlert] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('');
 
   const fetchAlerts = async () => {
     setIsLoading(true);
@@ -55,6 +58,14 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.alerts)) {
         setAlerts(data.alerts);
+        setLastRefreshedAt(
+          new Intl.DateTimeFormat('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+          }).format(new Date())
+        );
         if (data.rlsBlocked != null) {
           setIsRlsBlocked(Boolean(data.rlsBlocked));
         }
@@ -83,6 +94,30 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
 
   useEffect(() => {
     fetchAlerts();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const handleGlobalAlertUpdate = () => {
+      fetchAlerts();
+    };
+
+    window.addEventListener('quant-alerts-updated', handleGlobalAlertUpdate);
+    window.addEventListener('quant-scan-completed', handleGlobalAlertUpdate);
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAlerts();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      window.removeEventListener('quant-alerts-updated', handleGlobalAlertUpdate);
+      window.removeEventListener('quant-scan-completed', handleGlobalAlertUpdate);
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
   }, []);
 
   const handleCopyRlsSql = () => {
@@ -491,6 +526,11 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">새로고침</span>
+            {lastRefreshedAt && (
+              <span className="hidden lg:inline text-[10px] text-cyan-400/80 font-mono ml-1">
+                ({lastRefreshedAt})
+              </span>
+            )}
           </button>
 
           <button

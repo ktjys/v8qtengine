@@ -19,6 +19,7 @@ interface ScanRunsViewProps {
   onSelectTicker?: (ticker: string, tab?: string) => void;
   onOpenDbHealthModal?: () => void;
   initialTab?: 'alerts' | 'runs';
+  alertRefreshKey?: number;
 }
 
 export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
@@ -27,6 +28,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
   onSelectTicker,
   onOpenDbHealthModal,
   initialTab = 'alerts',
+  alertRefreshKey,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'alerts' | 'runs'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,7 +143,11 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
 
       {/* Sub-Tab 1: Alert History */}
       {activeSubTab === 'alerts' && (
-        <AlertHistoryView onSelectTicker={onSelectTicker} onTriggerScan={onTriggerScan} />
+        <AlertHistoryView
+          onSelectTicker={onSelectTicker}
+          onTriggerScan={onTriggerScan}
+          refreshKey={alertRefreshKey}
+        />
       )}
 
       {/* Sub-Tab 2: Scan Execution Logs */}

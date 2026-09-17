@@ -11,7 +11,8 @@ import { dbClient } from './src/db/supabaseClient';
 import { createSignalSnapshot } from './src/engine/signalEngine';
 import { calculateBacktestMetrics } from './src/engine/backtestEngine';
 import { INITIAL_HISTORICAL_SIGNALS, INITIAL_SCAN_RUNS, runV8PipelineOnSeedData } from './src/data/seed/initialData';
-import { SignalSnapshot } from './src/types/v8';
+import { SignalSnapshot, AlertNotificationLog } from './src/types/v8';
+import { ensureDipEvaluation } from './src/engine/dipBuyEngine';
 import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
@@ -605,6 +606,16 @@ export default {
         const runLog = result.runLog;
         const actionableSignals = (result.evaluations || []).filter((e: any) => e.signal_generated);
 
+        // Calculate Strategy B Dip Buy evaluations
+        const dipBuyOpportunities = (result.evaluations || [])
+          .map((e: any) => ensureDipEvaluation(e))
+          .filter(
+            (e: any) =>
+              e.dip_evaluation &&
+              e.dip_evaluation.suitability.tier !== 'D' &&
+              e.dip_evaluation.isActionableDip
+          );
+
         // Telegram Notification Dispatch
         let telegramStatus: { sent: boolean; message: string; target?: string | null } = {
           sent: false,
@@ -631,37 +642,57 @@ export default {
           ''
         ).trim().replace(/^['"]|['"]$/g, '');
 
+        const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        const kstTimeStr = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')} ${String(nowKST.getUTCHours()).padStart(2, '0')}:${String(nowKST.getUTCMinutes()).padStart(2, '0')}:${String(nowKST.getUTCSeconds()).padStart(2, '0')} KST`;
+
+        let reportText = `<b>🚀 퀀트 스캐너 실행 완료 리포트</b>\n`;
+        reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr}\n`;
+        reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        reportText += `• <b>검토 대상:</b> ${(result.evaluations || []).length}개 종목\n`;
+        reportText += `• <b>전략 A (모멘텀 돌파):</b> <b>${actionableSignals.length}건</b>\n`;
+        reportText += `• <b>전략 B (우량주 눌림추매):</b> <b>${dipBuyOpportunities.length}건</b>\n`;
+        reportText += `• <b>고위험 종목:</b> ${(result.evaluations || []).filter((e: any) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
+
+        // 1. 전략 A 섹션
+        reportText += `<b>🎯 전략 A: 모멘텀 & 추세돌파 포착 종목</b>\n`;
+        if (actionableSignals.length > 0) {
+          actionableSignals.slice(0, 5).forEach((sig: any, idx: number) => {
+            const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
+            const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
+            reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
+            reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (전일대비: ${arrow} ${changeStr})\n`;
+            reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
+            reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 팩터 점수 우수'}\n\n`;
+          });
+        } else {
+          reportText += `ℹ️ 현재 엄격한 모멘텀 돌파 제약을 통과한 신규 진입 신호 없음\n\n`;
+        }
+
+        // 2. 전략 B 섹션
+        reportText += `<b>🛡️ 전략 B: 우량대형주 & 지수ETF 분할적립/눌림목 포착</b>\n`;
+        if (dipBuyOpportunities.length > 0) {
+          dipBuyOpportunities.slice(0, 5).forEach((dip: any, idx: number) => {
+            const evalData = dip.dip_evaluation!;
+            const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
+            const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
+            reportText += `${idx + 1}. <b>${dip.ticker}</b> (${dip.name})\n`;
+            reportText += `   - 현재가: $${(dip.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+            reportText += `   - 적합도: <b>💎 ${evalData.suitability.tierLabel}</b> (${evalData.suitability.score}점)\n`;
+            reportText += `   - 눌림타이밍: <b>${evalData.timing.score}점</b> (RSI ${evalData.timing.rsi.toFixed(1)}, ${evalData.timing.drawdownLabel})\n`;
+            reportText += `   - 실행신호: <code>${evalData.actionSignal}</code> (${evalData.signalLabel})\n`;
+            reportText += `   - <b>💡 권고 분할적립 배수:</b> <b>${evalData.suggestedDcaRatio}</b>\n\n`;
+          });
+        } else {
+          reportText += `ℹ️ 현재 최적의 과매도 눌림목에 도달한 종목 없음 (정기 일정 유지)\n\n`;
+        }
+
+        if (url.origin) {
+          reportText += `🔗 <a href="${url.origin}">퀀트 시스템 대시보드 바로가기</a>`;
+        }
+
         if (sendTelegram) {
           if (botToken && chatId) {
             try {
-              const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
-              const kstTimeStr = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')} ${String(nowKST.getUTCHours()).padStart(2, '0')}:${String(nowKST.getUTCMinutes()).padStart(2, '0')}:${String(nowKST.getUTCSeconds()).padStart(2, '0')} KST`;
-
-              let reportText = `<b>🚀 퀀트 스캐너 실행 완료 리포트</b>\n`;
-              reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr}\n`;
-              reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
-              reportText += `• <b>검토 대상:</b> ${(result.evaluations || []).length}개 종목\n`;
-              reportText += `• <b>유효 진입 신호:</b> <b>${actionableSignals.length}건</b>\n`;
-              reportText += `• <b>고위험 종목:</b> ${(result.evaluations || []).filter((e: any) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
-
-              if (actionableSignals.length > 0) {
-                reportText += `<b>🎯 오늘 포착된 주요 기회 종목:</b>\n`;
-                actionableSignals.slice(0, 5).forEach((sig: any, idx: number) => {
-                  const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
-                  const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-                  reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
-                  reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
-                  reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
-                  reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 팩터 점수 우수'}\n\n`;
-                });
-              } else {
-                reportText += `ℹ️ 현재 엄격한 리스크 제약을 통과한 신규 진입 신호가 없습니다. (안전 자산/현금 비중 유지 권장)\n\n`;
-              }
-
-              if (url.origin) {
-                reportText += `🔗 <a href="${url.origin}">퀀트 시스템 대시보드 바로가기</a>`;
-              }
-
               const sendRes = await telegramNotifier.sendMessage(reportText, botToken, chatId);
               if (sendRes.success && !sendRes.previewOnly) {
                 telegramStatus = {
@@ -690,11 +721,63 @@ export default {
           }
         }
 
+        // Record the alert notification log (Audit trail for UI viewing)
+        try {
+          const allActionTickers = Array.from(
+            new Set([
+              ...actionableSignals.map((e: any) => e.ticker),
+              ...dipBuyOpportunities.map((e: any) => e.ticker),
+            ])
+          );
+
+          const alertDeliveryStatus = telegramStatus.sent
+            ? 'SENT'
+            : (!botToken || !chatId)
+            ? 'LOCAL_LOGGED'
+            : 'FAILED';
+
+          const alertLog: AlertNotificationLog = {
+            id: `alert-manual-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            kst_time: kstTimeStr,
+            strategy_type: 'DUAL_SCAN_REPORT',
+            title: `⚡ [수동 스캔] 듀얼 퀀트 브리핑 (모멘텀 ${actionableSignals.length}건 + 눌림목 ${dipBuyOpportunities.length}건)`,
+            tickers: allActionTickers,
+            signals_count: actionableSignals.length + dipBuyOpportunities.length,
+            delivery_status: alertDeliveryStatus,
+            delivery_target: telegramStatus.target || (chatId ? `${chatId.slice(0, 3)}****` : null),
+            message_preview: `전략 A ${actionableSignals.length}건, 전략 B ${dipBuyOpportunities.length}건 (${telegramStatus.message})`,
+            message_body: reportText,
+            details: {
+              strategy_a_tickers: actionableSignals.map((e: any) => ({
+                ticker: e.ticker,
+                score: e.opportunity?.opportunity_score ?? 50,
+                decision: e.decision?.decision || 'BUY',
+                price: e.price ?? 0,
+                change1d: e.change1d ?? 0,
+              })),
+              strategy_b_tickers: dipBuyOpportunities.map((e: any) => ({
+                ticker: e.ticker,
+                tier: e.dip_evaluation?.suitability.tier || 'A',
+                dip_score: e.dip_evaluation?.dip_score || 0,
+                rsi: e.dip_evaluation?.timing.rsi || 50,
+                drawdown: e.dip_evaluation?.timing.drawdownLabel || '0.0%',
+                suggested_action: e.dip_evaluation?.suggestedDcaRatio || '1.0x 정기 적립',
+              })),
+            },
+          };
+
+          await alertHistoryRepository.save(alertLog);
+        } catch (aErr) {
+          console.warn('[WorkerScan] Failed to save alert log:', aErr);
+        }
+
         return jsonResponse({
           success: true,
           scan_log: runLog,
           new_signals: result.newSignals || [],
           actionable_signals: actionableSignals,
+          dip_buy_signals: dipBuyOpportunities,
           evaluations_count: (result.evaluations || []).length,
           evaluations: result.evaluations || [],
           telegram_status: telegramStatus,

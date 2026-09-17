@@ -60,6 +60,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [deleteTargetTicker, setDeleteTargetTicker] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [alertRefreshKey, setAlertRefreshKey] = useState<number>(0);
 
   const handleOpenSymbolDetail = (ticker: string, initialTab: 'overview' | 'chart' | 'dip_buy' = 'overview') => {
     setSelectedTicker(ticker);
@@ -423,6 +424,10 @@ export default function App() {
       } catch (e) {}
     }
     showToast('전체 워치리스트 퀀트 파이프라인 평가 및 스냅샷 저장이 완료되었습니다.');
+    setAlertRefreshKey((k) => k + 1);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: scanResult }));
+    }
     await loadAllData();
   };
 
@@ -534,6 +539,7 @@ export default function App() {
         {activeTab === 'runs' && (
           <ScanRunsView
             runs={runs}
+            alertRefreshKey={alertRefreshKey}
             onTriggerScan={() => setIsScanModalOpen(true)}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}

@@ -100,6 +100,9 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
         if (data.telegram_status) {
           setTelegramStatus(data.telegram_status);
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: data }));
+        }
         onScanCompleted(data);
       } else {
         throw new Error(data.error || '스캔 엔진 실행 중 오류가 발생했습니다.');
@@ -391,6 +394,9 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               {onViewAlertHistory && (
                 <button
                   onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('quant-alerts-updated'));
+                    }
                     onClose();
                     onViewAlertHistory();
                   }}
@@ -401,7 +407,12 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                 </button>
               )}
               <button
-                onClick={onClose}
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('quant-alerts-updated'));
+                  }
+                  onClose();
+                }}
                 className={`w-full ${
                   onViewAlertHistory ? 'sm:w-1/2' : ''
                 } py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-bold transition-all active:scale-95`}
