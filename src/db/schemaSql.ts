@@ -181,7 +181,24 @@ CREATE TABLE IF NOT EXISTS scan_run_items (
   finished_at TIMESTAMPTZ NOT NULL
 );
 
--- 11. Schema Compatibility Migrations (Automatically adds any missing columns to existing tables)
+-- 11. Alert Notifications History
+CREATE TABLE IF NOT EXISTS alert_notifications (
+  id VARCHAR(100) PRIMARY KEY,
+  timestamp TIMESTAMPTZ NOT NULL,
+  kst_time VARCHAR(50) NOT NULL,
+  strategy_type VARCHAR(50) NOT NULL,
+  title TEXT NOT NULL,
+  tickers TEXT[] NOT NULL DEFAULT '{}',
+  signals_count INT DEFAULT 0,
+  delivery_status VARCHAR(30) NOT NULL DEFAULT 'SENT',
+  delivery_target VARCHAR(100),
+  message_preview TEXT,
+  message_body TEXT,
+  details JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. Schema Compatibility Migrations (Automatically adds any missing columns to existing tables)
 ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT '';
 ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS asset_type VARCHAR(50) DEFAULT 'equity';
 ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS exchange VARCHAR(50) DEFAULT 'US';
@@ -230,8 +247,9 @@ CREATE INDEX IF NOT EXISTS idx_evaluations_ticker_date ON evaluations (ticker, e
 CREATE INDEX IF NOT EXISTS idx_signals_date ON signals (signal_date DESC);
 CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals (ticker);
 CREATE INDEX IF NOT EXISTS idx_scan_runs_started ON scan_runs (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alert_notifications_time ON alert_notifications (timestamp DESC);
 
--- 13. Disable RLS or Allow Public Access (For API Server Service/Anon Key access)
+-- 14. Disable RLS or Allow Public Access (For API Server Service/Anon Key access)
 ALTER TABLE IF EXISTS assets DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS watchlist DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS market_data_daily DISABLE ROW LEVEL SECURITY;
@@ -242,4 +260,5 @@ ALTER TABLE IF EXISTS signals DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS signal_outcomes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scan_runs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scan_run_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS alert_notifications DISABLE ROW LEVEL SECURITY;
 `;

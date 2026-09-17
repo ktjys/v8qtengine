@@ -213,6 +213,7 @@ class UniversalDatabaseClient {
       'signal_outcomes',
       'scan_runs',
       'scan_run_items',
+      'alert_notifications',
       'classification_snapshot',
     ];
 

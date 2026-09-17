@@ -3,6 +3,7 @@ import { watchlistRepository } from './src/db/repositories/watchlistRepository';
 import { assetRepository } from './src/db/repositories/assetRepository';
 import { signalRepository } from './src/db/repositories/signalRepository';
 import { scanRunRepository } from './src/db/repositories/scanRunRepository';
+import { alertHistoryRepository } from './src/db/repositories/alertHistoryRepository';
 import { evaluationService } from './src/pipeline/evaluationService';
 import { scanService } from './src/pipeline/scanService';
 import { dailyScoreHistoryService } from './src/pipeline/dailyScoreHistoryService';
@@ -737,6 +738,84 @@ export default {
         dbClient.classifications.delete(ticker);
       }
       return jsonResponse({ success: true, message: `${ticker} 분류가 자동 분석으로 복원되었습니다.` });
+    }
+
+    // ========== Alert History Routes ==========
+    if (path === '/api/v8/alerts' && method === 'GET') {
+      try {
+        const searchParams = url.searchParams;
+        const ticker = searchParams.get('ticker');
+        const strategy = searchParams.get('strategy');
+
+        let alerts = await alertHistoryRepository.getAll();
+
+        if (ticker && typeof ticker === 'string') {
+          const clean = ticker.toUpperCase().trim();
+          alerts = alerts.filter((a) => a.tickers.map((t) => t.toUpperCase()).includes(clean));
+        }
+
+        if (strategy && typeof strategy === 'string' && strategy !== 'ALL') {
+          if (strategy === 'STRATEGY_B') {
+            alerts = alerts.filter(
+              (a) =>
+                a.strategy_type === 'STRATEGY_B' ||
+                (a.details?.strategy_b_tickers && a.details.strategy_b_tickers.length > 0)
+            );
+          } else if (strategy === 'STRATEGY_A') {
+            alerts = alerts.filter(
+              (a) =>
+                a.strategy_type === 'STRATEGY_A' ||
+                (a.details?.strategy_a_tickers && a.details.strategy_a_tickers.length > 0)
+            );
+          } else {
+            alerts = alerts.filter((a) => a.strategy_type === strategy);
+          }
+        }
+
+        return jsonResponse({
+          success: true,
+          alerts,
+          totalCount: alerts.length,
+        });
+      } catch (err: any) {
+        console.error('[WorkerAlerts] GET error:', err);
+        return jsonResponse({
+          success: false,
+          error: err.message || '알림 발송 내역 조회 실패',
+          alerts: [],
+        }, 500);
+      }
+    }
+
+    if (path === '/api/v8/alerts' && method === 'POST') {
+      try {
+        const alertData = await request.json().catch(() => ({}));
+        if (!alertData || !alertData.title) {
+          return jsonResponse({ success: false, error: '유효한 알림 데이터가 누락되었습니다.' }, 400);
+        }
+
+        const saved = await alertHistoryRepository.save(alertData);
+        return jsonResponse({ success: true, alert: saved });
+      } catch (err: any) {
+        console.error('[WorkerAlerts] POST error:', err);
+        return jsonResponse({
+          success: false,
+          error: err.message || '알림 저장 실패',
+        }, 500);
+      }
+    }
+
+    if (path === '/api/v8/alerts' && method === 'DELETE') {
+      try {
+        await alertHistoryRepository.clearAll();
+        return jsonResponse({ success: true, message: '알림 발송 이력이 초기화되었습니다.' });
+      } catch (err: any) {
+        console.error('[WorkerAlerts] DELETE error:', err);
+        return jsonResponse({
+          success: false,
+          error: err.message || '알림 이력 초기화 실패',
+        }, 500);
+      }
     }
 
     // ========== Backtest Backfill ==========

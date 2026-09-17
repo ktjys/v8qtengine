@@ -990,6 +990,10 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                   이미 <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 크론 스케줄(<code className="text-slate-300 text-[10px]">06:30, 23:00 KST</code>)과 <code className="text-emerald-300 font-mono text-[10px]">worker.ts</code>의 <code className="text-slate-300 text-[10px]">scheduled()</code> 이벤트 핸들러를 등록해 두었습니다.<br />
                   👉 <b>Cloudflare 대시보드</b> (<span className="text-slate-200 font-semibold">Workers & Pages &gt; v8qtengine &gt; Settings &gt; Triggers &gt; Cron Triggers</span>)에서 확인하실 수 있으며, 외부 크론 없이도 Cloudflare가 시간에 맞춰 Worker를 직접 깨워 텔레그램을 100% 자동 발송합니다!
                 </p>
+                <p>
+                  <b className="text-rose-400">⚠️ 중복 실행(Double Trigger) 주의:</b><br />
+                  Cloudflare Cron Triggers와 외부 크론(cron-job.org 등)을 <b>동일한 시각(예: 23:00)에 동시에 등록하면 스캔이 2번 실행</b>될 수 있습니다. 엔진 자체에 45초 중복 방지 디바운스 가드가 적용되어 있으나, 외부 크론과 Cloudflare 크론 중 하나만 활성화하시는 것을 권장합니다.
+                </p>
               </div>
             </div>
 

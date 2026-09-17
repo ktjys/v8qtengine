@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  Database,
   Filter,
   Info,
   LineChart,
@@ -72,6 +73,7 @@ interface WatchlistViewProps {
   onClearDummyTickers?: () => void;
   onClearAllWatchlist?: () => void;
   onRestoreDefaultSeed?: () => void;
+  onOpenDbHealthModal?: () => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
@@ -89,6 +91,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   onClearDummyTickers,
   onClearAllWatchlist,
   onRestoreDefaultSeed,
+  onOpenDbHealthModal,
 }) => {
   const [strategyMode, setStrategyMode] = useState<ActiveStrategyMode>(initialStrategyMode);
   const [isOptimizerModalOpen, setIsOptimizerModalOpen] = useState(false);
@@ -379,6 +382,18 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {onOpenDbHealthModal && (
+                <button
+                  onClick={onOpenDbHealthModal}
+                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                  title="Supabase DB 테이블 상태 및 DDL 마이그레이션 스크립트를 확인합니다."
+                >
+                  <Database className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">DB 헬스체크</span>
+                  <span className="sm:hidden">DB체크</span>
+                </button>
+              )}
+
               {onRestoreDefaultSeed && (
                 <button
                   onClick={() => {

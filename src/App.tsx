@@ -22,6 +22,8 @@ import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
+import { DatabaseHealthModal } from './components/DatabaseHealthModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './constants/limits';
 import {
   DEFAULT_STRATEGY_CONFIG,
@@ -53,6 +55,7 @@ export default function App() {
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
+  const [isDbHealthModalOpen, setIsDbHealthModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [deleteTargetTicker, setDeleteTargetTicker] = useState<string | null>(null);
@@ -433,6 +436,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenScanModal={() => setIsScanModalOpen(true)}
         onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
+        onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
         totalCount={evaluations.length}
         signalsCount={signals.length}
         isInitialLoading={isInitialLoading}
@@ -502,6 +506,7 @@ export default function App() {
             onClearDummyTickers={handleClearDummyTickers}
             onClearAllWatchlist={handleClearAllWatchlist}
             onRestoreDefaultSeed={handleRestoreDefaultSeed}
+            onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
           />
         )}
 
@@ -531,6 +536,7 @@ export default function App() {
             runs={runs}
             onTriggerScan={() => setIsScanModalOpen(true)}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
+            onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
           />
         )}
 
@@ -667,6 +673,17 @@ export default function App() {
           onClose={() => setIsScheduleModalOpen(false)}
           onShowToast={showToast}
         />
+      )}
+
+      {/* Database Health Check & DDL Modal */}
+      {isDbHealthModalOpen && (
+        <ErrorBoundary fallbackTitle="DB 헬스체크 모달을 표시할 수 없습니다." onReset={() => setIsDbHealthModalOpen(false)}>
+          <DatabaseHealthModal
+            isOpen={isDbHealthModalOpen}
+            onClose={() => setIsDbHealthModalOpen(false)}
+            onShowToast={showToast}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Toast Notification */}

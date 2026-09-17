@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Bell, CheckCircle2, Clock, Layers, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, Bell, CheckCircle2, Clock, Database, Layers, RefreshCw, Search } from 'lucide-react';
 import { ScanRunLog } from '../types/v8';
 import { SortableHeader } from './SortableHeader';
 import { AlertHistoryView } from './AlertHistoryView';
@@ -17,6 +17,7 @@ interface ScanRunsViewProps {
   runs: ScanRunLog[];
   onTriggerScan: () => void;
   onSelectTicker?: (ticker: string, tab?: string) => void;
+  onOpenDbHealthModal?: () => void;
   initialTab?: 'alerts' | 'runs';
 }
 
@@ -24,6 +25,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
   runs,
   onTriggerScan,
   onSelectTicker,
+  onOpenDbHealthModal,
   initialTab = 'alerts',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'alerts' | 'runs'>(initialTab);
@@ -88,7 +90,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn text-xs">
       {/* Top Level Sub-Navigation Switcher */}
-      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-2xl p-2 shadow-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/90 border border-slate-800 rounded-2xl p-2 shadow-sm">
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setActiveSubTab('alerts')}
@@ -115,13 +117,26 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
           </button>
         </div>
 
-        <button
-          onClick={onTriggerScan}
-          className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold shadow-md transition-all active:scale-95 text-xs whitespace-nowrap"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>신규 스캔 실행</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {onOpenDbHealthModal && (
+            <button
+              onClick={onOpenDbHealthModal}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-slate-100 border border-slate-700 font-semibold shadow-sm transition-all active:scale-95 text-xs whitespace-nowrap"
+              title="데이터베이스 헬스체크 및 DDL 스키마 확인"
+            >
+              <Database className="w-3.5 h-3.5 text-cyan-400" />
+              <span>DB 헬스체크</span>
+            </button>
+          )}
+
+          <button
+            onClick={onTriggerScan}
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold shadow-md transition-all active:scale-95 text-xs whitespace-nowrap"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>신규 스캔 실행</span>
+          </button>
+        </div>
       </div>
 
       {/* Sub-Tab 1: Alert History */}

@@ -50,6 +50,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
     'signal_outcomes',
     'scan_runs',
     'scan_run_items',
+    'alert_notifications',
   ];
 
   const startTime = Date.now();

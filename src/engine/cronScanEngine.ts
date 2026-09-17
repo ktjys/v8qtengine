@@ -13,6 +13,8 @@ import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
 let lastCronScanResult: CronScanResult | null = null;
+let activeExecutionPromise: Promise<CronScanResult> | null = null;
+let lastExecutedTimestamp = 0;
 
 export function getLastCronScanResult(): CronScanResult | null {
   return lastCronScanResult;
@@ -55,6 +57,36 @@ export interface CronScanResult {
 }
 
 export async function executeCronScan(options: CronScanOptions = {}): Promise<CronScanResult> {
+  // Concurrency Guard: If a scan is already actively running, await and return its result to prevent concurrent runs
+  if (activeExecutionPromise) {
+    console.log(`[CronScanEngine] Scan already running, joining existing execution (triggeredBy: ${options.triggeredBy || 'unknown'})`);
+    return activeExecutionPromise;
+  }
+
+  // Debounce Guard: If a scan finished less than 45 seconds ago and this is not an explicit manual trigger, return the cached result
+  const now = Date.now();
+  const timeSinceLastRun = now - lastExecutedTimestamp;
+  const isManual = options.triggeredBy === 'ManualTrigger' || options.triggeredBy === 'DirectUI';
+  if (!isManual && lastCronScanResult && lastCronScanResult.success && timeSinceLastRun < 45000) {
+    console.log(`[CronScanEngine] Skipping duplicate trigger within 45s debounce window (${Math.round(timeSinceLastRun / 1000)}s ago by ${options.triggeredBy})`);
+    return {
+      ...lastCronScanResult,
+      telegram_status: {
+        ...lastCronScanResult.telegram_status,
+        message: `${lastCronScanResult.telegram_status.message} (45초 이내 중복 호출 방지: 이전 결과 반환)`,
+      },
+    };
+  }
+
+  activeExecutionPromise = doExecuteCronScan(options).finally(() => {
+    activeExecutionPromise = null;
+    lastExecutedTimestamp = Date.now();
+  });
+
+  return activeExecutionPromise;
+}
+
+async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronScanResult> {
   const startTime = Date.now();
   const runId = `CRON_${Date.now()}`;
 

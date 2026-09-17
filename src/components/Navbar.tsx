@@ -3,6 +3,7 @@ import {
   Activity,
   Bell,
   Clock,
+  Database,
   Globe,
   Layers,
   ListFilter,
@@ -18,6 +19,7 @@ interface NavbarProps {
   setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide') => void;
   onOpenScanModal: () => void;
   onOpenScheduleModal: () => void;
+  onOpenDbHealthModal?: () => void;
   totalCount: number;
   signalsCount: number;
   isInitialLoading?: boolean;
@@ -28,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   onOpenScanModal,
   onOpenScheduleModal,
+  onOpenDbHealthModal,
   totalCount,
   signalsCount,
   isInitialLoading = false,
@@ -178,6 +181,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Action Trigger */}
           <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
+            {onOpenDbHealthModal && (
+              <button
+                id="header-db-health-btn"
+                onClick={onOpenDbHealthModal}
+                className="flex items-center space-x-1 p-2 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs sm:text-sm font-medium border border-slate-700 transition-all active:scale-95"
+                title="데이터베이스 헬스체크 & DDL (Supabase 연결 상태 및 스키마 확인)"
+              >
+                <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                <span className="hidden lg:inline">DB 헬스체크</span>
+              </button>
+            )}
+
             <button
               id="header-schedule-btn"
               onClick={onOpenScheduleModal}
@@ -274,6 +289,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             전략 매매 가이드
           </button>
+          {onOpenDbHealthModal && (
+            <button
+              onClick={onOpenDbHealthModal}
+              className="px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium text-cyan-400 bg-slate-950/60 border border-slate-800 flex items-center space-x-1"
+            >
+              <Database className="w-3 h-3 text-cyan-400" />
+              <span>DB 헬스체크</span>
+            </button>
+          )}
         </div>
       </div>
     </header>
