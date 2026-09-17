@@ -6,7 +6,7 @@ export interface DiagnosticTableResult {
   recordCount: number;
   storageMode: 'SUPABASE' | 'DISCONNECTED';
   latencyMs: number;
-  status: 'HEALTHY' | 'EMPTY' | 'NOT_INITIALIZED' | 'ERROR';
+  status: 'HEALTHY' | 'EMPTY' | 'NOT_INITIALIZED' | 'RLS_BLOCKED' | 'ERROR';
   sampleInfo?: {
     idOrKey?: string;
     updatedAt?: string;
@@ -117,14 +117,49 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
             };
           }
 
+          let tableStatus: 'HEALTHY' | 'EMPTY' | 'RLS_BLOCKED' = recCount > 0 ? 'HEALTHY' : 'EMPTY';
+          let writeError: string | undefined;
+
+          // Active write test for alert_notifications to detect Row Level Security (RLS) blockage early
+          if (tableName === 'alert_notifications') {
+            try {
+              const probeId = `__probe_${Date.now()}`;
+              const probeRes = await client.from('alert_notifications').insert({
+                id: probeId,
+                timestamp: new Date().toISOString(),
+                kst_time: 'PROBE',
+                strategy_type: 'PROBE',
+                title: 'probe',
+                tickers: [],
+              });
+
+              if (probeRes.error) {
+                if (
+                  probeRes.error.code === '42501' ||
+                  probeRes.error.message?.includes('row-level security') ||
+                  probeRes.error.message?.includes('policy')
+                ) {
+                  tableStatus = 'RLS_BLOCKED';
+                  writeError = 'RLS(행 수준 보안) 정책으로 인해 쓰기가 차단됨 (42501). DB 설정 팝업에서 "RLS 해제 SQL"을 실행해주세요.';
+                }
+              } else {
+                // Succeeded: clean up probe row
+                await client.from('alert_notifications').delete().eq('id', probeId);
+              }
+            } catch (pErr) {
+              // Ignore probe probe exception
+            }
+          }
+
           tableResults[tableName] = {
             tableName,
             initialized: true,
             recordCount: recCount,
             storageMode: 'SUPABASE',
             latencyMs: latency,
-            status: recCount > 0 ? 'HEALTHY' : 'EMPTY',
+            status: tableStatus,
             sampleInfo,
+            error: writeError,
           };
         }
       } catch (err: any) {
@@ -167,6 +202,9 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
   if (!isConnected) {
     persistenceHealth = 'DB_NOT_CONNECTED';
     recommendation = 'Supabase DB가 연결되지 않았습니다. Cloudflare 환경변수 SUPABASE_URL과 SUPABASE_KEY를 설정하거나, DB Settings에서 연결하세요.';
+  } else if (tableResults['alert_notifications']?.status === 'RLS_BLOCKED') {
+    persistenceHealth = 'PARTIALLY_INITIALIZED';
+    recommendation = '⚠️ alert_notifications 테이블이 생성되었으나 RLS(행 수준 보안) 정책으로 인해 새 알람 쓰기가 차단 중입니다. DB 설정 팝업의 [RLS 해제 SQL]을 Supabase SQL Editor에서 실행해주세요.';
   } else if (missingCount === 0) {
     persistenceHealth = 'FULLY_INITIALIZED';
     recommendation = `모든 ${targetTables.length}개 테이블이 Supabase에 올바르게 초기화되어 총 ${totalRecords}개 레코드가 클라우드에 영구 저장되고 있습니다.`;

@@ -171,6 +171,8 @@ const inMemoryAlertLogs: Map<string, AlertNotificationLog> = new Map();
 INITIAL_ALERT_LOGS.forEach((item) => inMemoryAlertLogs.set(item.id, item));
 
 export class AlertHistoryRepository {
+  public isRlsBlocked: boolean = false;
+
   async getAll(): Promise<AlertNotificationLog[]> {
     if (dbClient.isTableAvailable('alert_notifications') && dbClient.supabase) {
       try {
@@ -181,30 +183,32 @@ export class AlertHistoryRepository {
 
         if (error) {
           dbClient.handleDbError('alert_notifications', 'getAll', error);
-        } else if (Array.isArray(data) && data.length > 0) {
-          const mapped: AlertNotificationLog[] = data.map((r: any) => ({
-            id: r.id,
-            timestamp: r.timestamp,
-            kst_time: r.kst_time,
-            strategy_type: r.strategy_type,
-            title: r.title,
-            tickers: r.tickers || [],
-            signals_count: r.signals_count || 0,
-            delivery_status: r.delivery_status,
-            delivery_target: r.delivery_target,
-            message_preview: r.message_preview,
-            message_body: r.message_body,
-            details: r.details,
-          }));
-          mapped.forEach((item) => inMemoryAlertLogs.set(item.id, item));
-          return mapped;
+        } else if (Array.isArray(data)) {
+          if (data.length > 0) {
+            const mapped: AlertNotificationLog[] = data.map((r: any) => ({
+              id: r.id,
+              timestamp: r.timestamp,
+              kst_time: r.kst_time,
+              strategy_type: r.strategy_type,
+              title: r.title,
+              tickers: r.tickers || [],
+              signals_count: r.signals_count || 0,
+              delivery_status: r.delivery_status,
+              delivery_target: r.delivery_target,
+              message_preview: r.message_preview,
+              message_body: r.message_body,
+              details: r.details,
+            }));
+            // Merge Supabase rows into memory map
+            mapped.forEach((item) => inMemoryAlertLogs.set(item.id, item));
+          }
         }
       } catch (err) {
         dbClient.handleDbError('alert_notifications', 'getAll', err);
       }
     }
 
-    // Return in-memory logs sorted desc
+    // Return in-memory logs sorted desc (includes both remote DB and current session logs)
     return Array.from(inMemoryAlertLogs.values()).sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
@@ -234,6 +238,7 @@ export class AlertHistoryRepository {
       }).format(new Date(log.timestamp || Date.now()));
     }
 
+    // Always update in-memory state immediately so UI updates in real-time
     inMemoryAlertLogs.set(log.id, log);
 
     if (dbClient.isTableAvailable('alert_notifications') && dbClient.supabase) {
@@ -259,6 +264,16 @@ export class AlertHistoryRepository {
 
         if (error) {
           dbClient.handleDbError('alert_notifications', 'save', error);
+          if (
+            error.code === '42501' ||
+            error.message?.includes('row-level security') ||
+            error.message?.includes('policy')
+          ) {
+            this.isRlsBlocked = true;
+            console.warn('[AlertHistoryRepository] ⚠️ Supabase RLS 정책 위반으로 DB 저장이 거부되었습니다 (42501). 인메모리에 안전하게 보관됩니다.');
+          }
+        } else {
+          this.isRlsBlocked = false;
         }
       } catch (err) {
         dbClient.handleDbError('alert_notifications', 'save', err);
@@ -266,6 +281,44 @@ export class AlertHistoryRepository {
     }
 
     return log;
+  }
+
+  async syncPendingToDb(): Promise<{ syncedCount: number; error?: string }> {
+    if (!dbClient.isTableAvailable('alert_notifications') || !dbClient.supabase) {
+      return { syncedCount: 0, error: 'DB 미연결' };
+    }
+    try {
+      const items = Array.from(inMemoryAlertLogs.values()).filter((i) => !i.id.startsWith('alert-seed-'));
+      if (items.length === 0) return { syncedCount: 0 };
+
+      let syncedCount = 0;
+      for (const item of items) {
+        const { error } = await dbClient.supabase.from('alert_notifications').upsert({
+          id: item.id,
+          timestamp: item.timestamp,
+          kst_time: item.kst_time,
+          strategy_type: item.strategy_type,
+          title: item.title,
+          tickers: item.tickers,
+          signals_count: item.signals_count,
+          delivery_status: item.delivery_status,
+          delivery_target: item.delivery_target,
+          message_preview: item.message_preview,
+          message_body: item.message_body,
+          details: item.details,
+        });
+        if (!error) {
+          syncedCount++;
+          this.isRlsBlocked = false;
+        } else if (error.code === '42501') {
+          this.isRlsBlocked = true;
+          return { syncedCount, error: 'RLS 정책 위반 (42501)' };
+        }
+      }
+      return { syncedCount };
+    } catch (err: any) {
+      return { syncedCount: 0, error: err?.message };
+    }
   }
 
   async clearAll(): Promise<void> {

@@ -37,6 +37,7 @@ alertRouter.get('/', async (req, res) => {
       success: true,
       alerts,
       totalCount: alerts.length,
+      rlsBlocked: alertHistoryRepository.isRlsBlocked,
     });
   } catch (err: any) {
     console.error('[AlertRoutes] GET error:', err);
@@ -44,7 +45,18 @@ alertRouter.get('/', async (req, res) => {
       success: false,
       error: err.message || '알림 발송 내역 조회 실패',
       alerts: [],
+      rlsBlocked: alertHistoryRepository.isRlsBlocked,
     });
+  }
+});
+
+// POST /api/v8/alerts/sync
+alertRouter.post('/sync', async (req, res) => {
+  try {
+    const result = await alertHistoryRepository.syncPendingToDb();
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

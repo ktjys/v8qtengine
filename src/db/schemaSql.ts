@@ -261,4 +261,7 @@ ALTER TABLE IF EXISTS signal_outcomes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scan_runs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scan_run_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS alert_notifications DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all alert_notifications" ON alert_notifications;
+CREATE POLICY "Allow all alert_notifications" ON alert_notifications FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE alert_notifications TO anon, authenticated, service_role;
 `;

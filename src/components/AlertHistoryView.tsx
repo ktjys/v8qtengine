@@ -13,13 +13,16 @@ import {
   Search,
   Send,
   Shield,
+  ShieldAlert,
   Trash2,
   Zap,
   Layers,
   AlertCircle,
   Info,
+  PlusCircle,
 } from 'lucide-react';
 import { AlertNotificationLog, AlertStrategyType, AlertDeliveryStatus } from '../types/v8';
+import { ALERT_NOTIFICATIONS_RLS_FIX_SQL } from './DatabaseHealthModal';
 
 interface AlertHistoryViewProps {
   onSelectTicker?: (ticker: string, tab?: string) => void;
@@ -40,6 +43,10 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [copiedAlertId, setCopiedAlertId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [isRlsBlocked, setIsRlsBlocked] = useState(false);
+  const [copiedRlsSql, setCopiedRlsSql] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isCreatingTestAlert, setIsCreatingTestAlert] = useState(false);
 
   const fetchAlerts = async () => {
     setIsLoading(true);
@@ -48,6 +55,24 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.alerts)) {
         setAlerts(data.alerts);
+        if (data.rlsBlocked != null) {
+          setIsRlsBlocked(Boolean(data.rlsBlocked));
+        }
+      }
+
+      // Check diagnostics to ensure accurate RLS status
+      try {
+        const diagRes = await fetch('/api/v8/system/db/diagnostics');
+        if (diagRes.ok) {
+          const diagData = await diagRes.json();
+          if (diagData?.tables?.alert_notifications?.status === 'RLS_BLOCKED') {
+            setIsRlsBlocked(true);
+          } else if (diagData?.tables?.alert_notifications?.status === 'HEALTHY') {
+            setIsRlsBlocked(false);
+          }
+        }
+      } catch {
+        // Ignore diagnostic probe error
       }
     } catch (err) {
       console.error('Failed to load alert history:', err);
@@ -59,6 +84,65 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   useEffect(() => {
     fetchAlerts();
   }, []);
+
+  const handleCopyRlsSql = () => {
+    navigator.clipboard.writeText(ALERT_NOTIFICATIONS_RLS_FIX_SQL);
+    setCopiedRlsSql(true);
+    setTimeout(() => setCopiedRlsSql(false), 2500);
+  };
+
+  const handleSyncToDb = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/v8/alerts/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setIsRlsBlocked(false);
+        await fetchAlerts();
+      } else if (data.error?.includes('42501') || data.error?.includes('RLS')) {
+        setIsRlsBlocked(true);
+      }
+    } catch (err) {
+      console.error('Sync failed:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCreateTestAlert = async () => {
+    setIsCreatingTestAlert(true);
+    try {
+      const res = await fetch('/api/v8/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: '[수동 검증] 알람 발송 및 실시간 DB 기록 확인',
+          timestamp: new Date().toISOString(),
+          strategy_type: 'STRATEGY_B',
+          tickers: ['NVDA', 'AAPL'],
+          signals_count: 2,
+          delivery_status: 'LOCAL_LOGGED',
+          delivery_target: '로컬 시스템 즉시 기록',
+          message_preview: '[전략 B 우량주] NVDA (이격도 97.2%), AAPL (이격도 98.1%)',
+          message_body: '알림 발송 이력 시스템이 정상적으로 새로운 알람을 감지 및 기록하였습니다.',
+          details: {
+            strategy_b_tickers: [
+              { ticker: 'NVDA', company_name: 'NVIDIA Corp', rsi14: 38.5, disparity20: 97.2 },
+              { ticker: 'AAPL', company_name: 'Apple Inc', rsi14: 41.2, disparity20: 98.1 },
+            ],
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchAlerts();
+      }
+    } catch (err) {
+      console.error('Failed to create test alert:', err);
+    } finally {
+      setIsCreatingTestAlert(false);
+    }
+  };
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -283,6 +367,38 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
         </div>
       </div>
 
+      {/* RLS Warning Banner if Blocked */}
+      {isRlsBlocked && (
+        <div className="bg-rose-950/30 border border-rose-500/40 rounded-xl p-4 text-rose-200 space-y-2.5 animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center space-x-2 font-bold text-rose-300 text-xs sm:text-sm">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>Supabase RLS(행 수준 보안)로 인해 새 알람의 원격 DB 저장이 차단 중입니다</span>
+            </div>
+            <div className="flex items-center space-x-2 self-start sm:self-auto">
+              <button
+                onClick={handleCopyRlsSql}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-rose-950 transition-all cursor-pointer"
+              >
+                {copiedRlsSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedRlsSql ? '복사됨!' : '⚡ RLS 해제 SQL 복사'}</span>
+              </button>
+              <button
+                onClick={handleSyncToDb}
+                disabled={isSyncing}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>동기화 확인</span>
+              </button>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            현재 발생한 알림은 시스템 메모리에 안전하게 보관 중이며, Supabase SQL Editor에서 <b>[⚡ RLS 해제 SQL]</b>을 실행하시면 원격 영구 저장이 활성화되고 모든 알람이 DB로 자동 동기화됩니다.
+          </p>
+        </div>
+      )}
+
       {/* Informative Guidance Banner */}
       <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-3.5 py-2.5 flex items-start space-x-2.5 text-xs text-slate-400">
         <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
@@ -375,6 +491,16 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">새로고침</span>
+          </button>
+
+          <button
+            onClick={handleCreateTestAlert}
+            disabled={isCreatingTestAlert}
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-xs border border-cyan-500/30 transition-all active:scale-95 disabled:opacity-50"
+            title="새 알람 발송 기록 테스트 생성"
+          >
+            <PlusCircle className={`w-3.5 h-3.5 ${isCreatingTestAlert ? 'animate-spin' : ''}`} />
+            <span className="hidden md:inline">테스트 기록</span>
           </button>
 
           {alerts.length > 0 && (
