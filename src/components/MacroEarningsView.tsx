@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Activity,
   AlertOctagon,
@@ -23,14 +23,19 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { MacroMarketRegime, EarningsEvent, EarningsRiskStage } from '../types/v8';
+import { MacroMarketRegime, EarningsEvent, EarningsRiskStage, MarketRegion } from '../types/v8';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 interface MacroEarningsViewProps {
   onSelectTicker?: (ticker: string) => void;
+  activeMarket?: MarketRegion;
 }
 
-export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({ onSelectTicker }) => {
+export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({
+  onSelectTicker,
+  activeMarket = 'US' as MarketRegion,
+}) => {
   const [macroRegime, setMacroRegime] = useState<MacroMarketRegime | null>(null);
   const [earningsEvents, setEarningsEvents] = useState<EarningsEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +47,7 @@ export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({ onSelectTi
     try {
       // Try API first, fallback to client-side engine if needed
       try {
-        const url = forceRefresh ? '/api/v8/macro/regime?refresh=true' : '/api/v8/macro/regime';
+        const url = forceRefresh ? `/api/v8/macro/regime?market=${activeMarket}&refresh=true` : `/api/v8/macro/regime?market=${activeMarket}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
@@ -59,17 +64,17 @@ export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({ onSelectTi
       }
 
       try {
-        const res = await fetch('/api/v8/macro/earnings');
+        const res = await fetch(`/api/v8/macro/earnings?market=${activeMarket}`);
         if (res.ok) {
           const data = await res.json();
           if (data.events) {
             setEarningsEvents(data.events);
           }
         } else {
-          setEarningsEvents(MacroEarningsEngine.getEarningsCalendar());
+          setEarningsEvents(MacroEarningsEngine.getEarningsCalendar(undefined, activeMarket));
         }
       } catch {
-        setEarningsEvents(MacroEarningsEngine.getEarningsCalendar());
+        setEarningsEvents(MacroEarningsEngine.getEarningsCalendar(undefined, activeMarket));
       }
     } catch (err) {
       console.error('[MacroEarningsView] Load error:', err);
@@ -80,21 +85,28 @@ export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({ onSelectTi
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeMarket]);
 
-  const filteredEarnings = earningsEvents.filter((ev) => {
-    if (filterStage !== 'ALL' && ev.riskStage !== filterStage) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toUpperCase().trim();
-      const matchTicker = ev.ticker.toUpperCase().includes(q);
-      const matchName = ev.companyName.toUpperCase().includes(q);
-      if (!matchTicker && !matchName) return false;
-    }
-    return true;
-  });
+  const marketEarnings = useMemo(() => {
+    if (!activeMarket) return earningsEvents;
+    return earningsEvents.filter((ev) => detectMarketRegion(ev.ticker) === activeMarket);
+  }, [earningsEvents, activeMarket]);
 
-  const imminentCount = earningsEvents.filter((e) => e.riskStage === 'IMMINENT_DANGER').length;
-  const upcomingCount = earningsEvents.filter((e) => e.riskStage === 'UPCOMING_SOON').length;
+  const filteredEarnings = useMemo(() => {
+    return marketEarnings.filter((ev) => {
+      if (filterStage !== 'ALL' && ev.riskStage !== filterStage) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toUpperCase().trim();
+        const matchTicker = ev.ticker.toUpperCase().includes(q);
+        const matchName = ev.companyName.toUpperCase().includes(q);
+        if (!matchTicker && !matchName) return false;
+      }
+      return true;
+    });
+  }, [marketEarnings, filterStage, searchQuery]);
+
+  const imminentCount = marketEarnings.filter((e) => e.riskStage === 'IMMINENT_DANGER').length;
+  const upcomingCount = marketEarnings.filter((e) => e.riskStage === 'UPCOMING_SOON').length;
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -444,8 +456,17 @@ export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({ onSelectTi
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-              {filteredEarnings.map((item) => {
-                const isDanger = item.riskStage === 'IMMINENT_DANGER';
+              {filteredEarnings.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500 font-sans">
+                    {activeMarket === 'KR'
+                      ? '🇰🇷 현재 조건에 일치하는 국내 기업 실적 발표 일정이 없습니다.'
+                      : '🇺🇸 현재 조건에 일치하는 미국 기업 실적 발표 일정이 없습니다.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredEarnings.map((item) => {
+                  const isDanger = item.riskStage === 'IMMINENT_DANGER';
                 const isUpcoming = item.riskStage === 'UPCOMING_SOON';
 
                 return (
@@ -542,7 +563,7 @@ export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({ onSelectTi
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

@@ -3,6 +3,7 @@ import {
   DynamicStrategySplit,
   MacroMarketRegime,
   MarketRegimeType,
+  MarketRegion,
   MarketSector,
   PortfolioPosition,
   PortfolioRebalanceState,
@@ -27,6 +28,13 @@ export const TICKER_SECTOR_MAP: Record<string, { companyName: string; sector: Ma
   NFLX: { companyName: 'Netflix, Inc.', sector: 'Communication Services', defaultStrategy: 'STRATEGY_A' },
   SPY: { companyName: 'SPDR S&P 500 ETF', sector: 'Broad Market Index ETF', defaultStrategy: 'CORE_INDEX' },
   QQQ: { companyName: 'Invesco QQQ Trust', sector: 'Broad Market Index ETF', defaultStrategy: 'CORE_INDEX' },
+  // Korean Major Assets
+  '069500.KS': { companyName: 'KODEX 200 ETF', sector: 'Broad Market Index ETF', defaultStrategy: 'CORE_INDEX' },
+  '005930.KS': { companyName: '삼성전자 (Samsung Electronics)', sector: 'Semiconductors', defaultStrategy: 'STRATEGY_B' },
+  '000660.KS': { companyName: 'SK하이닉스 (SK Hynix)', sector: 'Semiconductors', defaultStrategy: 'STRATEGY_A' },
+  '005380.KS': { companyName: '현대차 (Hyundai Motor)', sector: 'Consumer Discretionary', defaultStrategy: 'STRATEGY_B' },
+  '035420.KS': { companyName: 'NAVER (네이버)', sector: 'Technology', defaultStrategy: 'STRATEGY_B' },
+  '068270.KS': { companyName: '셀트리온 (Celltrion)', sector: 'Technology', defaultStrategy: 'STRATEGY_A' },
 };
 
 export const SECTOR_CAPS: Record<MarketSector, number> = {
@@ -40,8 +48,9 @@ export const SECTOR_CAPS: Record<MarketSector, number> = {
 
 // Universe tickers for Correlation Matrix
 export const UNIVERSE_TICKERS = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'AMZN', 'TSLA', 'GOOGL', 'META', 'AMD'];
+export const UNIVERSE_TICKERS_KR = ['069500.KS', '005930.KS', '000660.KS', '005380.KS', '035420.KS', '068270.KS'];
 
-// Authoritative 60-Day Return Correlation Matrix
+// Authoritative 60-Day Return Correlation Matrix (US)
 const BASE_CORRELATION_MATRIX: number[][] = [
   // SPY   QQQ   NVDA  AAPL  MSFT  AMZN  TSLA  GOOGL META  AMD
   [1.00, 0.94, 0.72, 0.81, 0.85, 0.79, 0.52, 0.82, 0.75, 0.68], // SPY
@@ -56,6 +65,17 @@ const BASE_CORRELATION_MATRIX: number[][] = [
   [0.68, 0.79, 0.85, 0.61, 0.72, 0.66, 0.53, 0.67, 0.70, 1.00], // AMD
 ];
 
+// Authoritative 60-Day Return Correlation Matrix (KR)
+const BASE_CORRELATION_MATRIX_KR: number[][] = [
+  // 069500  005930  000660  005380  035420  068270
+  [1.00,     0.88,   0.84,   0.72,   0.65,   0.62], // KODEX 200
+  [0.88,     1.00,   0.82,   0.64,   0.58,   0.55], // 삼성전자
+  [0.84,     0.82,   1.00,   0.59,   0.54,   0.51], // SK하이닉스
+  [0.72,     0.64,   0.59,   1.00,   0.48,   0.45], // 현대차
+  [0.65,     0.58,   0.54,   0.48,   1.00,   0.58], // NAVER
+  [0.62,     0.55,   0.51,   0.45,   0.58,   1.00], // 셀트리온
+];
+
 // Initial Base Model Portfolio Holding Quantities ($100,000 Portfolio)
 const DEFAULT_HOLDINGS: { ticker: string; shares: number; price: number }[] = [
   { ticker: 'SPY', shares: 35, price: 548.2 },   // $19,187 (19.2%)
@@ -67,6 +87,16 @@ const DEFAULT_HOLDINGS: { ticker: string; shares: number; price: number }[] = [
   { ticker: 'TSLA', shares: 25, price: 228.4 },  // $5,710  (5.7%)
   { ticker: 'GOOGL', shares: 35, price: 162.3 }, // $5,680  (5.7%)
   { ticker: 'META', shares: 10, price: 512.4 },  // $5,124  (5.1%)
+];
+
+// Initial Base Model Portfolio Holding Quantities for KR (₩100,000,000 Portfolio)
+const DEFAULT_HOLDINGS_KR: { ticker: string; shares: number; price: number }[] = [
+  { ticker: '069500.KS', shares: 600, price: 36000 },  // 21,600,000원 (21.6%)
+  { ticker: '005930.KS', shares: 200, price: 70000 },  // 14,000,000원 (14.0%)
+  { ticker: '000660.KS', shares: 80, price: 175000 },  // 14,000,000원 (14.0%)
+  { ticker: '005380.KS', shares: 45, price: 230000 },  // 10,350,000원 (10.35%)
+  { ticker: '035420.KS', shares: 55, price: 170000 },  // 9,350,000원 (9.35%)
+  { ticker: '068270.KS', shares: 45, price: 185000 },  // 8,325,000원 (8.325%)
 ];
 
 export class PortfolioEngine {
@@ -109,13 +139,14 @@ export class PortfolioEngine {
   /**
    * 고상관 자산 쌍(Correlation > 0.80) 추출 및 분산도 진단
    */
-  public static getHighCorrelationPairs(): CorrelationPair[] {
+  public static getHighCorrelationPairs(marketRegion: MarketRegion = 'US'): CorrelationPair[] {
     const pairs: CorrelationPair[] = [];
-    const tickers = UNIVERSE_TICKERS;
+    const tickers = marketRegion === 'KR' ? UNIVERSE_TICKERS_KR : UNIVERSE_TICKERS;
+    const matrix = marketRegion === 'KR' ? BASE_CORRELATION_MATRIX_KR : BASE_CORRELATION_MATRIX;
 
     for (let i = 0; i < tickers.length; i++) {
       for (let j = i + 1; j < tickers.length; j++) {
-        const corr = BASE_CORRELATION_MATRIX[i][j];
+        const corr = matrix[i][j];
         let level: CorrelationPair['level'] = 'MODERATE';
         let label = '적정 분산';
 
@@ -148,14 +179,17 @@ export class PortfolioEngine {
    */
   public static calculatePortfolioState(
     customTotalCapital?: number,
-    macroRegime?: MacroMarketRegime
+    macroRegime?: MacroMarketRegime,
+    marketRegion: MarketRegion = 'US'
   ): PortfolioRebalanceState {
     const regime = macroRegime ? macroRegime.overallRegime : 'RISK_ON';
     const strategySplit = this.getDynamicStrategySplit(regime);
 
+    const holdingsSource = marketRegion === 'KR' ? DEFAULT_HOLDINGS_KR : DEFAULT_HOLDINGS;
+
     // 1. Calculate holding values
     let totalInvested = 0;
-    const rawPositions = DEFAULT_HOLDINGS.map((h) => {
+    const rawPositions = holdingsSource.map((h) => {
       const meta = TICKER_SECTOR_MAP[h.ticker] || {
         companyName: h.ticker,
         sector: 'Technology' as MarketSector,
@@ -172,33 +206,54 @@ export class PortfolioEngine {
       };
     });
 
-    const totalCapital = customTotalCapital || 100000;
+    const defaultCapital = marketRegion === 'KR' ? 100000000 : 100000;
+    const totalCapital = customTotalCapital || defaultCapital;
     const cashBalance = Math.max(0, Math.round((totalCapital - totalInvested) * 100) / 100);
     const cashWeightPct = Math.round((cashBalance / totalCapital) * 1000) / 10;
 
     // 2. Compute current weights & target weights based on Strategy & Quality Tier
-    const targetWeights: Record<string, number> = {
-      SPY: 18.0,
-      QQQ: 14.0,
-      NVDA: 12.0,
-      AAPL: 11.0,
-      MSFT: 11.0,
-      AMZN: 8.0,
-      TSLA: 6.0,
-      GOOGL: 6.0,
-      META: 4.0,
-    };
-
-    // If Risk-Off, tilt target weights toward Core Index & Quality S-tier (SPY, QQQ, AAPL, MSFT)
-    if (regime === 'RISK_OFF') {
-      targetWeights['SPY'] = 22.0;
-      targetWeights['QQQ'] = 16.0;
-      targetWeights['AAPL'] = 12.0;
-      targetWeights['MSFT'] = 12.0;
-      targetWeights['NVDA'] = 8.0;
-      targetWeights['TSLA'] = 3.0;
-      targetWeights['META'] = 2.0;
+    let targetWeights: Record<string, number> = {};
+    if (marketRegion === 'KR') {
+      targetWeights = {
+        '069500.KS': 22.0,
+        '005930.KS': 16.0,
+        '000660.KS': 15.0,
+        '005380.KS': 12.0,
+        '035420.KS': 10.0,
+        '068270.KS': 10.0,
+      };
+      if (regime === 'RISK_OFF') {
+        targetWeights['069500.KS'] = 28.0;
+        targetWeights['005930.KS'] = 18.0;
+        targetWeights['000660.KS'] = 10.0;
+        targetWeights['005380.KS'] = 10.0;
+        targetWeights['035420.KS'] = 8.0;
+        targetWeights['068270.KS'] = 6.0;
+      }
+    } else {
+      targetWeights = {
+        SPY: 18.0,
+        QQQ: 14.0,
+        NVDA: 12.0,
+        AAPL: 11.0,
+        MSFT: 11.0,
+        AMZN: 8.0,
+        TSLA: 6.0,
+        GOOGL: 6.0,
+        META: 4.0,
+      };
+      if (regime === 'RISK_OFF') {
+        targetWeights['SPY'] = 22.0;
+        targetWeights['QQQ'] = 16.0;
+        targetWeights['AAPL'] = 12.0;
+        targetWeights['MSFT'] = 12.0;
+        targetWeights['NVDA'] = 8.0;
+        targetWeights['TSLA'] = 3.0;
+        targetWeights['META'] = 2.0;
+      }
     }
+
+    const minCashDeltaThreshold = marketRegion === 'KR' ? 300000 : 300;
 
     const positions: PortfolioPosition[] = rawPositions.map((pos) => {
       const currentWeightPct = Math.round((pos.marketValue / totalCapital) * 1000) / 10;
@@ -211,9 +266,9 @@ export class PortfolioEngine {
       const recommendedSharesDelta = Math.round(recommendedCashDelta / pos.price);
 
       let rebalanceAction: PortfolioPosition['rebalanceAction'] = 'BALANCED';
-      if (recommendedCashDelta > 300) {
+      if (recommendedCashDelta > minCashDeltaThreshold) {
         rebalanceAction = 'INCREASE';
-      } else if (recommendedCashDelta < -300) {
+      } else if (recommendedCashDelta < -minCashDeltaThreshold) {
         rebalanceAction = 'TRIM';
       }
 
@@ -281,10 +336,10 @@ export class PortfolioEngine {
       sectorExposures,
       positions,
       correlationMatrix: {
-        tickers: UNIVERSE_TICKERS,
-        matrix: BASE_CORRELATION_MATRIX,
+        tickers: marketRegion === 'KR' ? UNIVERSE_TICKERS_KR : UNIVERSE_TICKERS,
+        matrix: marketRegion === 'KR' ? BASE_CORRELATION_MATRIX_KR : BASE_CORRELATION_MATRIX,
       },
-      highCorrelationPairs: this.getHighCorrelationPairs(),
+      highCorrelationPairs: this.getHighCorrelationPairs(marketRegion),
       maxConcentrationAlert,
       lastUpdated: new Date().toISOString(),
     };

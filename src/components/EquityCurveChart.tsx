@@ -25,6 +25,7 @@ import {
   Info,
 } from 'lucide-react';
 import { EquityCurveResult, EquityDataPoint } from '../engine/equityCurveEngine';
+import { formatCurrencyAmount } from '../utils/formatters';
 
 interface EquityCurveChartProps {
   data: EquityCurveResult | null;
@@ -69,9 +70,11 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
   };
 
   const formatCurrency = (val: number | undefined) => {
-    if (val === undefined || isNaN(val)) return '$100,000';
-    return `$${val.toLocaleString()}`;
+    if (val === undefined || isNaN(val)) return metrics?.market === 'KR' ? '₩100,000,000' : '$100,000';
+    return formatCurrencyAmount(val, metrics?.market || 'US');
   };
+
+  const benchmarkName = metrics?.benchmarkName || (metrics?.market === 'KR' ? 'KOSPI 200 (069500)' : 'S&P 500 (SPY)');
 
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-6">
@@ -84,7 +87,7 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
             </span>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                <span>누적 수익 곡선 & S&P 500 (SPY) 벤치마크 알파</span>
+                <span>누적 수익 곡선 & {benchmarkName} 벤치마크 알파</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-medium">
                   {metrics ? `Alpha ${formatPercent(metrics.cumulativeAlpha)}` : 'Live Quant'}
                 </span>
@@ -170,7 +173,7 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
             <span className="text-[11px] text-slate-400 font-sans flex items-center gap-1">
               <BarChart3 className="w-3.5 h-3.5 text-slate-400" />
-              S&P 500 (SPY)
+              {metrics.benchmarkName || (metrics.market === 'KR' ? 'KOSPI 200 (069500)' : 'S&P 500 (SPY)')}
             </span>
             <div className="text-base sm:text-lg font-bold text-slate-300">
               {formatPercent(metrics.totalBenchmarkReturn)}
@@ -215,7 +218,7 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
               -{metrics.maxDrawdown.toFixed(1)}%
             </div>
             <div className="text-[10px] text-slate-500 font-sans">
-              SPY -{metrics.benchmarkMaxDrawdown.toFixed(1)}%
+              {metrics.market === 'KR' ? 'KOSPI200' : 'SPY'} -{metrics.benchmarkMaxDrawdown.toFixed(1)}%
             </div>
           </div>
 
@@ -269,14 +272,14 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
                     tickFormatter={(val) => `${val > 0 ? '+' : ''}${val}%`}
                     domain={['auto', 'auto']}
                   />
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip content={<CustomTooltip benchmarkName={benchmarkName} market={metrics?.market || 'US'} />} />
                   <Legend
                     verticalAlign="top"
                     height={36}
                     iconType="circle"
                     formatter={(value) => {
                       if (value === 'strategyReturn') return '퀀트 전략 누적 수익률 (%)';
-                      if (value === 'benchmarkReturn') return 'S&P 500 (SPY) 벤치마크 (%)';
+                      if (value === 'benchmarkReturn') return `${benchmarkName} (%)`;
                       return value;
                     }}
                   />
@@ -325,12 +328,12 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
                     tickLine={false}
                     tickFormatter={(val) => `${val > 0 ? '+' : ''}${val}%p`}
                   />
-                  <Tooltip content={<CustomAlphaTooltip />} />
+                  <Tooltip content={<CustomAlphaTooltip benchmarkName={benchmarkName} />} />
                   <Legend
                     verticalAlign="top"
                     height={36}
                     iconType="circle"
-                    formatter={() => '초과 수익률 알파 (전략 - SPY 벤치마크, %p)'}
+                    formatter={() => `초과 수익률 알파 (전략 - ${benchmarkName} 벤치마크, %p)`}
                   />
                   <ReferenceLine y={0} stroke="#64748b" strokeWidth={1} />
                   <Area
@@ -368,14 +371,14 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
                     tickLine={false}
                     tickFormatter={(val) => `${val}%`}
                   />
-                  <Tooltip content={<CustomDrawdownTooltip />} />
+                  <Tooltip content={<CustomDrawdownTooltip benchmarkName={benchmarkName} />} />
                   <Legend
                     verticalAlign="top"
                     height={36}
                     iconType="circle"
                     formatter={(value) => {
                       if (value === 'drawdown') return '전략 포트폴리오 낙폭 (Drawdown %)';
-                      if (value === 'benchmarkDrawdown') return 'SPY 벤치마크 낙폭 (%)';
+                      if (value === 'benchmarkDrawdown') return `${benchmarkName} 낙폭 (%)`;
                       return value;
                     }}
                   />
@@ -423,7 +426,7 @@ export const EquityCurveChart: React.FC<EquityCurveChartProps> = ({
 };
 
 // Tooltip Components
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label, benchmarkName = 'S&P 500 (SPY)', market = 'US' }: any) => {
   if (active && payload && payload.length) {
     const data: EquityDataPoint = payload[0]?.payload;
     if (!data) return null;
@@ -443,7 +446,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             <span className="font-bold">{strat >= 0 ? '+' : ''}{strat.toFixed(2)}%</span>
           </div>
           <div className="flex justify-between items-center text-slate-300">
-            <span>S&P 500 (SPY):</span>
+            <span className="truncate max-w-[130px]">{benchmarkName}:</span>
             <span>{bench >= 0 ? '+' : ''}{bench.toFixed(2)}%</span>
           </div>
           <div className="flex justify-between items-center text-emerald-400 border-t border-slate-800/60 pt-1 font-bold">
@@ -452,7 +455,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           </div>
           <div className="flex justify-between items-center text-slate-400 pt-1 border-t border-slate-800/60">
             <span>추정 자산:</span>
-            <span>${data.portfolioValue?.toLocaleString()}</span>
+            <span>{formatCurrencyAmount(data.portfolioValue || 0, market as any)}</span>
           </div>
         </div>
         {data.eventTickers && data.eventTickers.length > 0 && (
@@ -467,7 +470,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const CustomAlphaTooltip = ({ active, payload, label }: any) => {
+const CustomAlphaTooltip = ({ active, payload, label, benchmarkName = 'S&P 500 (SPY)' }: any) => {
   if (active && payload && payload.length) {
     const data: EquityDataPoint = payload[0]?.payload;
     if (!data) return null;
@@ -483,7 +486,7 @@ const CustomAlphaTooltip = ({ active, payload, label }: any) => {
           <span>{alpha >= 0 ? '+' : ''}{alpha.toFixed(2)}%p</span>
         </div>
         <div className="text-[10px] text-slate-400 font-sans">
-          {alpha >= 0 ? '벤치마크 S&P 500 대비 초과 수익 달성' : '벤치마크 대비 언더퍼폼 구간'}
+          {alpha >= 0 ? `벤치마크 (${benchmarkName}) 대비 초과 수익 달성` : `벤치마크 (${benchmarkName}) 대비 언더퍼폼 구간`}
         </div>
       </div>
     );
@@ -491,7 +494,7 @@ const CustomAlphaTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const CustomDrawdownTooltip = ({ active, payload, label }: any) => {
+const CustomDrawdownTooltip = ({ active, payload, label, benchmarkName = 'SPY' }: any) => {
   if (active && payload && payload.length) {
     const data: EquityDataPoint = payload[0]?.payload;
     if (!data) return null;
@@ -506,7 +509,7 @@ const CustomDrawdownTooltip = ({ active, payload, label }: any) => {
           <span>{data.drawdown.toFixed(2)}%</span>
         </div>
         <div className="flex justify-between items-center text-slate-400">
-          <span>SPY 시장 낙폭:</span>
+          <span className="truncate max-w-[130px]">{benchmarkName} 낙폭:</span>
           <span>{data.benchmarkDrawdown.toFixed(2)}%</span>
         </div>
       </div>

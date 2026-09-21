@@ -21,7 +21,7 @@ import {
   Info,
   PlusCircle,
 } from 'lucide-react';
-import { AlertNotificationLog, AlertStrategyType, AlertDeliveryStatus } from '../types/v8';
+import { AlertNotificationLog, AlertStrategyType, AlertDeliveryStatus, MarketRegion } from '../types/v8';
 import { ALERT_NOTIFICATIONS_RLS_FIX_SQL } from './DatabaseHealthModal';
 
 interface AlertHistoryViewProps {
@@ -29,6 +29,7 @@ interface AlertHistoryViewProps {
   onTriggerScan?: () => void;
   initialTickerFilter?: string;
   refreshKey?: number;
+  activeMarket?: MarketRegion;
 }
 
 export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
@@ -36,6 +37,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   onTriggerScan,
   initialTickerFilter = '',
   refreshKey,
+  activeMarket = 'US',
 }) => {
   const [alerts, setAlerts] = useState<AlertNotificationLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,7 +56,8 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   const fetchAlerts = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/v8/alerts');
+      const url = activeMarket ? `/api/v8/alerts?market=${activeMarket}` : '/api/v8/alerts';
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.alerts)) {
         setAlerts(data.alerts);
@@ -94,7 +97,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
 
   useEffect(() => {
     fetchAlerts();
-  }, [refreshKey]);
+  }, [refreshKey, activeMarket]);
 
   useEffect(() => {
     const handleGlobalAlertUpdate = () => {
@@ -341,11 +344,13 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1.5">
-            <span>총 알림 발송/기록</span>
+            <span className="flex items-center space-x-1">
+              <span>총 알림 발송 ({activeMarket === 'KR' ? '국내장' : '미국장'})</span>
+            </span>
             <Bell className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="text-xl sm:text-2xl font-bold text-white font-mono">{totalCount}건</div>
-          <div className="text-[11px] text-slate-500 mt-1">스캔 브리핑 및 단독 알람 누적</div>
+          <div className="text-[11px] text-slate-500 mt-1">{activeMarket === 'KR' ? 'KOSPI / KOSDAQ 전송 누적' : 'NYSE / NASDAQ 전송 누적'}</div>
         </div>
 
         <div className="bg-slate-900/90 border border-emerald-900/40 rounded-xl p-3.5 sm:p-4 shadow-sm">
@@ -580,10 +585,16 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
         <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-12 text-center">
           <Bell className="w-10 h-10 text-slate-600 mx-auto mb-3" />
           <h3 className="text-sm font-semibold text-slate-300 mb-1">
-            {searchTerm ? `'${searchTerm}' 관련 알림 내역이 없습니다.` : '기록된 알림 내역이 없습니다.'}
+            {searchTerm
+              ? `'${searchTerm}' 관련 알림 내역이 없습니다.`
+              : activeMarket === 'KR'
+              ? '국내장(KOSPI/KOSDAQ) 발송 알림 내역이 없습니다.'
+              : '미국장(NYSE/NASDAQ) 발송 알림 내역이 없습니다.'}
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
-            정기 스캔이 실행되거나 전략 B 우량주 눌림목/전략 A 모멘텀 신호가 포착되면 텔레그램 발송 내역과 메시지 전문이 이곳에 자동 기록됩니다.
+            {activeMarket === 'KR'
+              ? '국내 워치리스트 종목에 대해 정기 스캔이 실행되거나 매수/청산 신호가 포착되면 텔레그램 발송 내역과 메시지 전문이 이곳에 자동 기록됩니다.'
+              : '정기 스캔이 실행되거나 전략 B 우량주 눌림목/전략 A 모멘텀 신호가 포착되면 텔레그램 발송 내역과 메시지 전문이 이곳에 자동 기록됩니다.'}
           </p>
           {onTriggerScan && (
             <button
@@ -591,7 +602,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
               className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md transition-all active:scale-95"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>지금 스캔 실행하여 알림 생성</span>
+              <span>{activeMarket === 'KR' ? '국내 퀀트 스캔 실행' : '미국 퀀트 스캔 실행'}</span>
             </button>
           )}
         </div>

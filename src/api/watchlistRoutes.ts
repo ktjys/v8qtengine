@@ -16,17 +16,29 @@ watchlistRouter.get('/', async (req, res) => {
   }
 });
 
-// Ticker format validation: 1 to 6 uppercase letters, optional dot or hyphen followed by 1 to 3 letters (e.g. AAPL, BRK.B, BF-B)
-export const TICKER_REGEX = /^[A-Z]{1,6}([.-][A-Z]{1,3})?$/;
+// Ticker format validation:
+// 1) US Stocks & ETFs: 1 to 6 uppercase letters, optional dot or hyphen (e.g. AAPL, BRK.B, BF-B)
+// 2) Korean Stocks & ETFs: 6 digits (e.g. 005930), or 6 digits with .KS / .KQ (e.g. 005930.KS, 247540.KQ)
+export const TICKER_REGEX = /^([A-Z]{1,6}([.-][A-Z]{1,3})?|\d{6}(\.(KS|KQ))?)$/;
 
 export function parseRawTickers(rawInput: string | string[]): string[] {
+  let tokens: string[] = [];
   if (Array.isArray(rawInput)) {
-    return Array.from(new Set(rawInput.map((t) => String(t).trim().toUpperCase()).filter(Boolean)));
+    tokens = rawInput.map((t) => String(t).trim().toUpperCase()).filter(Boolean);
+  } else if (typeof rawInput === 'string') {
+    // Split by commas, spaces, slashes, tabs, or newlines
+    tokens = rawInput.split(/[,\s\n\r/]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
   }
-  if (typeof rawInput !== 'string') return [];
-  // Split by commas, spaces, slashes, tabs, or newlines
-  const tokens = rawInput.split(/[,\s\n\r/]+/);
-  return Array.from(new Set(tokens.map((t) => t.trim().toUpperCase()).filter(Boolean)));
+
+  // 6자리 순수 숫자만 입력된 경우 한국 주식 기본 코스피(.KS) 형태로 자동 보정
+  const normalized = tokens.map((t) => {
+    if (/^\d{6}$/.test(t)) {
+      return `${t}.KS`;
+    }
+    return t;
+  });
+
+  return Array.from(new Set(normalized));
 }
 
 async function validateSingleTickerWithYahoo(ticker: string): Promise<{ valid: boolean; symbol: string; name?: string; reason?: string }> {

@@ -14,11 +14,15 @@ import {
   Menu,
   X,
   LineChart,
+  ShieldAlert,
 } from 'lucide-react';
+import { MarketRegion } from '../types/v8';
 
 interface NavbarProps {
-  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide';
-  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide') => void;
+  activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'exit' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide';
+  setActiveTab: (tab: 'dashboard' | 'watchlist' | 'backtest' | 'exit' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide') => void;
+  activeMarket?: MarketRegion;
+  onSelectMarket?: (market: MarketRegion) => void;
   onOpenScanModal: () => void;
   onOpenScheduleModal: () => void;
   onOpenDbHealthModal?: () => void;
@@ -30,6 +34,8 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
+  activeMarket = 'US',
+  onSelectMarket,
   onOpenScanModal,
   onOpenScheduleModal,
   onOpenDbHealthModal,
@@ -53,7 +59,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const mainTabs: {
-    id: 'dashboard' | 'watchlist' | 'backtest' | 'runs' | 'guide';
+    id: 'dashboard' | 'watchlist' | 'backtest' | 'exit' | 'runs' | 'guide';
     label: string;
     icon: React.ReactNode;
     badge?: string;
@@ -68,6 +74,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: '워치리스트',
       icon: <ListFilter className="w-4 h-4 text-blue-400" />,
       badge: isInitialLoading ? '…' : `${totalCount}`,
+    },
+    {
+      id: 'exit',
+      label: '매도 & 청산',
+      icon: <ShieldAlert className="w-4 h-4 text-rose-400" />,
     },
     {
       id: 'backtest',
@@ -233,8 +244,40 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </nav>
 
-          {/* Action Trigger Controls */}
+          {/* Action Trigger Controls & Market Selector */}
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            {/* Market Region Segmented Toggle */}
+            {onSelectMarket && (
+              <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner">
+                <button
+                  id="market-select-us-btn"
+                  onClick={() => onSelectMarket('US')}
+                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md transition-all ${
+                    activeMarket === 'US'
+                      ? 'bg-blue-600 text-white shadow-md font-bold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                  title="미국 주식 & ETF (USD $ / S&P500 기준)"
+                >
+                  <span className="text-sm leading-none">🇺🇸</span>
+                  <span className="text-xs">미국장</span>
+                </button>
+                <button
+                  id="market-select-kr-btn"
+                  onClick={() => onSelectMarket('KR')}
+                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md transition-all ${
+                    activeMarket === 'KR'
+                      ? 'bg-emerald-600 text-white shadow-md font-bold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                  title="국내 주식 & ETF (KRW ₩ / KOSPI200 기준)"
+                >
+                  <span className="text-sm leading-none">🇰🇷</span>
+                  <span className="text-xs">국내장</span>
+                </button>
+              </div>
+            )}
+
             {onOpenDbHealthModal && (
               <button
                 id="header-db-health-btn"
@@ -327,6 +370,45 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Mobile Full Dropdown Drawer */}
         {isMobileDrawerOpen && (
           <div className="lg:hidden border-t border-slate-800 py-3 px-2 bg-slate-900/98 rounded-b-2xl shadow-2xl animate-fadeIn space-y-2">
+            {/* Market Region Toggle in Mobile */}
+            {onSelectMarket && (
+              <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800 mb-2">
+                <div className="text-[10px] text-slate-400 font-semibold mb-1.5 uppercase tracking-wider">
+                  분석 대상 시장 선택
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => {
+                      onSelectMarket('US');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      activeMarket === 'US'
+                        ? 'bg-blue-600 text-white shadow-md font-bold'
+                        : 'text-slate-400 bg-slate-900 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>🇺🇸</span>
+                    <span>미국장 (USD $)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onSelectMarket('KR');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      activeMarket === 'KR'
+                        ? 'bg-emerald-600 text-white shadow-md font-bold'
+                        : 'text-slate-400 bg-slate-900 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>🇰🇷</span>
+                    <span>국내장 (KRW ₩)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="text-[11px] font-semibold text-slate-400 px-2 uppercase tracking-wider">
               핵심 퀀트 메뉴
             </div>

@@ -11,13 +11,14 @@ import {
   X,
   Send,
 } from 'lucide-react';
-import { ScanRunLog, SignalSnapshot } from '../types/v8';
+import { MarketRegion, ScanRunLog, SignalSnapshot } from '../types/v8';
 
 interface ScanRunnerModalProps {
   onClose: () => void;
   onScanCompleted: (result: { scan_log: ScanRunLog; new_signals: SignalSnapshot[] }) => void;
   totalWatchlistCount?: number;
   onViewAlertHistory?: () => void;
+  activeMarket?: MarketRegion;
 }
 
 export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
@@ -25,6 +26,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   onScanCompleted,
   totalWatchlistCount,
   onViewAlertHistory,
+  activeMarket = 'US',
 }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [simulateFailure, setSimulateFailure] = useState(false);
@@ -70,6 +72,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
         method: 'POST',
         headers,
         body: JSON.stringify({
+          market: activeMarket,
           simulate_partial_failure: simulateFailure,
           send_telegram: sendTelegramOption,
           botToken: storedToken || undefined,
@@ -126,14 +129,18 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="text-sm sm:text-base font-bold text-slate-100">퀀트 스캐너 실행</h3>
+                <h3 className="text-sm sm:text-base font-bold text-slate-100">
+                  {activeMarket === 'KR' ? '🇰🇷 국내(KR) 퀀트 스캐너 실행' : '🇺🇸 미국(US) 퀀트 스캐너 실행'}
+                </h3>
                 {totalWatchlistCount !== undefined && totalWatchlistCount > 0 && (
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                    워치리스트 {totalWatchlistCount}개
+                    {activeMarket === 'KR' ? '국내 종목' : '미국 종목'} {totalWatchlistCount}개
                   </span>
                 )}
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-400 font-mono">워치리스트 전종목 일괄 평가 파이프라인</p>
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono">
+                {activeMarket === 'KR' ? 'KOSPI / KOSDAQ 전종목 일괄 평가 파이프라인' : 'NYSE / NASDAQ 전종목 일괄 평가 파이프라인'}
+              </p>
             </div>
           </div>
 

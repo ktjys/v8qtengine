@@ -3,6 +3,7 @@ import { MarketDataService, ProcessedAssetData, marketDataService as defaultMark
 import { classifyAsset } from '../engine/classificationEngine';
 import { evaluateV8, MarketSnapshot } from '../engine/evaluateV8';
 import { evaluateDipBuyStrategy } from '../engine/dipBuyEngine';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 export class EvaluationService {
   private marketDataService: MarketDataService;
@@ -89,6 +90,7 @@ export class EvaluationService {
       price: processed.price,
       change1d: processed.change1d,
       evaluated_at: new Date().toISOString(),
+      market_region: detectMarketRegion(processed.ticker),
       classification: evaluation.classification,
       opportunity: evaluation.opportunity,
       risk: evaluation.risk,

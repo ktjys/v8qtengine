@@ -30,10 +30,13 @@ import {
   AssetType,
   DecisionType,
   FullTickerEvaluation,
+  MarketRegion,
   RiskLevel,
   StrategyType,
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { detectMarketRegion } from '../utils/marketUtils';
+import { StockDisplayBadge } from './StockDisplayBadge';
 import { SortableHeader } from './SortableHeader';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
 import { DipBuyMatrix } from './DipBuyMatrix';
@@ -73,11 +76,13 @@ interface WatchlistViewProps {
   onClearDummyTickers?: () => void;
   onClearAllWatchlist?: () => void;
   onRestoreDefaultSeed?: () => void;
+  activeMarket?: MarketRegion;
   onOpenDbHealthModal?: () => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
   evaluations,
+  activeMarket = 'US',
   initialStrategyMode = 'MOMENTUM',
   onSelectTicker,
   onPreviewTelegram,
@@ -230,10 +235,18 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     if (!newTicker.trim()) {
       return { valid: [], invalid: [], alreadyExists: [] };
     }
-    const TICKER_REGEX = /^[A-Z]{1,6}([.-][A-Z]{1,3})?$/;
+    // TICKER_REGEX supports US tickers (AAPL, BRK.B, etc.) and Korean tickers (005930.KS, 069500.KS, 035420.KS, 247540.KQ or raw 6 digits 005930)
+    const TICKER_REGEX = /^([A-Z]{1,6}([.-][A-Z]{1,3})?|[0-9]{6}(\.(KS|KQ))?)$/;
     const tokens: string[] = newTicker
       .split(/[,\s\n\r/]+/)
-      .map((t) => t.trim().toUpperCase())
+      .map((t) => {
+        const trimmed = t.trim().toUpperCase();
+        // If user enters 6 digits like 005930 without suffix, automatically add .KS
+        if (/^[0-9]{6}$/.test(trimmed)) {
+          return `${trimmed}.KS`;
+        }
+        return trimmed;
+      })
       .filter(Boolean);
     const unique: string[] = Array.from(new Set<string>(tokens));
 
@@ -263,7 +276,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       if (parsedTickers.alreadyExists.length > 0) {
         alert('입력하신 종목이 이미 워치리스트에 모두 등록되어 있습니다.');
       } else if (parsedTickers.invalid.length > 0) {
-        alert(`유효하지 않은 티커 형식입니다: ${parsedTickers.invalid.join(', ')}\n(예: AAPL, NVDA, TSLA와 같은 영문 티커 심볼을 콤마로 구분하여 입력해주세요)`);
+        alert(`유효하지 않은 티커 형식입니다: ${parsedTickers.invalid.join(', ')}\n(예: 미국 종목은 AAPL, NVDA, 국내 종목은 005930.KS, 069500.KS 또는 6자리 종목코드 005930을 콤마로 구분하여 입력해주세요)`);
       }
       return;
     }
@@ -625,9 +638,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                       </span>
                       <div className="min-w-0">
                         <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-slate-100 text-sm font-mono">
-                            {item.ticker}
-                          </span>
+                          <StockDisplayBadge
+                            ticker={item.ticker}
+                            name={item.name}
+                            showSubCode={true}
+                            primaryClassName="font-bold text-slate-100 text-sm"
+                          />
                           <span className="uppercase text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-medium">
                             {item.classification?.asset_type || 'EQUITY'}
                           </span>
@@ -636,9 +652,6 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                               MANUAL
                             </span>
                           )}
-                        </div>
-                        <div className="text-xs text-slate-400 truncate max-w-[180px]">
-                          {item.name}
                         </div>
                       </div>
                     </div>
@@ -763,7 +776,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     className="py-3.5 px-4 font-semibold"
                   >
                     <span className="text-slate-400 font-mono text-[11px] mr-1.5">No.</span>
-                    <span>종목코드 / 이름</span>
+                    <span>종목명 (코드)</span>
                   </SortableHeader>
 
                 <SortableHeader<WatchlistSortField>
@@ -835,8 +848,31 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <tbody className="divide-y divide-slate-800/60 font-mono">
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-500 font-sans text-xs">
-                    {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 상단에서 종목을 추가해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+                  <td colSpan={9} className="py-16 text-center text-slate-400 font-sans">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto border border-cyan-500/20">
+                        <Plus className="w-5 h-5" />
+                      </div>
+                      <div className="font-semibold text-slate-200 text-sm">
+                        {evaluations.length === 0
+                          ? `${activeMarket === 'KR' ? '국내 주식(KOSPI/KOSDAQ)' : '미국 주식(NYSE/NASDAQ)'} 워치리스트가 비어 있습니다.`
+                          : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {evaluations.length === 0
+                          ? '상단의 [+ 종목 추가] 버튼을 누르고 국내 추천 종목(삼성전자, SK하이닉스 등)을 바로 추가해보세요.'
+                          : '필터 조건을 변경하거나 검색어를 지워보세요.'}
+                      </p>
+                      {evaluations.length === 0 && (
+                        <button
+                          onClick={() => setShowAddModal(true)}
+                          className="mt-2 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>{activeMarket === 'KR' ? '국내 종목 추가하기' : '미국 종목 추가하기'}</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -857,18 +893,18 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                           {idx + 1}
                         </span>
                         <div className="min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-bold text-slate-100 text-sm font-mono group-hover:text-cyan-400 transition-colors">
-                              {item.ticker}
-                            </span>
+                          <div className="flex items-center space-x-1.5">
+                            <StockDisplayBadge
+                              ticker={item.ticker}
+                              name={item.name}
+                              showSubCode={true}
+                              primaryClassName="font-bold text-slate-100 text-sm group-hover:text-cyan-400 transition-colors"
+                            />
                             {item.classification.classification_source === 'manual' && (
                               <span className="px-1.5 py-0.2 text-[9px] rounded bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
                                 MANUAL
                               </span>
                             )}
-                          </div>
-                          <div className="text-[11px] text-slate-400 truncate max-w-[140px]">
-                            {item.name}
                           </div>
                         </div>
                       </div>
@@ -1118,7 +1154,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 </div>
                 <textarea
                   id="watchlist-new-ticker-input"
-                  placeholder="예: AAPL, MSFT, NVDA, TSLA, VOO (쉼표로 구분하여 여러 종목을 한 번에 입력)"
+                  placeholder={
+                    activeMarket === 'KR'
+                      ? '예: 005930, 000660, 035420, 069500.KS, 247540.KQ (6자리 코드 또는 .KS/.KQ)'
+                      : '예: AAPL, NVDA, TSLA, MSFT, SPY, QQQ (콤마나 공백으로 구분)'
+                  }
                   value={newTicker}
                   onChange={(e) => setNewTicker(e.target.value)}
                   disabled={isCapacityReached}
@@ -1126,6 +1166,93 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-mono uppercase focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
                   required
                 />
+
+                {/* Recommended Ticker Examples Chips */}
+                <div className="mt-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-slate-300">
+                      {activeMarket === 'KR' ? '🇰🇷 국내 추천 예시 종목 (클릭 시 자동 추가):' : '🇺🇸 미국 추천 예시 종목 (클릭 시 자동 추가):'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeMarket === 'KR') {
+                          setNewTicker('005930.KS, 000660.KS, 005380.KS, 069500.KS, 035420.KS');
+                        } else {
+                          setNewTicker('NVDA, AAPL, MSFT, TSLA, SPY');
+                        }
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 text-[10px] font-semibold underline decoration-dotted"
+                    >
+                      {activeMarket === 'KR' ? '+ 국내 대표 5선 일괄 담기' : '+ 미국 대표 5선 일괄 담기'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeMarket === 'KR' ? (
+                      [
+                        { ticker: '005930.KS', name: '삼성전자' },
+                        { ticker: '000660.KS', name: 'SK하이닉스' },
+                        { ticker: '005380.KS', name: '현대차' },
+                        { ticker: '069500.KS', name: 'KODEX 200' },
+                        { ticker: '035420.KS', name: 'NAVER' },
+                        { ticker: '373220.KS', name: 'LG에너지솔루션' },
+                        { ticker: '000270.KS', name: '기아' },
+                        { ticker: '247540.KQ', name: '에코프로비엠' },
+                      ].map((item) => (
+                        <button
+                          key={item.ticker}
+                          type="button"
+                          onClick={() => {
+                            setNewTicker((prev) => {
+                              const trimmed = prev.trim();
+                              if (!trimmed) {
+                                setNewName(item.name);
+                                return item.ticker;
+                              }
+                              const list = trimmed.split(/[,\s]+/).map((s) => s.trim().toUpperCase());
+                              if (list.includes(item.ticker)) return prev;
+                              return `${trimmed}, ${item.ticker}`;
+                            });
+                          }}
+                          className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center space-x-1"
+                        >
+                          <span className="font-medium">{item.name}</span>
+                          <span className="font-mono text-[10px] text-slate-400">({item.ticker})</span>
+                        </button>
+                      ))
+                    ) : (
+                      [
+                        { ticker: 'NVDA', name: 'NVIDIA' },
+                        { ticker: 'AAPL', name: 'Apple' },
+                        { ticker: 'MSFT', name: 'Microsoft' },
+                        { ticker: 'TSLA', name: 'Tesla' },
+                        { ticker: 'SPY', name: 'S&P 500 ETF' },
+                        { ticker: 'QQQ', name: 'Nasdaq 100 ETF' },
+                      ].map((item) => (
+                        <button
+                          key={item.ticker}
+                          type="button"
+                          onClick={() => {
+                            setNewTicker((prev) => {
+                              const trimmed = prev.trim();
+                              if (!trimmed) {
+                                setNewName(item.name);
+                                return item.ticker;
+                              }
+                              const list = trimmed.split(/[,\s]+/).map((s) => s.trim().toUpperCase());
+                              if (list.includes(item.ticker)) return prev;
+                              return `${trimmed}, ${item.ticker}`;
+                            });
+                          }}
+                          className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center space-x-1"
+                        >
+                          <span className="font-mono font-bold">{item.ticker}</span>
+                          <span className="text-[10px] text-slate-400">({item.name})</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
 
                 {/* Real-time Ticker Parsing Preview */}
                 {newTicker.trim() && (

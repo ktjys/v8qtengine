@@ -1,3 +1,5 @@
+export type MarketRegion = 'US' | 'KR';
+
 export type AssetType = 'etf' | 'equity' | 'other';
 
 export type ETFStrategyType =
@@ -177,6 +179,7 @@ export interface FullTickerEvaluation {
   price: number;
   change1d: number;
   evaluated_at: string;
+  market_region?: MarketRegion;
   classification: AssetClassification;
   opportunity: OpportunityEvaluation;
   risk: RiskEvaluation;
@@ -256,6 +259,7 @@ export interface SignalSnapshot {
   signal_date: string;
   ticker: string;
   name: string;
+  market_region?: MarketRegion;
   signal_price: number;
   strategy_type: StrategyType;
   asset_type: AssetType;
@@ -297,6 +301,7 @@ export interface WatchlistItem {
   name: string;
   is_active: boolean;
   memo: string;
+  market_region?: MarketRegion;
   created_at: string;
 }
 
@@ -316,6 +321,7 @@ export interface ScanRunLog {
   run_id: string;
   started_at: string;
   finished_at: string;
+  market_region?: MarketRegion;
   watchlist_count: number;
   evaluated_count: number;
   signal_count: number;
@@ -609,6 +615,7 @@ export interface PaperTradeOrder {
   id: string;
   ticker: string;
   companyName: string;
+  market_region?: MarketRegion;
   orderType: OrderType;
   strategySource: TradeStrategySource;
   shares: number;
@@ -623,6 +630,7 @@ export interface PaperTradeOrder {
 export interface PaperTradePosition {
   ticker: string;
   companyName: string;
+  market_region?: MarketRegion;
   shares: number;
   avgCostBasis: number;
   currentPrice: number;
@@ -635,6 +643,8 @@ export interface PaperTradePosition {
 }
 
 export interface PaperAccountSummary {
+  market_region?: MarketRegion;
+  currency?: string;
   initialBalance: number;
   cashBalance: number;
   portfolioValue: number;
@@ -739,3 +749,101 @@ export interface PositionSizingCalculation {
   isCappedByAccountLimit: boolean;
   capWarning: string | null;
 }
+
+// ==========================================
+// Phase 4: Integrated Sell & Exit Signal System
+// ==========================================
+
+export type SellSignalType =
+  | 'TAKE_PROFIT_1' // 1차 목표 수익 도달 (부분 익절 권장 +15%)
+  | 'TAKE_PROFIT_2' // 2차 목표 수익 도달 (강력 익절 권장 +25% 이상)
+  | 'TRAILING_STOP' // 최고점 대비 트레일링 스탑 이탈 (수익 보존 매도)
+  | 'STOP_LOSS'     // 손절선 이탈 (자본 보호 손절매 -7%)
+  | 'OVERBOUGHT_DIVERGENCE' // 기술적 과열 (RSI 75+ 및 볼린저 상단 이탈 후 음봉)
+  | 'TREND_BREAK_20MA'     // 단기 추세 이탈 (20 SMA 하향 이탈)
+  | 'TREND_BREAK_50MA'     // 중기 추세 붕괴 (50 SMA 하향 이탈/데드크로스)
+  | 'HOLD';                // 정상 보유 유지
+
+export type SellUrgency = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+
+export interface ExitSignalDetail {
+  type: SellSignalType;
+  label: string;
+  urgency: SellUrgency;
+  actionRecommendation: string;
+  reason: string;
+  triggerPrice?: number;
+  returnSinceEntryPct?: number;
+  drawdownFromPeakPct?: number;
+}
+
+export interface IntegratedExitEvaluation {
+  ticker: string;
+  name: string;
+  currentPrice: number;
+  change1d: number;
+  isHoldPosition: boolean; // 사용자가 등록한 보유 종목인지 여부
+  entryPrice?: number;     // 사용자 평단가 (등록된 경우)
+  shares?: number;         // 보유 수량
+  entryDate?: string;      // 매수 진입일
+  highestPriceSinceEntry?: number; // 진입 후 최고가
+  returnSinceEntryPct?: number;   // 진입 대비 수익률 (%)
+  
+  // 종합 판정
+  primaryExitSignal: SellSignalType;
+  urgency: SellUrgency;
+  isActionableSell: boolean; // 매도 권고 여부 (HOLD가 아님)
+  headline: string;
+  recommendedAction: string;
+  
+  // 4대 매도 규칙 개별 평가 결과
+  rules: {
+    takeProfit: {
+      triggered: boolean;
+      targetPct: number;
+      targetPrice: number;
+      label: string;
+      status: 'REACHED_TP2' | 'REACHED_TP1' | 'IN_PROGRESS' | 'NOT_APPLICABLE';
+    };
+    trailingStop: {
+      triggered: boolean;
+      highestPrice: number;
+      stopPrice: number;
+      drawdownFromPeakPct: number;
+      label: string;
+    };
+    stopLoss: {
+      triggered: boolean;
+      stopPrice: number;
+      lossPct: number;
+      label: string;
+    };
+    technicalExit: {
+      triggered: boolean;
+      rsi14: number;
+      isOverbought: boolean;
+      ma20Broken: boolean;
+      ma50Broken: boolean;
+      label: string;
+    };
+  };
+  
+  signalsList: ExitSignalDetail[];
+}
+
+export interface UserHoldPosition {
+  id: string;
+  ticker: string;
+  name: string;
+  market_region?: MarketRegion;
+  entryPrice: number;
+  shares: number;
+  entryDate: string;
+  targetTakeProfitPct?: number; // 기본값 15%
+  stopLossPct?: number;         // 기본값 -7%
+  trailingStopPct?: number;     // 기본값 -7%
+  highestPrice?: number;        // 진입 후 최고가 추적
+  memo?: string;
+  created_at: string;
+}
+

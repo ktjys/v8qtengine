@@ -1,14 +1,22 @@
 import { Router } from 'express';
 import { alertHistoryRepository } from '../db/repositories/alertHistoryRepository';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 export const alertRouter = Router();
 
 // GET /api/v8/alerts
 alertRouter.get('/', async (req, res) => {
   try {
-    const { ticker, strategy } = req.query;
+    const { ticker, strategy, market } = req.query;
 
     let alerts = await alertHistoryRepository.getAll();
+
+    if (market && (market === 'US' || market === 'KR')) {
+      alerts = alerts.filter((a) => {
+        if (!a.tickers || a.tickers.length === 0) return market === 'US';
+        return a.tickers.some((t) => detectMarketRegion(t) === market);
+      });
+    }
 
     if (ticker && typeof ticker === 'string') {
       const clean = ticker.toUpperCase().trim();

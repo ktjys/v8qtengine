@@ -9,6 +9,7 @@ import { createSignalSnapshot } from './signalEngine';
 import { ensureDipEvaluation } from './dipBuyEngine';
 import { MacroEarningsEngine } from './macroEarningsEngine';
 import { PortfolioEngine } from './portfolioEngine';
+import { ExitSignalEngine } from './exitSignalEngine';
 import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types/v8';
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
@@ -250,6 +251,29 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       reportText += `   ℹ️ 현재 우량주 중 최적의 과매도 눌림목 구간에 도달한 종목 없음 (정기 일정 유지)\n`;
     }
     reportText += `\n`;
+
+    // 3. 통합 매도 & 청산 신호 섹션 (익절/손절/트레일링/추세붕괴)
+    try {
+      const exitEvals = ExitSignalEngine.evaluateAllExits(evaluations);
+      const actionableExits = exitEvals.filter((e) => e.isActionableSell);
+      if (actionableExits.length > 0) {
+        reportText += `🚨 <b>[통합 매도 & 포지션 청산 권고]</b>\n`;
+        actionableExits.slice(0, 3).forEach((exit, idx) => {
+          const safeTicker = escapeTelegramHtml(exit.ticker);
+          const safeHeadline = escapeTelegramHtml(exit.headline);
+          const safeAction = escapeTelegramHtml(exit.recommendedAction);
+          const retText = exit.returnSinceEntryPct !== undefined
+            ? ` (진입대비 ${exit.returnSinceEntryPct >= 0 ? '+' : ''}${exit.returnSinceEntryPct.toFixed(1)}%)`
+            : '';
+
+          reportText += `${idx + 1}. <b>${safeTicker}</b>: ${safeHeadline}${retText}\n`;
+          reportText += `   └ 💡 <b>실행 권고:</b> ${safeAction}\n`;
+        });
+        reportText += `\n`;
+      }
+    } catch (exitErr) {
+      console.warn('[CronScan] Exit evaluations skipped:', exitErr);
+    }
 
     // Phase 2: 포트폴리오 리밸런싱 및 섹터 쏠림 가이드
     try {

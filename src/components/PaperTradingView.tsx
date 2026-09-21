@@ -36,19 +36,23 @@ import {
   PaperTradePosition,
   SignalPerformanceSummary,
   TradeStrategySource,
+  MarketRegion,
 } from '../types/v8';
 import { PaperTradingEngine } from '../engine/paperTradingEngine';
 import { RiskSizingEngine } from '../engine/riskSizingEngine';
 import { PositionSizingCalculator } from './PositionSizingCalculator';
 import { EquityCurveChart } from './EquityCurveChart';
-import { EquityCurveEngine, EquityCurveResult } from '../engine/equityCurveEngine';
-import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { EquityCurveResult } from '../engine/equityCurveEngine';
+import { formatStockPrice, formatCurrencyAmount } from '../utils/formatters';
+import { detectMarketRegion, getStockDisplayInfo } from '../utils/marketUtils';
+import { StockDisplayBadge } from './StockDisplayBadge';
 
 interface PaperTradingViewProps {
   onSelectTicker?: (ticker: string) => void;
+  activeMarket?: MarketRegion;
 }
 
-export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTicker }) => {
+export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTicker, activeMarket = 'US' }) => {
   const [activeSubTab, setActiveSubTab] = useState<'positions' | 'equity' | 'accuracy' | 'history' | 'sizing'>('positions');
   const [accountSummary, setAccountSummary] = useState<PaperAccountSummary | null>(null);
   const [performanceSummary, setPerformanceSummary] = useState<SignalPerformanceSummary | null>(null);
@@ -56,17 +60,20 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   const [isLoadingEquity, setIsLoadingEquity] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const isKr = activeMarket === 'KR';
+  const currencySymbol = isKr ? '₩' : '$';
+
   // Sizing Subtab State
-  const [sizingTicker, setSizingTicker] = useState<string>('NVDA');
-  const [sizingPrice, setSizingPrice] = useState<number>(118.6);
+  const [sizingTicker, setSizingTicker] = useState<string>(isKr ? '005930.KS' : 'NVDA');
+  const [sizingPrice, setSizingPrice] = useState<number>(isKr ? 74200 : 118.6);
 
   // New Order Modal State
   const [isOrderModalOpen, setIsOrderModalOpen] = useState<boolean>(false);
-  const [orderTicker, setOrderTicker] = useState<string>('NVDA');
+  const [orderTicker, setOrderTicker] = useState<string>(isKr ? '005930.KS' : 'NVDA');
   const [orderType, setOrderType] = useState<OrderType>('BUY');
   const [orderStrategy, setOrderStrategy] = useState<TradeStrategySource>('STRATEGY_A');
-  const [orderShares, setOrderShares] = useState<number>(10);
-  const [orderPrice, setOrderPrice] = useState<number>(118.6);
+  const [orderShares, setOrderShares] = useState<number>(isKr ? 10 : 10);
+  const [orderPrice, setOrderPrice] = useState<number>(isKr ? 74200 : 118.6);
   const [orderReason, setOrderReason] = useState<string>('');
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState<string | null>(null);
@@ -75,10 +82,25 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   const [signalStrategyFilter, setSignalStrategyFilter] = useState<'ALL' | 'STRATEGY_A' | 'STRATEGY_B'>('ALL');
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState<boolean>(false);
 
+  // Update default states when activeMarket changes
+  useEffect(() => {
+    if (activeMarket === 'KR') {
+      setSizingTicker('005930.KS');
+      setSizingPrice(74200);
+      setOrderTicker('005930.KS');
+      setOrderPrice(74200);
+    } else {
+      setSizingTicker('NVDA');
+      setSizingPrice(118.6);
+      setOrderTicker('NVDA');
+      setOrderPrice(118.6);
+    }
+  }, [activeMarket]);
+
   const loadEquityCurve = async () => {
     setIsLoadingEquity(true);
     try {
-      const res = await fetch('/api/v8/backtest/equity-curve?_t=' + Date.now());
+      const res = await fetch(`/api/v8/backtest/equity-curve?market=${activeMarket}&_t=${Date.now()}`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -96,8 +118,8 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   const loadData = () => {
     setIsLoading(true);
     try {
-      const summary = PaperTradingEngine.getAccountSummary();
-      const perf = PaperTradingEngine.getSignalPerformanceSummary();
+      const summary = PaperTradingEngine.getAccountSummary(activeMarket);
+      const perf = PaperTradingEngine.getSignalPerformanceSummary(activeMarket);
       setAccountSummary(summary);
       setPerformanceSummary(perf);
     } catch (err) {
@@ -110,12 +132,14 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   useEffect(() => {
     loadData();
     loadEquityCurve();
-  }, []);
+  }, [activeMarket]);
 
   const handleOpenOrderModal = (ticker?: string, type: OrderType = 'BUY', price?: number, strategy?: TradeStrategySource) => {
-    if (ticker) setOrderTicker(ticker);
+    if (ticker) {
+      setOrderTicker(ticker);
+      if (price) setOrderPrice(price);
+    }
     setOrderType(type);
-    if (price) setOrderPrice(price);
     if (strategy) setOrderStrategy(strategy);
     setOrderError(null);
     setOrderSuccessMsg(null);
@@ -133,6 +157,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
       price: Number(orderPrice),
       strategySource: orderStrategy,
       reason: orderReason.trim() || undefined,
+      market: activeMarket,
     });
 
     if (!res.success) {
@@ -140,7 +165,8 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
       return;
     }
 
-    setOrderSuccessMsg(`주문이 성공적으로 체결되었습니다: ${orderTicker} ${orderShares}주 @ $${orderPrice}`);
+    const { primaryName } = getStockDisplayInfo(orderTicker);
+    setOrderSuccessMsg(`주문이 성공적으로 체결되었습니다: ${primaryName} (${orderTicker}) ${orderShares}주 @ ${formatCurrencyAmount(orderPrice, activeMarket)}`);
     loadData();
     setTimeout(() => {
       setIsOrderModalOpen(false);
@@ -153,16 +179,36 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
   };
 
   const handleExecuteReset = () => {
-    PaperTradingEngine.resetAccount(100000);
+    PaperTradingEngine.resetAccount(activeMarket);
     setIsResetConfirmOpen(false);
     loadData();
   };
 
   const filteredSignalRecords = useMemo(() => {
     if (!performanceSummary) return [];
-    if (signalStrategyFilter === 'ALL') return performanceSummary.records;
-    return performanceSummary.records.filter((r) => r.strategyType === signalStrategyFilter);
-  }, [performanceSummary, signalStrategyFilter]);
+    let recs = performanceSummary.records;
+    if (activeMarket) {
+      recs = recs.filter((r) => detectMarketRegion(r.ticker) === activeMarket);
+    }
+    if (signalStrategyFilter !== 'ALL') {
+      recs = recs.filter((r) => r.strategyType === signalStrategyFilter);
+    }
+    return recs;
+  }, [performanceSummary, signalStrategyFilter, activeMarket]);
+
+  const filteredPositions = useMemo(() => {
+    if (!accountSummary) return [];
+    return accountSummary.positions.filter(
+      (p) => (p.market_region || detectMarketRegion(p.ticker)) === activeMarket
+    );
+  }, [accountSummary, activeMarket]);
+
+  const filteredOrders = useMemo(() => {
+    if (!accountSummary) return [];
+    return (accountSummary.tradeHistory || []).filter(
+      (o) => (o.market_region || detectMarketRegion(o.ticker)) === activeMarket
+    );
+  }, [accountSummary, activeMarket]);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -175,14 +221,20 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                가상 모의투자 & 시그널 적중률 추적기
+                {isKr ? '🇰🇷 국내 모의투자 & 시그널 적중률 추적기' : '🇺🇸 미국 모의투자 & 시그널 적중률 추적기'}
               </h1>
-              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
-                Phase 3 실시간 검증
+              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
+                isKr 
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' 
+                  : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
+              }`}>
+                {isKr ? '원화 (KRW) 계좌' : '달러 (USD) 계좌'}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              신호 발생 시 원클릭 가상 매매 체결, 실시간 포지션/손익 추적, T+5/T+20일 사후 성과 및 승률(Hit Ratio) 자동 채점
+              {isKr 
+                ? '국내 종목 신호 발생 시 원클릭 가상 매매 체결 (초기자금: 1억원), 종목명 우선 실시간 포지션/손익 추적' 
+                : '미국 종목 신호 발생 시 원클릭 가상 매매 체결 (초기자금: $100,000), 실시간 포지션/손익 추적'}
             </p>
           </div>
         </div>
@@ -200,7 +252,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
             id="paper-reset-btn"
             onClick={handleResetAccount}
             className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs sm:text-sm font-medium border border-slate-700 transition-all active:scale-95"
-            title="계좌 잔고 리셋 ($100,000)"
+            title={isKr ? '계좌 잔고 리셋 (₩100,000,000)' : '계좌 잔고 리셋 ($100,000)'}
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">리셋</span>
@@ -223,10 +275,10 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
               <span>총 가상 순자산</span>
-              <DollarSign className="w-4 h-4 text-cyan-400" />
+              <span className="font-bold text-cyan-400">{currencySymbol}</span>
             </div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-white">
-              ${accountSummary.totalEquity.toLocaleString()}
+              {formatCurrencyAmount(accountSummary.totalEquity, activeMarket)}
             </div>
             <div
               className={`text-xs font-semibold font-mono mt-1 flex items-center space-x-1 ${
@@ -240,7 +292,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               )}
               <span>
                 {accountSummary.totalPnL >= 0 ? '+' : ''}
-                ${accountSummary.totalPnL.toLocaleString()} ({accountSummary.totalReturnPct}%)
+                {formatCurrencyAmount(accountSummary.totalPnL, activeMarket)} ({accountSummary.totalReturnPct}%)
               </span>
             </div>
           </div>
@@ -252,10 +304,10 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               <Activity className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-white">
-              ${accountSummary.cashBalance.toLocaleString()}
+              {formatCurrencyAmount(accountSummary.cashBalance, activeMarket)}
             </div>
             <div className="text-xs text-slate-500 font-mono mt-1">
-              비중: {Math.round((accountSummary.cashBalance / accountSummary.totalEquity) * 100)}%
+              비중: {accountSummary.totalEquity > 0 ? Math.round((accountSummary.cashBalance / accountSummary.totalEquity) * 100) : 0}%
             </div>
           </div>
 
@@ -266,10 +318,10 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               <BarChart3 className="w-4 h-4 text-purple-400" />
             </div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-white">
-              ${accountSummary.portfolioValue.toLocaleString()}
+              {formatCurrencyAmount(accountSummary.portfolioValue, activeMarket)}
             </div>
             <div className="text-xs text-slate-500 font-mono mt-1">
-              {accountSummary.positions.length}개 포지션 운용 중
+              {filteredPositions.length}개 포지션 운용 중
             </div>
           </div>
 
@@ -284,11 +336,11 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 accountSummary.unrealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              {accountSummary.unrealizedPnL >= 0 ? '+' : ''}$
-              {accountSummary.unrealizedPnL.toLocaleString()}
+              {accountSummary.unrealizedPnL >= 0 ? '+' : ''}
+              {formatCurrencyAmount(accountSummary.unrealizedPnL, activeMarket)}
             </div>
             <div className="text-xs text-slate-400 font-mono mt-1">
-              실현 손익: ${accountSummary.realizedPnL.toLocaleString()}
+              실현 손익: {formatCurrencyAmount(accountSummary.realizedPnL, activeMarket)}
             </div>
           </div>
 
@@ -309,58 +361,58 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
       )}
 
       {/* 3. Sub-Navigation Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
+      <div className="flex items-center space-x-2 border-b border-slate-800 pb-3 overflow-x-auto">
         <button
           onClick={() => setActiveSubTab('positions')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
             activeSubTab === 'positions'
               ? 'bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>보유 포지션 ({accountSummary?.positions.length || 0})</span>
+          <span>보유 포지션 ({filteredPositions.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('equity')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
             activeSubTab === 'equity'
               ? 'bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
           <TrendingUp className="w-4 h-4 text-cyan-400" />
-          <span>누적 수익 곡선 & SPY 알파</span>
+          <span>누적 수익 곡선 & {isKr ? 'KOSPI' : 'SPY'} 알파</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('accuracy')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
             activeSubTab === 'accuracy'
               ? 'bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>시그널 적중률 추적기 ({performanceSummary?.totalSignals || 0})</span>
+          <span>시그널 적중률 추적기 ({filteredSignalRecords.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('history')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
             activeSubTab === 'history'
               ? 'bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
           <Clock className="w-4 h-4" />
-          <span>주문 체결 이력 ({accountSummary?.tradeHistory.length || 0})</span>
+          <span>주문 체결 이력 ({filteredOrders.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('sizing')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
             activeSubTab === 'sizing'
               ? 'bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -380,19 +432,21 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2">
                 <Layers className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-base sm:text-lg font-bold text-white">현재 보유 가상 포지션</h2>
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  {isKr ? '현재 보유 국내 가상 포지션' : '현재 보유 미국 가상 포지션'}
+                </h2>
               </div>
               <span className="text-xs text-slate-400">
-                실시간 단가 및 평가손익 계산 완료
+                실시간 단가 및 평가손익 계산 완료 ({currencySymbol} 기준)
               </span>
             </div>
 
-            {accountSummary && accountSummary.positions.length > 0 ? (
+            {filteredPositions.length > 0 ? (
               <div className="border border-slate-800 rounded-xl overflow-hidden overflow-x-auto">
                 <table className="w-full text-left text-xs sm:text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-950 text-slate-400 font-medium">
-                      <th className="py-3 px-4">종목 (Ticker)</th>
+                      <th className="py-3 px-4">종목명 (코드)</th>
                       <th className="py-3 px-4">전략 태그</th>
                       <th className="py-3 px-4">보유 수량</th>
                       <th className="py-3 px-4">평균 매입 단가</th>
@@ -403,23 +457,23 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                    {accountSummary.positions.map((pos) => {
+                    {filteredPositions.map((pos) => {
                       const isProfit = pos.unrealizedPnL >= 0;
                       return (
                         <tr key={pos.ticker} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-3 px-4">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => onSelectTicker?.(pos.ticker)}
-                                className="font-bold font-mono text-cyan-400 hover:text-cyan-300 hover:underline flex items-center space-x-1"
-                              >
-                                <span>{pos.ticker}</span>
-                                <ExternalLink className="w-3 h-3 opacity-60" />
-                              </button>
-                              <span className="text-xs text-slate-400 truncate max-w-[120px]">
-                                {pos.companyName}
-                              </span>
-                            </div>
+                            <button
+                              onClick={() => onSelectTicker?.(pos.ticker)}
+                              className="text-left group flex items-center space-x-1.5"
+                            >
+                              <StockDisplayBadge
+                                ticker={pos.ticker}
+                                name={pos.companyName}
+                                showSubCode={true}
+                                primaryClassName="font-bold text-cyan-400 group-hover:text-cyan-300 group-hover:underline text-sm"
+                              />
+                              <ExternalLink className="w-3 h-3 text-cyan-400 opacity-60 shrink-0" />
+                            </button>
                           </td>
 
                           <td className="py-3 px-4">
@@ -445,16 +499,16 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                           </td>
 
                           <td className="py-3 px-4 font-mono text-slate-300">
-                            ${pos.avgCostBasis.toFixed(2)}
+                            {formatStockPrice(pos.avgCostBasis, pos.ticker)}
                           </td>
 
                           <td className="py-3 px-4 font-mono font-bold text-white">
-                            ${pos.currentPrice.toFixed(2)}
+                            {formatStockPrice(pos.currentPrice, pos.ticker)}
                           </td>
 
                           <td className="py-3 px-4 font-mono font-bold">
                             <div className={isProfit ? 'text-emerald-400' : 'text-rose-400'}>
-                              {isProfit ? '+' : ''}${pos.unrealizedPnL.toLocaleString()}
+                              {isProfit ? '+' : ''}{formatCurrencyAmount(pos.unrealizedPnL, activeMarket)}
                             </div>
                             <div className={`text-xs ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                               ({isProfit ? '+' : ''}{pos.unrealizedPnLPct}%)
@@ -462,7 +516,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                           </td>
 
                           <td className="py-3 px-4 font-mono font-bold text-white">
-                            ${pos.marketValue.toLocaleString()}
+                            {formatCurrencyAmount(pos.marketValue, activeMarket)}
                           </td>
 
                           <td className="py-3 px-4 text-center">
@@ -488,15 +542,23 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 </table>
               </div>
             ) : (
-              <div className="p-8 text-center text-slate-500">
-                현재 보유 중인 포지션이 없습니다. 상단의 '신규 주문' 버튼을 눌러 모의투자를 시작해보세요!
+              <div className="p-10 text-center text-slate-500">
+                <Layers className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-semibold text-slate-300 mb-1">
+                  {isKr
+                    ? '🇰🇷 현재 보유 중인 국내 가상 포지션이 없습니다.'
+                    : '🇺🇸 현재 보유 중인 미국 가상 포지션이 없습니다.'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  상단의 '신규 주문' 버튼을 눌러 모의투자를 시작해보세요!
+                </p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* SUBTAB: Cumulative Equity Curve & SPY Benchmark */}
+      {/* SUBTAB: Cumulative Equity Curve & Benchmark */}
       {activeSubTab === 'equity' && (
         <EquityCurveChart
           data={equityData}
@@ -592,7 +654,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               <table className="w-full text-left text-xs sm:text-sm border-collapse">
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 font-medium">
-                    <th className="py-3 px-4">종목</th>
+                    <th className="py-3 px-4">종목명 (코드)</th>
                     <th className="py-3 px-4">전략 구분</th>
                     <th className="py-3 px-4">신호일자 / 신호가</th>
                     <th className="py-3 px-4">현재가</th>
@@ -611,12 +673,16 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                         <td className="py-3 px-4 font-sans">
                           <button
                             onClick={() => onSelectTicker?.(rec.ticker)}
-                            className="font-bold text-cyan-400 hover:underline flex items-center space-x-1"
+                            className="text-left group flex items-center space-x-1.5"
                           >
-                            <span>{rec.ticker}</span>
-                            <ExternalLink className="w-3 h-3 opacity-60" />
+                            <StockDisplayBadge
+                              ticker={rec.ticker}
+                              name={rec.companyName}
+                              showSubCode={true}
+                              primaryClassName="font-bold text-cyan-400 group-hover:text-cyan-300 group-hover:underline text-sm"
+                            />
+                            <ExternalLink className="w-3 h-3 text-cyan-400 opacity-60 shrink-0" />
                           </button>
-                          <div className="text-[10px] text-slate-500">{rec.companyName}</div>
                         </td>
 
                         <td className="py-3 px-4 font-sans">
@@ -632,12 +698,12 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                         </td>
 
                         <td className="py-3 px-4">
-                          <div className="text-white">${rec.signalPrice.toFixed(2)}</div>
+                          <div className="text-white">{formatStockPrice(rec.signalPrice, rec.ticker)}</div>
                           <div className="text-[10px] text-slate-500 font-sans">{rec.signalDate}</div>
                         </td>
 
                         <td className="py-3 px-4 font-bold text-white">
-                          ${rec.currentPrice.toFixed(2)}
+                          {formatStockPrice(rec.currentPrice, rec.ticker)}
                         </td>
 
                         <td className="py-3 px-4 font-bold">
@@ -655,8 +721,8 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                         </td>
 
                         <td className="py-3 px-4 text-slate-300 text-xs">
-                          <div>T+5: {rec.returnT5 !== undefined ? `${rec.returnT5 >= 0 ? '+' : ''}${rec.returnT5}%` : '-'}</div>
-                          <div>T+10: {rec.returnT10 !== undefined ? `${rec.returnT10 >= 0 ? '+' : ''}${rec.returnT10}%` : '-'}</div>
+                          <div>T+5: {rec.returnT5 !== undefined && rec.returnT5 !== null ? `${rec.returnT5 >= 0 ? '+' : ''}${rec.returnT5}%` : '-'}</div>
+                          <div>T+10: {rec.returnT10 !== undefined && rec.returnT10 !== null ? `${rec.returnT10 >= 0 ? '+' : ''}${rec.returnT10}%` : '-'}</div>
                         </td>
 
                         <td className="py-3 px-4 text-center font-sans">
@@ -689,68 +755,87 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               <h2 className="text-base sm:text-lg font-bold text-white">가상 주문 체결 이력</h2>
             </div>
             <span className="text-xs text-slate-400 font-mono">
-              총 {accountSummary.tradeHistory.length}건의 체결 기록
+              총 {filteredOrders.length}건의 체결 기록
             </span>
           </div>
 
           <div className="border border-slate-800 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm border-collapse font-mono">
-              <thead>
-                <tr className="bg-slate-950 text-slate-400 font-sans font-medium">
-                  <th className="py-3 px-4">체결 시각</th>
-                  <th className="py-3 px-4">종목</th>
-                  <th className="py-3 px-4">주문 유형</th>
-                  <th className="py-3 px-4">체결 수량</th>
-                  <th className="py-3 px-4">체결 가격</th>
-                  <th className="py-3 px-4">총 체결 금액</th>
-                  <th className="py-3 px-4 font-sans">체결 사유 및 전략</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                {accountSummary.tradeHistory.map((order) => {
-                  const isBuy = order.orderType === 'BUY';
-                  return (
-                    <tr key={order.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-4 text-slate-400 text-xs font-sans">
-                        {new Date(order.executedAt).toLocaleString()}
-                      </td>
+            {filteredOrders.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 font-sans">
+                <Clock className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-semibold text-slate-300 mb-1">
+                  {isKr
+                    ? '🇰🇷 체결된 국내 가상 주문 이력이 없습니다.'
+                    : '🇺🇸 체결된 미국 가상 주문 이력이 없습니다.'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  신규 주문 버튼을 눌러 모의투자를 진행하세요.
+                </p>
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs sm:text-sm border-collapse font-mono">
+                <thead>
+                  <tr className="bg-slate-950 text-slate-400 font-sans font-medium">
+                    <th className="py-3 px-4">체결 시각</th>
+                    <th className="py-3 px-4">종목명 (코드)</th>
+                    <th className="py-3 px-4">주문 유형</th>
+                    <th className="py-3 px-4">체결 수량</th>
+                    <th className="py-3 px-4">체결 가격</th>
+                    <th className="py-3 px-4">총 체결 금액</th>
+                    <th className="py-3 px-4 font-sans">체결 사유 및 전략</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                  {filteredOrders.map((order) => {
+                    const isBuy = order.orderType === 'BUY';
+                    return (
+                      <tr key={order.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 text-slate-400 text-xs font-sans">
+                          {new Date(order.executedAt).toLocaleString()}
+                        </td>
 
-                      <td className="py-3 px-4 font-bold text-cyan-400 font-sans">
-                        {order.ticker}
-                      </td>
+                        <td className="py-3 px-4 font-bold text-cyan-400 font-sans">
+                          <StockDisplayBadge
+                            ticker={order.ticker}
+                            name={order.companyName}
+                            showSubCode={true}
+                            primaryClassName="font-bold text-cyan-400 text-sm"
+                          />
+                        </td>
 
-                      <td className="py-3 px-4 font-sans">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-bold border ${
-                            isBuy
-                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                              : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                          }`}
-                        >
-                          {isBuy ? '매수 (BUY)' : '매도 (SELL)'}
-                        </span>
-                      </td>
+                        <td className="py-3 px-4 font-sans">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                              isBuy
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            }`}
+                          >
+                            {isBuy ? '매수 (BUY)' : '매도 (SELL)'}
+                          </span>
+                        </td>
 
-                      <td className="py-3 px-4 font-bold text-white">
-                        {order.shares}주
-                      </td>
+                        <td className="py-3 px-4 font-bold text-white">
+                          {order.shares}주
+                        </td>
 
-                      <td className="py-3 px-4 text-slate-200">
-                        ${order.executedPrice.toFixed(2)}
-                      </td>
+                        <td className="py-3 px-4 text-slate-200">
+                          {formatStockPrice(order.executedPrice, order.ticker)}
+                        </td>
 
-                      <td className="py-3 px-4 font-bold text-white">
-                        ${order.totalAmount.toLocaleString()}
-                      </td>
+                        <td className="py-3 px-4 font-bold text-white">
+                          {formatCurrencyAmount(order.totalAmount, activeMarket)}
+                        </td>
 
-                      <td className="py-3 px-4 text-xs text-slate-400 font-sans truncate max-w-[280px]">
-                        {order.reason || '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td className="py-3 px-4 text-xs text-slate-400 font-sans truncate max-w-[280px]">
+                          {order.reason || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
@@ -762,22 +847,30 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center space-x-2">
               <Scale className="w-5 h-5 text-cyan-400" />
-              <span className="text-sm font-bold text-white">종목별 ATR 리스크 & 포지션 사이징:</span>
+              <span className="text-sm font-bold text-white">
+                {isKr ? '국내' : '미국'} 종목별 ATR 리스크 & 포지션 사이징:
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-              {[
-                { t: 'NVDA', p: 118.6 },
-                { t: 'TSLA', p: 228.4 },
-                { t: 'AAPL', p: 224.8 },
-                { t: 'MSFT', p: 428.1 },
-                { t: 'AMZN', p: 186.4 },
-                { t: 'GOOGL', p: 178.5 },
-                { t: 'META', p: 514.2 },
-                { t: 'AMD', p: 142.3 },
-                { t: 'SPY', p: 548.2 },
-                { t: 'QQQ', p: 476.5 },
-              ].map((item) => (
+              {(isKr
+                ? [
+                    { t: '005930.KS', label: '삼성전자', p: 74200 },
+                    { t: '000660.KS', label: 'SK하이닉스', p: 186500 },
+                    { t: '035420.KS', label: 'NAVER', p: 174000 },
+                    { t: '005380.KS', label: '현대차', p: 248000 },
+                    { t: '068270.KS', label: '셀트리온', p: 188000 },
+                  ]
+                : [
+                    { t: 'NVDA', label: 'NVIDIA', p: 118.6 },
+                    { t: 'TSLA', label: 'Tesla', p: 228.4 },
+                    { t: 'AAPL', label: 'Apple', p: 224.8 },
+                    { t: 'MSFT', label: 'Microsoft', p: 428.1 },
+                    { t: 'AMZN', label: 'Amazon', p: 186.4 },
+                    { t: 'GOOGL', label: 'Alphabet', p: 178.5 },
+                    { t: 'SPY', label: 'S&P 500', p: 548.2 },
+                  ]
+              ).map((item) => (
                 <button
                   key={item.t}
                   type="button"
@@ -791,17 +884,17 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                       : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  {item.t} (${item.p})
+                  {item.label} ({isKr ? `₩${item.p.toLocaleString()}` : `$${item.p}`})
                 </button>
               ))}
             </div>
           </div>
 
           <PositionSizingCalculator
-            key={sizingTicker}
+            key={`${sizingTicker}-${activeMarket}`}
             ticker={sizingTicker}
             currentPrice={sizingPrice}
-            initialAccountEquity={accountSummary?.totalEquity || 100000}
+            initialAccountEquity={accountSummary?.totalEquity || (isKr ? 100000000 : 100000)}
             onOrderExecuted={loadData}
           />
         </div>
@@ -820,11 +913,13 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
 
             <div className="flex items-center space-x-2.5 border-b border-slate-800 pb-3">
               <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                <DollarSign className="w-5 h-5" />
+                <span className="font-bold text-lg">{currencySymbol}</span>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">가상 모의투자 주문 제출</h3>
-                <p className="text-xs text-slate-400">실시간 시장가 가상 체결 시뮬레이션</p>
+                <h3 className="text-lg font-bold text-white">
+                  {isKr ? '국내 가상 모의투자 주문' : '미국 가상 모의투자 주문'}
+                </h3>
+                <p className="text-xs text-slate-400">실시간 가상 체결 시뮬레이션 ({currencySymbol})</p>
               </div>
             </div>
 
@@ -872,11 +967,19 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               {/* Ticker & Strategy */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-400 block mb-1">종목 코드 (Ticker)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-400">종목 코드/티커</label>
+                    {orderTicker && (
+                      <span className="text-[10px] text-cyan-400 truncate max-w-[90px]">
+                        {getStockDisplayInfo(orderTicker).primaryName}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={orderTicker}
                     onChange={(e) => setOrderTicker(e.target.value.toUpperCase())}
+                    placeholder={isKr ? '005930.KS' : 'NVDA'}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
                     required
                   />
@@ -908,7 +1011,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                           ticker: orderTicker,
                           entryPrice: orderPrice,
                           stopLossPrice: profile.stopLossPrice,
-                          accountEquity: accountSummary?.totalEquity || 100000,
+                          accountEquity: accountSummary?.totalEquity || (isKr ? 100000000 : 100000),
                           riskTolerancePct: 1.0,
                         });
                         setOrderShares(res.recommendedShares);
@@ -931,11 +1034,13 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-400 block mb-1">주문 단가 ($ Price)</label>
+                  <label className="text-xs font-medium text-slate-400 block mb-1">
+                    주문 단가 ({currencySymbol} Price)
+                  </label>
                   <input
                     type="number"
-                    min="0.01"
-                    step="0.01"
+                    min={isKr ? 1 : 0.01}
+                    step={isKr ? 1 : 0.01}
                     value={orderPrice}
                     onChange={(e) => setOrderPrice(Number(e.target.value))}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
@@ -949,13 +1054,13 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 <div className="flex justify-between text-slate-400 font-mono">
                   <span>예상 체결 금액:</span>
                   <span className="font-bold text-white">
-                    ${(orderShares * orderPrice).toLocaleString()}
+                    {formatCurrencyAmount(orderShares * orderPrice, activeMarket)}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-400 font-mono">
                   <span>보유 가능 예수금:</span>
                   <span className="text-emerald-400">
-                    ${accountSummary?.cashBalance.toLocaleString() || 0}
+                    {formatCurrencyAmount(accountSummary?.cashBalance || 0, activeMarket)}
                   </span>
                 </div>
               </div>
@@ -995,6 +1100,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
           </div>
         </div>
       )}
+
       {/* Reset Account Confirmation Modal */}
       {isResetConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
@@ -1004,17 +1110,21 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 <RotateCcw className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">가상 계좌 리셋</h3>
+                <h3 className="text-base font-bold text-slate-100">
+                  {isKr ? '국내 가상 계좌 리셋' : '미국 가상 계좌 리셋'}
+                </h3>
                 <p className="text-xs text-slate-400">초기 투자 자금으로 원복합니다.</p>
               </div>
             </div>
 
             <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl text-xs space-y-1.5 text-slate-300">
               <p className="leading-relaxed">
-                가상 계좌 잔고를 <span className="font-bold text-emerald-400 font-mono">$100,000</span>으로 리셋하시겠습니까?
+                가상 계좌 잔고를 <span className="font-bold text-emerald-400 font-mono">
+                  {isKr ? '₩100,000,000' : '$100,000'}
+                </span>으로 리셋하시겠습니까?
               </p>
               <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 leading-relaxed">
-                현재 보유 중인 포지션과 주문 체결 내역이 모두 초기화됩니다.
+                현재 보유 중인 {isKr ? '국내' : '미국'} 포지션과 주문 체결 내역이 초기화됩니다.
               </p>
             </div>
 

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Clock, Database, Layers, RefreshCw, Search } from 'lucide-react';
-import { ScanRunLog } from '../types/v8';
+import { MarketRegion, ScanRunLog } from '../types/v8';
 import { SortableHeader } from './SortableHeader';
 import { AlertHistoryView } from './AlertHistoryView';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 export type ScanRunsSortField =
   | 'run_id'
@@ -20,6 +21,7 @@ interface ScanRunsViewProps {
   onOpenDbHealthModal?: () => void;
   initialTab?: 'alerts' | 'runs';
   alertRefreshKey?: number;
+  activeMarket?: MarketRegion;
 }
 
 export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
@@ -29,6 +31,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
   onOpenDbHealthModal,
   initialTab = 'alerts',
   alertRefreshKey,
+  activeMarket = 'US',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'alerts' | 'runs'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,6 +51,20 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
   };
 
   const filtered = (runs || []).filter((run) => {
+    if (activeMarket) {
+      if (run.market_region) {
+        if (run.market_region !== activeMarket) return false;
+      } else if (run.items && run.items.length > 0) {
+        const itemMarket = detectMarketRegion(run.items[0].ticker);
+        if (itemMarket !== activeMarket) return false;
+      } else if (run.failed_tickers && run.failed_tickers.length > 0) {
+        const failedMarket = detectMarketRegion(run.failed_tickers[0].ticker);
+        if (failedMarket !== activeMarket) return false;
+      } else {
+        // Run without specific region info defaults to US
+        if (activeMarket !== 'US') return false;
+      }
+    }
     if (filterStatus !== 'ALL' && run.status !== filterStatus) return false;
     if (
       searchTerm &&
@@ -103,7 +120,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
             }`}
           >
             <Bell className="w-4 h-4" />
-            <span>알림 발송 내역 (Alert History)</span>
+            <span>알림 발송 내역 ({activeMarket === 'KR' ? '국내장' : '미국장'})</span>
           </button>
 
           <button
@@ -115,7 +132,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>스캔 실행 로그 ({runs.length})</span>
+            <span>스캔 실행 로그 ({filtered.length})</span>
           </button>
         </div>
 
@@ -147,6 +164,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
           onSelectTicker={onSelectTicker}
           onTriggerScan={onTriggerScan}
           refreshKey={alertRefreshKey}
+          activeMarket={activeMarket}
         />
       )}
 
@@ -279,8 +297,19 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
             <tbody className="divide-y divide-slate-800/60 font-mono">
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500 font-sans">
-                    검색 조건과 일치하는 스캔 실행 이력이 없습니다.
+                  <td colSpan={8} className="py-12 text-center text-slate-500 font-sans">
+                    <p className="text-sm font-semibold text-slate-300 mb-1">
+                      {searchTerm
+                        ? `'${searchTerm}' 관련 스캔 실행 이력이 없습니다.`
+                        : activeMarket === 'KR'
+                        ? '🇰🇷 국내 주식 시장(KOSPI/KOSDAQ) 스캔 실행 로그가 없습니다.'
+                        : '🇺🇸 미국 주식 시장(NYSE/NASDAQ) 스캔 실행 로그가 없습니다.'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {activeMarket === 'KR'
+                        ? '상단의 [신규 스캔 실행] 버튼을 눌러 국내 워치리스트 종목의 퀀트 평가 및 시그널 검출을 시작하세요.'
+                        : '상단의 [신규 스캔 실행] 버튼을 눌러 스캔을 가동하세요.'}
+                    </p>
                   </td>
                 </tr>
               ) : (

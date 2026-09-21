@@ -23,10 +23,12 @@ import {
   Zap,
   BookOpen,
 } from 'lucide-react';
-import { BacktestSummary, FullTickerEvaluation, SignalSnapshot, MacroMarketRegime, EarningsEvent } from '../types/v8';
+import { BacktestSummary, FullTickerEvaluation, SignalSnapshot, MacroMarketRegime, EarningsEvent, MarketRegion } from '../types/v8';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { detectMarketRegion } from '../utils/marketUtils';
+import { StockDisplayBadge } from './StockDisplayBadge';
 import { SortableHeader } from './SortableHeader';
 import { SectorPerformanceTreemap } from './SectorPerformanceTreemap';
 import { StrategyOptimizationBanner } from './StrategyOptimizationBanner';
@@ -35,6 +37,7 @@ import {
   DEFAULT_STRATEGY_CONFIG,
   StrategyOptimizationConfig,
 } from '../engine/strategyOptimizerEngine';
+import { ExitSignalEngine } from '../engine/exitSignalEngine';
 
 export type DashboardSignalSortField =
   | 'signal_date'
@@ -58,10 +61,12 @@ interface DashboardViewProps {
   onNavigateToPortfolio?: () => void;
   onNavigateToPaper?: () => void;
   onNavigateToGuide?: () => void;
+  onNavigateToExit?: () => void;
   onRecalculate?: () => void;
   isRecalculating?: boolean;
   currentConfig?: StrategyOptimizationConfig;
   onApplyConfig?: (config: StrategyOptimizationConfig) => void;
+  activeMarket?: MarketRegion;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -75,10 +80,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToPortfolio,
   onNavigateToPaper,
   onNavigateToGuide,
+  onNavigateToExit,
   onRecalculate,
   isRecalculating = false,
   currentConfig = DEFAULT_STRATEGY_CONFIG,
   onApplyConfig,
+  activeMarket = 'US',
 }) => {
   const [isOptimizerModalOpen, setIsOptimizerModalOpen] = useState(false);
   const [showAllWatch, setShowAllWatch] = useState(false);
@@ -133,6 +140,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const moderateDcas = useMemo(() => {
     return dipItems.filter((i) => i.dip.actionSignal === 'MODERATE_DCA');
   }, [dipItems]);
+
+  const exitSignals = useMemo(() => {
+    return ExitSignalEngine.evaluateAllExits(evaluations).filter((e) => e.isActionableSell);
+  }, [evaluations]);
 
   const uniqueRecentSignals = useMemo(() => {
     const map = new Map<string, SignalSnapshot>();
@@ -225,40 +236,81 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 sm:p-4.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2">
-            <span>20일 승률 (백테스트)</span>
+            <span>20일 승률 ({activeMarket === 'KR' ? '국내 퀀트' : '미국 퀀트'})</span>
             <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
           </div>
           <div className="flex items-baseline space-x-1.5 sm:space-x-2">
             <span className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">
-              {backtestSummary?.win_rate_20d ?? 83.3}%
+              {evaluations.length === 0 || !backtestSummary || backtestSummary.completed_signals === 0
+                ? '-'
+                : `${backtestSummary.win_rate_20d}%`}
             </span>
-            <span className="text-[10px] sm:text-xs text-slate-400">
-              (5D: {backtestSummary?.win_rate_5d ?? 100.0}%)
-            </span>
+            {evaluations.length > 0 && backtestSummary && backtestSummary.completed_signals > 0 && (
+              <span className="text-[10px] sm:text-xs text-slate-400">
+                (5D: {backtestSummary.win_rate_5d}%)
+              </span>
+            )}
           </div>
           <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-emerald-400/90 font-mono truncate">
-            평균: +{backtestSummary?.avg_return_20d ?? 10.5}%
+            {evaluations.length === 0
+              ? '종목 등록 필요'
+              : !backtestSummary || backtestSummary.completed_signals === 0
+              ? '완료 신호 대기'
+              : `평균: +${backtestSummary.avg_return_20d}%`}
           </div>
         </div>
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 sm:p-4.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2">
-            <span>Profit Factor</span>
+            <span>Profit Factor ({activeMarket === 'KR' ? '국내' : '미국'})</span>
             <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
           </div>
           <div className="flex items-baseline space-x-1.5 sm:space-x-2">
             <span className="text-xl sm:text-2xl font-bold text-blue-400 font-mono">
-              {backtestSummary?.profit_factor ?? 8.4}x
+              {evaluations.length === 0 || !backtestSummary || backtestSummary.completed_signals === 0
+                ? '-'
+                : `${backtestSummary.profit_factor}x`}
             </span>
             <span className="text-[10px] sm:text-xs text-slate-400">수익/손실</span>
           </div>
           <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-cyan-400 font-mono truncate">
-            MDD: -{backtestSummary?.max_drawdown ?? 2.4}%
+            {evaluations.length === 0
+              ? '종목 등록 필요'
+              : !backtestSummary || backtestSummary.completed_signals === 0
+              ? 'MDD: 0.0%'
+              : `MDD: -${backtestSummary.max_drawdown}%`}
           </div>
         </div>
       </div>
 
-      {/* 1.5 Phase 1: Macro Market Regime & Earnings Risk Guard Ribbon */}
+      {/* Empty Market Watchlist Banner */}
+      {evaluations.length === 0 && (
+        <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-6 sm:p-8 shadow-xl text-center space-y-4 animate-in fade-in">
+          <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-base sm:text-lg font-bold text-white">
+              {activeMarket === 'KR' ? '🇰🇷 국내 주식 시장(KOSPI / KOSDAQ) 워치리스트가 비어있습니다' : '🇺🇸 미국 주식 시장(NYSE / NASDAQ) 워치리스트가 비어있습니다'}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              {activeMarket === 'KR'
+                ? '아직 등록된 국내 종목이 없습니다. 워치리스트에 종목을 추가하면 4대 팩터 기회 점수 산출, 매크로 어닝 가드 및 실시간 매도·청산 시그널 감시가 자동으로 가동됩니다.'
+                : '아직 등록된 미국 종목이 없습니다. 워치리스트에 종목을 추가해보세요.'}
+            </p>
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={() => onNavigateToWatchlist()}
+              className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all active:scale-95"
+            >
+              <span>{activeMarket === 'KR' ? '🇰🇷 국내 종목 등록하러 가기' : '🇺🇸 미국 종목 등록하러 가기'}</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {macroRegime && (
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950">
           <div className="flex items-center space-x-3">
@@ -329,6 +381,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               >
                 <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
                 <span>매매 가이드</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 1.6 Integrated Exit Signals Alert Banner */}
+      {exitSignals.length > 0 && (
+        <div className="bg-gradient-to-r from-rose-950/70 via-slate-900 to-slate-950 border border-rose-500/30 rounded-2xl p-4 shadow-lg shadow-rose-950/20 flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+              <ShieldAlert className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-rose-400">
+                  🚨 실시간 퀀트 매도/청산 신호 ({exitSignals.length}건)
+                </span>
+                <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  Exit Rules Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 truncate">
+                {exitSignals.slice(0, 3).map((e) => `${e.ticker}: ${e.headline}`).join(' | ')}
+                {exitSignals.length > 3 ? ` 외 ${exitSignals.length - 3}건` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0 self-end md:self-auto">
+            {onNavigateToExit && (
+              <button
+                id="dashboard-goto-exit-btn"
+                onClick={onNavigateToExit}
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md shadow-rose-600/30 transition-all active:scale-95"
+              >
+                <span>매도 & 청산 센터 이동</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -470,14 +560,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-100 font-mono group-hover:text-cyan-400 transition-colors">
-                            {item.ticker}
-                          </span>
-                          <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                            {item.name}
-                          </span>
-                        </div>
+                        <StockDisplayBadge
+                          ticker={item.ticker}
+                          name={item.name}
+                          showSubCode={true}
+                          primaryClassName="font-bold text-slate-100 group-hover:text-cyan-400 transition-colors text-xs sm:text-sm"
+                        />
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           {item.classification.strategy_type}
                         </div>
@@ -540,14 +628,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-100 font-mono group-hover:text-amber-400 transition-colors">
-                            {item.ticker}
-                          </span>
-                          <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                            {item.name}
-                          </span>
-                        </div>
+                        <StockDisplayBadge
+                          ticker={item.ticker}
+                          name={item.name}
+                          showSubCode={true}
+                          primaryClassName="font-bold text-slate-100 group-hover:text-amber-400 transition-colors text-xs sm:text-sm"
+                        />
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           {item.classification.strategy_type}
                         </div>
@@ -629,14 +715,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-100 font-mono group-hover:text-rose-400 transition-colors">
-                            {item.ticker}
-                          </span>
-                          <span className="text-[11px] text-slate-400 truncate max-w-[110px]">
-                            {item.name}
-                          </span>
-                        </div>
+                        <StockDisplayBadge
+                          ticker={item.ticker}
+                          name={item.name}
+                          showSubCode={true}
+                          primaryClassName="font-bold text-slate-100 group-hover:text-rose-400 transition-colors text-xs sm:text-sm"
+                        />
                         <div className="text-[10px] text-rose-400/90 mt-0.5 truncate max-w-[180px]">
                           {item.risk.risk_reasons[0] || '고위험 제약 적용'}
                         </div>
@@ -712,25 +796,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1.5">
-                      <span className="font-mono font-bold text-sm text-slate-100 group-hover:text-emerald-300 transition-colors">
-                        {item.ticker}
-                      </span>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                          d.suitability.tier === 'S'
-                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                            : d.suitability.tier === 'A'
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                        }`}
-                      >
-                        {d.suitability.tier}등급
-                      </span>
-                    </div>
+                    <StockDisplayBadge
+                      ticker={item.ticker}
+                      name={item.name}
+                      showSubCode={true}
+                      primaryClassName="font-mono font-bold text-sm text-slate-100 group-hover:text-emerald-300 transition-colors"
+                    />
 
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ml-2 ${
                         d.actionSignal === 'STRONG_DIP_BUY'
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                           : d.actionSignal === 'MODERATE_DCA'
@@ -742,10 +816,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     >
                       {d.signalLabel}
                     </span>
-                  </div>
-
-                  <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                    {item.name}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between text-xs font-mono">
@@ -805,7 +875,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className="pb-3 font-semibold"
                 >
                   <span className="text-slate-500 font-mono mr-1.5">No.</span>
-                  <span>종목코드 / 이름</span>
+                  <span>종목명 (코드)</span>
                 </SortableHeader>
 
                 <SortableHeader<DashboardSignalSortField>
@@ -906,14 +976,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-center min-w-[22px]">
                         {idx + 1}
                       </span>
-                      <div>
-                        <div className="font-bold text-slate-100 font-mono">{sig.ticker}</div>
-                        <div className="text-[11px] text-slate-400">{sig.name}</div>
-                      </div>
+                      <StockDisplayBadge
+                        ticker={sig.ticker}
+                        name={sig.name}
+                        showSubCode={true}
+                        showMarketBadge={false}
+                        primaryClassName="font-bold text-slate-100 font-sans text-xs sm:text-sm"
+                      />
                     </div>
                   </td>
                   <td className="py-3 font-sans text-slate-300">{sig.strategy_type}</td>
-                  <td className="py-3 text-slate-200">${sig.signal_price.toFixed(2)}</td>
+                  <td className="py-3 text-slate-200">{formatStockPrice(sig.signal_price, sig.ticker)}</td>
                   <td className="py-3 text-center">
                     <span className="font-bold text-cyan-400">{sig.opportunity_score}</span>
                   </td>

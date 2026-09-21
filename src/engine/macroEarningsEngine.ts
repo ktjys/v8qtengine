@@ -3,11 +3,13 @@ import {
   EarningsRiskStage,
   MacroMarketRegime,
   MarketRegimeType,
+  MarketRegion,
   VixStatus,
   InterestRateTrend,
   DollarTrend,
   FullTickerEvaluation,
 } from '../types/v8';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 // Base Earnings Calendar for Key Watchlist Assets
 // Dynamically calculated relative to current or specified date
@@ -115,6 +117,61 @@ const WATCHLIST_EARNINGS_DATABASE: RawEarningsInfo[] = [
   {
     ticker: 'QQQ',
     companyName: 'Invesco QQQ Trust',
+    estimatedDate: '2026-12-31',
+    reportTime: 'DURING',
+    estimatedEps: null,
+    estimatedRevenue: null,
+    lastSurprise: '지수 ETF (개별실적 없음)',
+  },
+  // Korean Major Stocks Earnings Database
+  {
+    ticker: '005930.KS',
+    companyName: '삼성전자 (Samsung Electronics)',
+    estimatedDate: '2026-10-08',
+    reportTime: 'BMO',
+    estimatedEps: 1450,
+    estimatedRevenue: '75.2조원',
+    lastSurprise: '+8.4% (잠정실적 서프라이즈)',
+  },
+  {
+    ticker: '000660.KS',
+    companyName: 'SK하이닉스 (SK Hynix)',
+    estimatedDate: '2026-10-24',
+    reportTime: 'BMO',
+    estimatedEps: 7200,
+    estimatedRevenue: '18.5조원',
+    lastSurprise: '+15.2% (HBM 호조 Beat)',
+  },
+  {
+    ticker: '035420.KS',
+    companyName: 'NAVER (네이버)',
+    estimatedDate: '2026-11-06',
+    reportTime: 'BMO',
+    estimatedEps: 2850,
+    estimatedRevenue: '2.8조원',
+    lastSurprise: '+4.5% (광고/클라우드 견조)',
+  },
+  {
+    ticker: '005380.KS',
+    companyName: '현대차 (Hyundai Motor)',
+    estimatedDate: '2026-10-24',
+    reportTime: 'AMC',
+    estimatedEps: 13500,
+    estimatedRevenue: '42.1조원',
+    lastSurprise: '+6.8% (하이브리드/SUV 호조)',
+  },
+  {
+    ticker: '068270.KS',
+    companyName: '셀트리온 (Celltrion)',
+    estimatedDate: '2026-11-12',
+    reportTime: 'AMC',
+    estimatedEps: 1100,
+    estimatedRevenue: '9800억원',
+    lastSurprise: '+5.1% (짐펜트라 미국 처방 확대)',
+  },
+  {
+    ticker: '069500.KS',
+    companyName: 'KODEX 200 ETF',
     estimatedDate: '2026-12-31',
     reportTime: 'DURING',
     estimatedEps: null,
@@ -266,12 +323,17 @@ export class MacroEarningsEngine {
   /**
    * 워치리스트 종목들의 실적 발표 캘린더 및 어닝 리스크 스테이지 계산
    */
-  public static getEarningsCalendar(referenceDateStr?: string): EarningsEvent[] {
+  public static getEarningsCalendar(referenceDateStr?: string, marketRegion?: MarketRegion): EarningsEvent[] {
     const today = referenceDateStr ? new Date(referenceDateStr) : new Date();
     // Normalize to midnight UTC for clean day delta calculation
     const todayMidnight = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).getTime();
 
-    const events: EarningsEvent[] = WATCHLIST_EARNINGS_DATABASE.map((item) => {
+    let pool = WATCHLIST_EARNINGS_DATABASE;
+    if (marketRegion) {
+      pool = pool.filter((item) => detectMarketRegion(item.ticker) === marketRegion);
+    }
+
+    const events: EarningsEvent[] = pool.map((item) => {
       const parts = item.estimatedDate.split('-').map(Number);
       const eventDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getTime();
       const diffDays = Math.round((eventDate - todayMidnight) / (1000 * 60 * 60 * 24));

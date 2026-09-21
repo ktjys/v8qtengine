@@ -1,13 +1,14 @@
-import { SignalSnapshot } from '../types/v8';
+import { MarketRegion, SignalSnapshot } from '../types/v8';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 export interface EquityDataPoint {
   date: string;
   strategyReturn: number; // Cumulative %
-  benchmarkReturn: number; // SPY Cumulative %
+  benchmarkReturn: number; // Benchmark Cumulative % (SPY or KOSPI 200)
   alpha: number; // strategyReturn - benchmarkReturn (%)
   drawdown: number; // Current Strategy Drawdown (% negative)
-  benchmarkDrawdown: number; // SPY Drawdown (% negative)
-  portfolioValue: number; // Starting from $100,000
+  benchmarkDrawdown: number; // Benchmark Drawdown (% negative)
+  portfolioValue: number; // Starting from capital
   eventTickers?: string[]; // Significant signals on this day
 }
 
@@ -18,7 +19,7 @@ export interface EquityPerformanceMetrics {
   totalBenchmarkReturn: number; // %
   cumulativeAlpha: number; // %
   annualizedReturn: number; // CAGR %
-  annualizedBenchmarkReturn: number; // SPY CAGR %
+  annualizedBenchmarkReturn: number; // Benchmark CAGR %
   sharpeRatio: number;
   sortinoRatio: number;
   informationRatio: number;
@@ -31,6 +32,8 @@ export interface EquityPerformanceMetrics {
   startDate: string;
   endDate: string;
   tradingDays: number;
+  benchmarkName?: string;
+  market?: MarketRegion;
 }
 
 export interface EquityCurveResult {
@@ -49,13 +52,19 @@ export class EquityCurveEngine {
       initialCapital?: number;
       startDate?: string;
       endDate?: string;
+      market?: MarketRegion;
     }
   ): EquityCurveResult {
-    const initialCapital = options?.initialCapital || 100000;
+    const market = options?.market || 'US';
+    const initialCapital = options?.initialCapital || (market === 'KR' ? 100_000_000 : 100_000);
 
-    // Filter signals with outcomes
+    // Filter signals strictly by market region
     const validSignals = (signals || [])
-      .filter((s) => s && s.signal_date)
+      .filter((s) => {
+        if (!s || !s.signal_date) return false;
+        const reg = s.market_region || detectMarketRegion(s.ticker);
+        return reg === market;
+      })
       .sort((a, b) => a.signal_date.localeCompare(b.signal_date));
 
     // Baseline SPY daily benchmark synthetic progression (realistic 2025-2026 trajectory)
@@ -132,19 +141,21 @@ export class EquityCurveEngine {
         }
       }
 
-      // SPY daily market drift: modest upward trend (~0.05% per day) with realistic volatility (+- 0.6%)
-      // Deterministic pseudo-random seed based on day index to avoid jumpy re-renders
+      // Daily market drift:
+      // US (S&P 500 SPY): ~0.058% per day (~15% annualized)
+      // KR (KOSPI 200 069500.KS): ~0.032% per day (~8.5% annualized) with slight cycle swings
       const seedVal = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
       const pseudoRand = seedVal - Math.floor(seedVal);
-      const spyDrift = 0.058 + (pseudoRand - 0.48) * 0.95; // Avg ~15% annualized with standard market noise
+      const benchmarkBaseDrift = market === 'KR' ? 0.034 : 0.058;
+      const benchmarkDrift = benchmarkBaseDrift + (pseudoRand - 0.48) * (market === 'KR' ? 0.85 : 0.95);
 
       // Slight dampening on zero-signal days to reflect cash drag or base market movement
       const actualStrategyDayDelta = activeHoldings.length > 0
-        ? dayStrategyDelta + (spyDrift * 0.25)
-        : spyDrift * 0.4; // 60% cash, 40% market allocation when idle
+        ? dayStrategyDelta + (benchmarkDrift * 0.25)
+        : benchmarkDrift * 0.4; // 60% cash, 40% market allocation when idle
 
       currentStrategyCum += actualStrategyDayDelta;
-      currentSpyCum += spyDrift;
+      currentSpyCum += benchmarkDrift;
 
       if (currentStrategyCum > peakStrategy) peakStrategy = currentStrategyCum;
       if (currentSpyCum > peakSpy) peakSpy = currentSpyCum;
@@ -161,8 +172,8 @@ export class EquityCurveEngine {
       const portfolioValue = Math.round(initialCapital * (1 + currentStrategyCum / 100));
 
       dailyReturnsStrategy.push(actualStrategyDayDelta);
-      dailyReturnsSpy.push(spyDrift);
-      dailyAlphas.push(actualStrategyDayDelta - spyDrift);
+      dailyReturnsSpy.push(benchmarkDrift);
+      dailyAlphas.push(actualStrategyDayDelta - benchmarkDrift);
 
       dataPoints.push({
         date: dateStr,
@@ -183,7 +194,8 @@ export class EquityCurveEngine {
       dailyReturnsSpy,
       dailyAlphas,
       validSignals,
-      initialCapital
+      initialCapital,
+      market
     );
 
     return {
@@ -221,7 +233,8 @@ export class EquityCurveEngine {
     dailyReturnsSpy: number[],
     dailyAlphas: number[],
     signals: SignalSnapshot[],
-    initialCapital: number = 100000
+    initialCapital: number = 100000,
+    market: MarketRegion = 'US'
   ): EquityPerformanceMetrics {
     const tradingDays = Math.max(1, dataPoints.length);
     const lastPoint = dataPoints[dataPoints.length - 1] || {
@@ -340,6 +353,8 @@ export class EquityCurveEngine {
       startDate: firstPoint.date,
       endDate: lastPoint.date,
       tradingDays,
+      benchmarkName: market === 'KR' ? 'KOSPI 200 (069500)' : 'S&P 500 (SPY)',
+      market,
     };
   }
 }

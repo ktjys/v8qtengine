@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { AssetClassification, AssetType, FullTickerEvaluation, StrategyType } from '../types/v8';
+import { detectMarketRegion } from '../utils/marketUtils';
 import { SortableHeader } from './SortableHeader';
 
 export type ClassificationSortField =
@@ -257,7 +258,16 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
                           {idx + 1}
                         </span>
                         <div className="min-w-0">
-                          <div className="font-bold text-slate-100 font-mono text-sm">{item.ticker}</div>
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-bold text-slate-100 font-mono text-sm">{item.ticker}</span>
+                            <span className={`px-1 py-0.2 text-[8px] rounded font-semibold border ${
+                              (item.market_region || detectMarketRegion(item.ticker)) === 'KR'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                            }`}>
+                              {(item.market_region || detectMarketRegion(item.ticker)) === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}
+                            </span>
+                          </div>
                           <div className="text-[11px] text-slate-400 truncate max-w-[150px]">{item.name}</div>
                         </div>
                       </div>

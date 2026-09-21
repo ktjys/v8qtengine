@@ -37,6 +37,7 @@ import {
   StrategyType,
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { detectMarketRegion } from '../utils/marketUtils';
 import { buildSignalTelegramMessage, buildDipBuyTelegramMessage } from '../notification/templates';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
@@ -190,6 +191,13 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
                 <h3 className="text-base sm:text-xl font-bold text-slate-100 truncate">{evaluation.name}</h3>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                  (evaluation.market_region || detectMarketRegion(evaluation.ticker)) === 'KR'
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                }`}>
+                  {(evaluation.market_region || detectMarketRegion(evaluation.ticker)) === 'KR' ? '🇰🇷 국내주식' : '🇺🇸 미국주식'}
+                </span>
                 <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold">
                   {formatStockPrice(evaluation.price, evaluation.ticker)}
                 </span>
@@ -855,7 +863,7 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
                 currentPrice={evaluation.price}
                 companyName={evaluation.name}
                 strategyType={evaluation.classification.strategy_type}
-                initialAccountEquity={PaperTradingEngine.getAccountSummary().totalEquity}
+                initialAccountEquity={PaperTradingEngine.getAccountSummary((evaluation.market_region || detectMarketRegion(evaluation.ticker))).totalEquity}
               />
             </div>
           )}

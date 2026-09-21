@@ -22,6 +22,8 @@ import {
 import { ATRRiskLevel, ATRRiskProfile, PositionSizingCalculation } from '../types/v8';
 import { RiskSizingEngine } from '../engine/riskSizingEngine';
 import { PaperTradingEngine } from '../engine/paperTradingEngine';
+import { detectMarketRegion } from '../utils/marketUtils';
+import { formatCurrencyAmount, formatStockPrice } from '../utils/formatters';
 
 interface PositionSizingCalculatorProps {
   ticker: string;
@@ -37,11 +39,13 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
   currentPrice,
   companyName,
   strategyType,
-  initialAccountEquity = 100000,
+  initialAccountEquity,
   onOrderExecuted,
 }) => {
+  const isKr = detectMarketRegion(ticker) === 'KR';
+  const defaultEquity = initialAccountEquity ?? (isKr ? 100000000 : 100000);
   const [riskLevel, setRiskLevel] = useState<ATRRiskLevel>('STANDARD');
-  const [accountEquity, setAccountEquity] = useState<number>(initialAccountEquity);
+  const [accountEquity, setAccountEquity] = useState<number>(defaultEquity);
   const [riskTolerancePct, setRiskTolerancePct] = useState<number>(1.0); // 1.0% default
   const [maxAllocationCap, setMaxAllocationCap] = useState<number>(25.0); // 25% default max
   const [customStopPrice, setCustomStopPrice] = useState<number | null>(null);
@@ -82,7 +86,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
       shares: sizing.recommendedShares,
       price: currentPrice,
       strategySource: stratSource,
-      reason: `ATR ${riskLevel} (${sizing.riskTolerancePct}% 계좌리스크) 동적 사이징 주문 (${sizing.recommendedShares}주, SL $${effectiveStopPrice})`,
+      reason: `ATR ${riskLevel} (${sizing.riskTolerancePct}% 계좌리스크) 동적 사이징 주문 (${sizing.recommendedShares}주, SL ${formatStockPrice(effectiveStopPrice, ticker)})`,
     });
     setIsExecuting(false);
 
@@ -97,23 +101,24 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
 
   // Copy sizing summary to clipboard
   const handleCopySummary = () => {
+    const market = isKr ? 'KR' : 'US';
     const text = `📐 [${ticker}] ATR 동적 손절 & 포지션 사이징 결과
-• 진입 현재가: $${currentPrice.toFixed(2)}
-• 14일 ATR 변동성: $${atrProfile.atr14.toFixed(2)} (${atrProfile.atrPct}%)
-• 권장 손절선: $${effectiveStopPrice.toFixed(2)} (-${atrProfile.stopLossPct}%)
-• 1차 목표가 (2R): $${atrProfile.takeProfit1Price.toFixed(2)} (+${atrProfile.takeProfit1Pct}%)
-• 2차 목표가 (3R): $${atrProfile.takeProfit2Price.toFixed(2)} (+${atrProfile.takeProfit2Pct}%)
-• 트레일링 스탑선: $${atrProfile.trailingStopPrice.toFixed(2)}
+• 진입 현재가: ${formatStockPrice(currentPrice, ticker)}
+• 14일 ATR 변동성: ${formatStockPrice(atrProfile.atr14, ticker)} (${atrProfile.atrPct}%)
+• 권장 손절선: ${formatStockPrice(effectiveStopPrice, ticker)} (-${atrProfile.stopLossPct}%)
+• 1차 목표가 (2R): ${formatStockPrice(atrProfile.takeProfit1Price, ticker)} (+${atrProfile.takeProfit1Pct}%)
+• 2차 목표가 (3R): ${formatStockPrice(atrProfile.takeProfit2Price, ticker)} (+${atrProfile.takeProfit2Pct}%)
+• 트레일링 스탑선: ${formatStockPrice(atrProfile.trailingStopPrice, ticker)}
 ------------------------
-• 계좌 자산: $${accountEquity.toLocaleString()}
-• 1회 허용 위험: ${riskTolerancePct}% ($${sizing.riskAmountDollars.toLocaleString()})
-• 최적 매수 수량: ${sizing.recommendedShares}주 (총 $${sizing.totalPositionCost.toLocaleString()}, 비중 ${sizing.accountAllocationPct}%)
-• 손절 시 최대 손실: -$${sizing.maxLossDollars.toLocaleString()}
-• 1차 도달 시 기대수익: +$${sizing.expectedGain1Dollars.toLocaleString()} (손익비 1:2.0)`;
+• 계좌 자산: ${formatCurrencyAmount(accountEquity, market)}
+• 1회 허용 위험: ${riskTolerancePct}% (${formatCurrencyAmount(sizing.riskAmountDollars, market)})
+• 최적 매수 수량: ${sizing.recommendedShares}주 (총 ${formatCurrencyAmount(sizing.totalPositionCost, market)}, 비중 ${sizing.accountAllocationPct}%)
+• 손절 시 최대 손실: -${formatCurrencyAmount(sizing.maxLossDollars, market)}
+• 1차 도달 시 기대수익: +${formatCurrencyAmount(sizing.expectedGain1Dollars, market)} (손익비 1:2.0)`;
 
     navigator.clipboard.writeText(text);
     setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
+    setTimeout(() => setCopySuccess(false), 2500);
   };
 
   return (
@@ -159,7 +164,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
             <div>
               <div className="text-xs text-slate-400">14일 일간 변동폭 (ATR-14)</div>
               <div className="text-lg font-bold font-mono text-white mt-0.5">
-                ${atrProfile.atr14.toFixed(2)}{' '}
+                {formatStockPrice(atrProfile.atr14, ticker)}{' '}
                 <span className="text-xs font-semibold text-cyan-400">
                   (주가의 {atrProfile.atrPct}%)
                 </span>
@@ -180,7 +185,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 {atrProfile.volatilityRank} 변동성
               </span>
               <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                현재가 ${currentPrice.toFixed(2)}
+                현재가 {formatStockPrice(currentPrice, ticker)}
               </div>
             </div>
           </div>
@@ -263,7 +268,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 운용 총자본 (Account Equity)
               </label>
               <div className="flex items-center space-x-1">
-                {[50000, 100000, 200000].map((amt) => (
+                {(isKr ? [30000000, 50000000, 100000000] : [50000, 100000, 200000]).map((amt) => (
                   <button
                     key={amt}
                     type="button"
@@ -274,20 +279,22 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                         : 'bg-slate-950 text-slate-400 border-slate-800'
                     }`}
                   >
-                    ${amt / 1000}k
+                    {isKr ? `${amt / 10000000}천만` : `$${amt / 1000}k`}
                   </button>
                 ))}
               </div>
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-2 text-slate-400 font-mono text-sm">$</span>
+              <span className="absolute left-3 top-2 text-slate-400 font-mono text-sm">
+                {isKr ? '₩' : '$'}
+              </span>
               <input
                 type="number"
-                step="1000"
-                min="1000"
+                step={isKr ? 1000000 : 1000}
+                min={isKr ? 1000000 : 1000}
                 value={accountEquity}
-                onChange={(e) => setAccountEquity(Math.max(1000, Number(e.target.value)))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-7 pr-3 py-1.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
+                onChange={(e) => setAccountEquity(Math.max(isKr ? 1000000 : 1000, Number(e.target.value)))}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
@@ -300,7 +307,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 <HelpCircle className="w-3 h-3 text-slate-500" title="손절가에 도달했을 때 계좌에서 잃어도 되는 최대 자본 비율" />
               </label>
               <span className="text-xs font-bold font-mono text-cyan-400">
-                {riskTolerancePct}% (${sizing.riskAmountDollars.toLocaleString()})
+                {riskTolerancePct}% ({formatCurrencyAmount(sizing.riskAmountDollars, isKr ? 'KR' : 'US')})
               </span>
             </div>
             <div className="grid grid-cols-4 gap-1.5 mb-2">
@@ -364,10 +371,10 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 <span>동적 손절선 (SL)</span>
               </div>
               <div className="text-base font-bold font-mono text-white mt-1">
-                ${effectiveStopPrice.toFixed(2)}
+                {formatStockPrice(effectiveStopPrice, ticker)}
               </div>
               <div className="text-[11px] font-mono text-rose-400 mt-0.5">
-                -{atrProfile.stopLossPct}% (-${(currentPrice - effectiveStopPrice).toFixed(2)})
+                -{atrProfile.stopLossPct}% (-{formatStockPrice(currentPrice - effectiveStopPrice, ticker)})
               </div>
             </div>
 
@@ -378,7 +385,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 <span>1차 익절 (2R)</span>
               </div>
               <div className="text-base font-bold font-mono text-white mt-1">
-                ${atrProfile.takeProfit1Price.toFixed(2)}
+                {formatStockPrice(atrProfile.takeProfit1Price, ticker)}
               </div>
               <div className="text-[11px] font-mono text-emerald-400 mt-0.5">
                 +{atrProfile.takeProfit1Pct}% (손익비 1:2)
@@ -392,7 +399,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 <span>2차 익절 (3R)</span>
               </div>
               <div className="text-base font-bold font-mono text-white mt-1">
-                ${atrProfile.takeProfit2Price.toFixed(2)}
+                {formatStockPrice(atrProfile.takeProfit2Price, ticker)}
               </div>
               <div className="text-[11px] font-mono text-cyan-400 mt-0.5">
                 +{atrProfile.takeProfit2Pct}% (손익비 1:3)
@@ -406,7 +413,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 <span>트레일링 스탑</span>
               </div>
               <div className="text-base font-bold font-mono text-white mt-1">
-                ${atrProfile.trailingStopPrice.toFixed(2)}
+                {formatStockPrice(atrProfile.trailingStopPrice, ticker)}
               </div>
               <div className="text-[11px] font-mono text-purple-400 mt-0.5">
                 고점 -1.5x ATR
@@ -421,7 +428,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 Fixed-Fractional Position Sizing
               </div>
               <span className="text-xs text-slate-400 font-mono">
-                1주당 위험: ${sizing.riskPerShare.toFixed(2)}
+                1주당 위험: {formatStockPrice(sizing.riskPerShare, ticker)}
               </span>
             </div>
 
@@ -438,7 +445,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               <div className="sm:text-right">
                 <div className="text-xs text-slate-400">총 투자 금액 (비중)</div>
                 <div className="text-xl sm:text-2xl font-bold font-mono text-slate-200 mt-1">
-                  ${sizing.totalPositionCost.toLocaleString()}{' '}
+                  {formatCurrencyAmount(sizing.totalPositionCost, isKr ? 'KR' : 'US')}{' '}
                   <span className="text-sm font-semibold text-slate-400">
                     ({sizing.accountAllocationPct}%)
                   </span>
@@ -451,7 +458,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               <div className="bg-slate-900/90 border border-rose-500/20 rounded-xl p-2.5">
                 <div className="text-[10px] text-rose-400 font-semibold">손절 시 최대 손실</div>
                 <div className="text-sm sm:text-base font-bold font-mono text-rose-300 mt-0.5">
-                  -${sizing.maxLossDollars.toLocaleString()}
+                  -{formatCurrencyAmount(sizing.maxLossDollars, isKr ? 'KR' : 'US')}
                 </div>
                 <div className="text-[10px] text-slate-500 font-mono">
                   (계좌의 {sizing.riskTolerancePct}%)
@@ -461,7 +468,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               <div className="bg-slate-900/90 border border-emerald-500/20 rounded-xl p-2.5">
                 <div className="text-[10px] text-emerald-400 font-semibold">1차(2R) 기대 수익</div>
                 <div className="text-sm sm:text-base font-bold font-mono text-emerald-300 mt-0.5">
-                  +${sizing.expectedGain1Dollars.toLocaleString()}
+                  +{formatCurrencyAmount(sizing.expectedGain1Dollars, isKr ? 'KR' : 'US')}
                 </div>
                 <div className="text-[10px] text-slate-500 font-mono">
                   (손익비 1:2.0)
@@ -471,7 +478,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               <div className="bg-slate-900/90 border border-cyan-500/20 rounded-xl p-2.5">
                 <div className="text-[10px] text-cyan-400 font-semibold">2차(3R) 기대 수익</div>
                 <div className="text-sm sm:text-base font-bold font-mono text-cyan-300 mt-0.5">
-                  +${sizing.expectedGain2Dollars.toLocaleString()}
+                  +{formatCurrencyAmount(sizing.expectedGain2Dollars, isKr ? 'KR' : 'US')}
                 </div>
                 <div className="text-[10px] text-slate-500 font-mono">
                   (손익비 1:3.0)
@@ -508,7 +515,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                   <>
                     <Zap className="w-4 h-4" />
                     <span>
-                      모의투자 계좌에 이 수량({sizing.recommendedShares}주, ${sizing.totalPositionCost.toLocaleString()})으로 즉시 주문
+                      모의투자 계좌에 이 수량({sizing.recommendedShares}주, {formatCurrencyAmount(sizing.totalPositionCost, isKr ? 'KR' : 'US')})으로 즉시 주문
                     </span>
                   </>
                 )}

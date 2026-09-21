@@ -64,8 +64,9 @@ paperTradingRouter.post('/order', (req, res) => {
  */
 paperTradingRouter.post('/reset', (req, res) => {
   try {
-    const capital = req.body.initialCapital ? Number(req.body.initialCapital) : 100000;
-    const summary = PaperTradingEngine.resetAccount(capital);
+    const market = (req.body.market || req.query.market || 'US') === 'KR' ? 'KR' : 'US';
+    const capital = req.body.initialCapital ? Number(req.body.initialCapital) : undefined;
+    const summary = PaperTradingEngine.resetAccount(market, capital);
     return res.json({ success: true, summary });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to reset paper account' });

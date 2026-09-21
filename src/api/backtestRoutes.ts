@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { runHistoricalReplay } from '../backtest/strategyReplay';
 import { signalRepository } from '../db/repositories/signalRepository';
 import { calculateBacktestMetrics } from '../engine/backtestEngine';
+import { detectMarketRegion } from '../utils/marketUtils';
 import {
   runHistoricalBackfill,
   initBackfill,
@@ -17,20 +18,75 @@ export const backtestRouter = Router();
 // GET /api/v8/backtest
 backtestRouter.get('/', async (req, res) => {
   try {
-    const signals = await signalRepository.getAll();
+    const market = (req.query.market as string)?.toUpperCase();
+    let signals = await signalRepository.getAll();
+
+    if (market === 'US' || market === 'KR') {
+      signals = signals.filter((s) => {
+        const reg = s.market_region || detectMarketRegion(s.ticker);
+        return reg === market;
+      });
+    }
+
     let summary = calculateBacktestMetrics(signals);
 
-    // If active signals in DB have no completed trades yet, fallback to full historical replay
+    // If active signals in DB have no completed trades yet, fallback to historical replay
     if (!summary || summary.completed_signals === 0) {
       const replayResult = await runHistoricalReplay({
         startDate: (req.query.startDate as string) || '2024-01-01',
         endDate: (req.query.endDate as string) || new Date().toISOString().split('T')[0],
       });
+
+      let replaySignals = replayResult.signals;
+      if (market === 'US' || market === 'KR') {
+        replaySignals = replaySignals.filter((s) => {
+          const reg = detectMarketRegion(s.ticker);
+          return reg === market;
+        });
+      }
+
+      // If market has no signals yet, return honest empty summary rather than fake numbers
+      if (replaySignals.length === 0) {
+        const emptySummary = {
+          total_signals: 0,
+          completed_signals: 0,
+          win_rate_5d: 0,
+          win_rate_10d: 0,
+          win_rate_20d: 0,
+          avg_return_5d: 0,
+          avg_return_10d: 0,
+          avg_return_20d: 0,
+          median_return_20d: 0,
+          max_drawdown: 0,
+          profit_factor: 0,
+          expectancy: 0,
+          completed_signals_60d: 0,
+          win_rate_60d: 0,
+          avg_return_60d: 0,
+          completed_signals_120d: 0,
+          win_rate_120d: 0,
+          avg_return_120d: 0,
+          completed_signals_252d: 0,
+          win_rate_252d: 0,
+          avg_return_252d: 0,
+          by_strategy: {},
+          by_risk: {},
+          by_opportunity_bucket: {},
+        };
+        return res.json({
+          success: true,
+          summary: emptySummary,
+          signals: [],
+          all_signals: [],
+          data: { signals: [], summary: emptySummary },
+        });
+      }
+
       return res.json({
         success: true,
-        summary: replayResult.summary,
-        signals: replayResult.signals,
-        all_signals: replayResult.signals,
+        summary: calculateBacktestMetrics(replaySignals as any) || replayResult.summary,
+        signals: replaySignals,
+        all_signals: replaySignals,
         data: replayResult,
       });
     }
@@ -211,11 +267,21 @@ backtestRouter.post('/replay', async (req, res) => {
   }
 });
 
-// GET /api/v8/backtest/equity-curve - Equity Curve & SPY Benchmark Alpha Comparison
+// GET /api/v8/backtest/equity-curve - Equity Curve & Benchmark Alpha Comparison
 backtestRouter.get('/equity-curve', async (req, res) => {
   try {
-    const signals = await signalRepository.getAll();
-    const initialCapital = req.query.initialCapital ? Number(req.query.initialCapital) : 100000;
+    const market = (req.query.market as string)?.toUpperCase() as any;
+    let signals = await signalRepository.getAll();
+
+    if (market === 'US' || market === 'KR') {
+      signals = signals.filter((s) => {
+        const reg = s.market_region || detectMarketRegion(s.ticker);
+        return reg === market;
+      });
+    }
+
+    const defaultCapital = market === 'KR' ? 100_000_000 : 100_000;
+    const initialCapital = req.query.initialCapital ? Number(req.query.initialCapital) : defaultCapital;
     const startDate = (req.query.startDate as string) || undefined;
     const endDate = (req.query.endDate as string) || undefined;
 
@@ -223,6 +289,7 @@ backtestRouter.get('/equity-curve', async (req, res) => {
       initialCapital,
       startDate,
       endDate,
+      market: market === 'KR' ? 'KR' : 'US',
     });
 
     res.json({
@@ -240,7 +307,16 @@ backtestRouter.get('/equity-curve', async (req, res) => {
 // GET /api/v8/backtest/regime-analysis & /api/v8/backtest/regimes - Market Regime Cross-Analysis
 const handleRegimeAnalysis = async (req: any, res: any) => {
   try {
-    const signals = await signalRepository.getAll();
+    const market = (req.query.market as string)?.toUpperCase() as any;
+    let signals = await signalRepository.getAll();
+
+    if (market === 'US' || market === 'KR') {
+      signals = signals.filter((s) => {
+        const reg = s.market_region || detectMarketRegion(s.ticker);
+        return reg === market;
+      });
+    }
+
     const result = RegimeAnalysisEngine.analyzeRegimes(signals);
     res.json({
       success: true,

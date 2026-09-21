@@ -14,6 +14,7 @@ scanRouter.post('/run', async (req, res) => {
     const simulatePartialFailure = req.body.simulate_partial_failure === true;
     const providerType = req.body.provider_type as 'yahoo' | 'seed' | undefined;
     const sendTelegram = req.body.send_telegram !== false; // 기본값 true
+    const market = (req.body.market as 'US' | 'KR') || undefined;
 
     const manualOverrides: Record<string, AssetClassification> = {};
     for (const [k, v] of dbClient.classifications.entries()) {
@@ -21,7 +22,7 @@ scanRouter.post('/run', async (req, res) => {
     }
 
     const result = await scanService.executeScan(
-      { simulatePartialFailure, providerType, saveToDb: true },
+      { market, simulatePartialFailure, providerType, saveToDb: true },
       manualOverrides
     );
 

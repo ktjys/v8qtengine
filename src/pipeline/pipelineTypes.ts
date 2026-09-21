@@ -1,6 +1,7 @@
-import { FullTickerEvaluation, ScanRunLog, SignalSnapshot, WatchlistItem } from '../types/v8';
+import { FullTickerEvaluation, MarketRegion, ScanRunLog, SignalSnapshot, WatchlistItem } from '../types/v8';
 
 export interface PipelineExecutionOptions {
+  market?: MarketRegion;
   providerType?: 'yahoo' | 'seed';
   simulatePartialFailure?: boolean;
   saveToDb?: boolean;

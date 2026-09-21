@@ -27,6 +27,7 @@ import {
   CorrelationPair,
   DynamicStrategySplit,
   MacroMarketRegime,
+  MarketRegion,
   MarketSector,
   PortfolioPosition,
   PortfolioRebalanceState,
@@ -37,19 +38,32 @@ import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
 
 interface PortfolioAllocationViewProps {
   onSelectTicker?: (ticker: string) => void;
+  activeMarket?: MarketRegion;
 }
 
 export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = ({
   onSelectTicker,
+  activeMarket = 'US' as MarketRegion,
 }) => {
-  const [totalCapital, setTotalCapital] = useState<number>(100000);
-  const [capitalInput, setCapitalInput] = useState<string>('100000');
+  const initialCapital = activeMarket === 'KR' ? 100000000 : 100000;
+  const [totalCapital, setTotalCapital] = useState<number>(initialCapital);
+  const [capitalInput, setCapitalInput] = useState<string>(String(initialCapital));
   const [macroRegime, setMacroRegime] = useState<MacroMarketRegime | null>(null);
   const [rebalanceState, setRebalanceState] = useState<PortfolioRebalanceState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [copiedTelegram, setCopiedTelegram] = useState<boolean>(false);
   const [selectedCorrelationTicker, setSelectedCorrelationTicker] = useState<string | null>(null);
   const [sectorFilter, setSectorFilter] = useState<string>('ALL');
+
+  const currencySymbol = activeMarket === 'KR' ? '₩' : '$';
+
+  // Synchronize capital whenever activeMarket changes
+  useEffect(() => {
+    const nextCapital = activeMarket === 'KR' ? 100000000 : 100000;
+    setTotalCapital(nextCapital);
+    setCapitalInput(String(nextCapital));
+    setSelectedCorrelationTicker(null);
+  }, [activeMarket]);
 
   const loadData = async (capital: number = totalCapital) => {
     setIsLoading(true);
@@ -62,8 +76,8 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
         // fallback
       }
 
-      // Compute state
-      const state = PortfolioEngine.calculatePortfolioState(capital, regime || undefined);
+      // Compute state with activeMarket
+      const state = PortfolioEngine.calculatePortfolioState(capital, regime || undefined, activeMarket);
       setRebalanceState(state);
     } catch (err) {
       console.error('[PortfolioAllocationView] Error loading state:', err);
@@ -74,7 +88,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
 
   useEffect(() => {
     loadData(totalCapital);
-  }, [totalCapital]);
+  }, [totalCapital, activeMarket]);
 
   const handleApplyCapital = () => {
     const val = Number(capitalInput.replace(/[^0-9]/g, ''));
@@ -162,13 +176,15 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
               </div>
               <div className="flex items-center space-x-2">
                 <div className="relative">
-                  <DollarSign className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <span className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 font-bold font-mono">
+                    {currencySymbol}
+                  </span>
                   <input
                     type="text"
                     value={capitalInput}
                     onChange={(e) => setCapitalInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCapital()}
-                    className="bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xl font-bold font-mono text-white focus:outline-none focus:border-purple-500 w-48"
+                    className="bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xl font-bold font-mono text-white focus:outline-none focus:border-purple-500 w-48"
                   />
                 </div>
                 <button
@@ -178,28 +194,41 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                   적용
                 </button>
                 <div className="flex items-center space-x-1.5 pl-2">
-                  {[50000, 100000, 250000, 500000].map((cap) => (
+                  {(activeMarket === 'KR'
+                    ? [
+                        { label: '5천만', val: 50000000 },
+                        { label: '1억', val: 100000000 },
+                        { label: '2억', val: 200000000 },
+                        { label: '5억', val: 500000000 },
+                      ]
+                    : [
+                        { label: '$50k', val: 50000 },
+                        { label: '$100k', val: 100000 },
+                        { label: '$250k', val: 250000 },
+                        { label: '$500k', val: 500000 },
+                      ]
+                  ).map((item) => (
                     <button
-                      key={cap}
+                      key={item.val}
                       onClick={() => {
-                        setCapitalInput(String(cap));
-                        setTotalCapital(cap);
+                        setCapitalInput(String(item.val));
+                        setTotalCapital(item.val);
                       }}
                       className={`px-2.5 py-1 text-[11px] rounded-lg border font-mono transition-all ${
-                        totalCapital === cap
+                        totalCapital === item.val
                           ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 font-bold'
                           : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                       }`}
                     >
-                      ${cap / 1000}k
+                      {item.label}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="flex items-center space-x-4 text-xs text-slate-400 font-mono pt-1">
-                <span>투자 자산: <b className="text-white">${rebalanceState.totalInvested.toLocaleString()}</b></span>
+                <span>투자 자산: <b className="text-white">{currencySymbol}{rebalanceState.totalInvested.toLocaleString()}</b></span>
                 <span>•</span>
-                <span>현금 잔고: <b className="text-emerald-400">${rebalanceState.cashBalance.toLocaleString()}</b> ({rebalanceState.cashWeightPct}%)</span>
+                <span>현금 잔고: <b className="text-emerald-400">{currencySymbol}{rebalanceState.cashBalance.toLocaleString()}</b> ({rebalanceState.cashWeightPct}%)</span>
               </div>
             </div>
 
@@ -426,11 +455,15 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
 
                       <td className="py-3 px-4 font-mono text-slate-300">
                         <div>{pos.shares}주</div>
-                        <div className="text-[10px] text-slate-500">${pos.currentPrice.toFixed(2)}</div>
+                        <div className="text-[10px] text-slate-500">
+                          {activeMarket === 'KR' ? `${pos.currentPrice.toLocaleString()}원` : `$${pos.currentPrice.toFixed(2)}`}
+                        </div>
                       </td>
 
                       <td className="py-3 px-4 font-mono">
-                        <div className="text-white font-semibold">${pos.marketValue.toLocaleString()}</div>
+                        <div className="text-white font-semibold">
+                          {currencySymbol}{pos.marketValue.toLocaleString()}
+                        </div>
                         <div className="text-xs text-slate-400">{pos.currentWeightPct}%</div>
                       </td>
 
@@ -472,13 +505,13 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                       <td className="py-3 px-4 font-mono text-xs">
                         {isIncrease ? (
                           <div className="text-cyan-300 font-semibold">
-                            +{pos.recommendedSharesDelta}주 매수 (+$
-                            {pos.recommendedCashDelta.toLocaleString()})
+                            +{pos.recommendedSharesDelta}주 매수 (+
+                            {currencySymbol}{pos.recommendedCashDelta.toLocaleString()})
                           </div>
                         ) : isTrim ? (
                           <div className="text-rose-300 font-semibold">
-                            {pos.recommendedSharesDelta}주 매도 (-$
-                            {Math.abs(pos.recommendedCashDelta).toLocaleString()})
+                            {pos.recommendedSharesDelta}주 매도 (-
+                            {currencySymbol}{Math.abs(pos.recommendedCashDelta).toLocaleString()})
                           </div>
                         ) : (
                           <div className="text-slate-500">조정 불필요 (오차 범위 내)</div>
@@ -501,7 +534,9 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
               <div className="flex items-center space-x-2">
                 <Layers className="w-5 h-5 text-emerald-400" />
                 <h2 className="text-lg sm:text-xl font-bold text-white">
-                  10대 핵심 자산 간 수익률 상관계수(Correlation) 매트릭스
+                  {activeMarket === 'KR'
+                    ? '국내 핵심 자산 간 수익률 상관계수(Correlation) 매트릭스'
+                    : '미국 10대 핵심 자산 간 수익률 상관계수(Correlation) 매트릭스'}
                 </h2>
               </div>
               <p className="text-xs text-slate-400 mt-1">
@@ -519,13 +554,13 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
             )}
           </div>
 
-          {/* 10x10 Matrix Grid Table */}
+          {/* Matrix Grid Table */}
           <div className="border border-slate-800 rounded-xl overflow-hidden overflow-x-auto">
             <table className="w-full text-center text-xs font-mono border-collapse">
               <thead>
                 <tr className="bg-slate-950 text-slate-400">
                   <th className="py-2.5 px-3 text-left font-sans">Ticker</th>
-                  {UNIVERSE_TICKERS.map((t) => (
+                  {rebalanceState.correlationMatrix.tickers.map((t) => (
                     <th key={t} className="py-2.5 px-2 font-bold text-slate-200">
                       {t}
                     </th>
@@ -533,7 +568,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 bg-slate-900/50">
-                {UNIVERSE_TICKERS.map((rowTicker, rowIdx) => (
+                {rebalanceState.correlationMatrix.tickers.map((rowTicker, rowIdx) => (
                   <tr key={rowTicker} className="hover:bg-slate-800/30">
                     <td className="py-2 px-3 text-left font-bold text-cyan-400 bg-slate-950/60">
                       <button
@@ -547,7 +582,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                         {rowTicker}
                       </button>
                     </td>
-                    {UNIVERSE_TICKERS.map((colTicker, colIdx) => {
+                    {rebalanceState.correlationMatrix.tickers.map((colTicker, colIdx) => {
                       const corr = rebalanceState.correlationMatrix.matrix[rowIdx][colIdx];
                       const isSelf = rowIdx === colIdx;
 

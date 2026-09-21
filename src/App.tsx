@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Trash2, RefreshCw, Database } from 'lucide-react';
 import {
   ActiveStrategyMode,
@@ -7,7 +7,9 @@ import {
   ScanRunLog,
   SignalSnapshot,
   WatchlistItem,
+  MarketRegion,
 } from './types/v8';
+import { detectMarketRegion } from './utils/marketUtils';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { WatchlistView } from './components/WatchlistView';
@@ -18,6 +20,7 @@ import { MacroEarningsView } from './components/MacroEarningsView';
 import { PortfolioAllocationView } from './components/PortfolioAllocationView';
 import { PaperTradingView } from './components/PaperTradingView';
 import { StrategyGuideView } from './components/StrategyGuideView';
+import { ExitSignalDashboardView } from './components/ExitSignalDashboardView';
 import { SymbolDetailModal } from './components/SymbolDetailModal';
 import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
@@ -25,6 +28,7 @@ import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 import { DatabaseHealthModal } from './components/DatabaseHealthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './constants/limits';
+import { calculateBacktestMetrics } from './engine/backtestEngine';
 import {
   DEFAULT_STRATEGY_CONFIG,
   recalculateEvaluationsWithConfig,
@@ -32,7 +36,21 @@ import {
 } from './engine/strategyOptimizerEngine';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'exit' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide'>('dashboard');
+  const [activeMarket, setActiveMarket] = useState<MarketRegion>(() => {
+    try {
+      const saved = localStorage.getItem('quant_active_market_v8');
+      if (saved === 'US' || saved === 'KR') return saved;
+    } catch (e) {}
+    return 'US';
+  });
+
+  const handleSelectMarket = (market: MarketRegion) => {
+    setActiveMarket(market);
+    try {
+      localStorage.setItem('quant_active_market_v8', market);
+    } catch (e) {}
+  };
   const [strategyConfig, setStrategyConfig] = useState<StrategyOptimizationConfig>(() => {
     try {
       const saved = localStorage.getItem('quant_strategy_config_v8');
@@ -220,6 +238,25 @@ export default function App() {
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // Synchronize market-specific backtest metrics (Win rate, Profit Factor, MDD) when switching US <-> KR
+  useEffect(() => {
+    let isCancelled = false;
+    const syncMarketBacktest = async () => {
+      try {
+        const btData = await safeFetchJson(`/api/v8/backtest?market=${activeMarket}&_t=${Date.now()}`);
+        if (!isCancelled && btData?.success && (btData.data?.summary || btData.summary)) {
+          setBacktestSummary(btData.data?.summary || btData.summary);
+        }
+      } catch (err) {
+        console.error('Failed to sync market backtest metrics', err);
+      }
+    };
+    syncMarketBacktest();
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeMarket]);
 
   const handleSaveOverride = async (
     ticker: string,
@@ -433,17 +470,34 @@ export default function App() {
 
   const selectedEvaluation = evaluations.find((e) => e.ticker === selectedTicker) || null;
 
+  // Filter evaluations and signals strictly according to activeMarket ('US' | 'KR')
+  const filteredEvaluations = useMemo(() => {
+    return evaluations.filter((e) => {
+      const region = e.market_region || detectMarketRegion(e.ticker);
+      return region === activeMarket;
+    });
+  }, [evaluations, activeMarket]);
+
+  const filteredSignals = useMemo(() => {
+    return signals.filter((s) => {
+      const region = s.market_region || detectMarketRegion(s.ticker);
+      return region === activeMarket;
+    });
+  }, [signals, activeMarket]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-white">
       {/* Navbar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        activeMarket={activeMarket}
+        onSelectMarket={handleSelectMarket}
         onOpenScanModal={() => setIsScanModalOpen(true)}
         onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
-        totalCount={evaluations.length}
-        signalsCount={signals.length}
+        totalCount={filteredEvaluations.length}
+        signalsCount={filteredSignals.length}
         isInitialLoading={isInitialLoading}
       />
 
@@ -474,9 +528,10 @@ export default function App() {
           <>
             {activeTab === 'dashboard' && (
               <DashboardView
-                evaluations={evaluations}
-                recentSignals={signals}
+                evaluations={filteredEvaluations}
+                recentSignals={filteredSignals}
                 backtestSummary={backtestSummary}
+                activeMarket={activeMarket}
                 currentConfig={strategyConfig}
                 onApplyConfig={handleApplyStrategyConfig}
                 onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
@@ -489,6 +544,7 @@ export default function App() {
                 onNavigateToPortfolio={() => setActiveTab('portfolio')}
                 onNavigateToPaper={() => setActiveTab('paper')}
                 onNavigateToGuide={() => setActiveTab('guide')}
+                onNavigateToExit={() => setActiveTab('exit')}
                 onRecalculate={handleRecalculateEvaluations}
                 isRecalculating={isRecalculating}
               />
@@ -496,8 +552,9 @@ export default function App() {
 
         {activeTab === 'watchlist' && (
           <WatchlistView
-            key={watchlistStrategyMode}
-            evaluations={evaluations}
+            key={`${watchlistStrategyMode}_${activeMarket}`}
+            evaluations={filteredEvaluations}
+            activeMarket={activeMarket}
             initialStrategyMode={watchlistStrategyMode}
             currentConfig={strategyConfig}
             onApplyConfig={handleApplyStrategyConfig}
@@ -515,11 +572,20 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'exit' && (
+          <ExitSignalDashboardView
+            evaluations={filteredEvaluations}
+            activeMarket={activeMarket}
+            onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
+          />
+        )}
+
         {activeTab === 'backtest' && (
           <BacktestView
             summary={backtestSummary}
-            allSignals={signals}
-            evaluations={evaluations}
+            allSignals={filteredSignals}
+            evaluations={filteredEvaluations}
+            activeMarket={activeMarket}
             currentConfig={strategyConfig}
             onApplyConfig={handleApplyStrategyConfig}
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
@@ -529,7 +595,7 @@ export default function App() {
 
         {activeTab === 'classification' && (
           <ClassificationView
-            evaluations={evaluations}
+            evaluations={filteredEvaluations}
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
             onSaveOverride={handleSaveOverride}
             onResetOverride={handleResetOverride}
@@ -540,6 +606,7 @@ export default function App() {
           <ScanRunsView
             runs={runs}
             alertRefreshKey={alertRefreshKey}
+            activeMarket={activeMarket}
             onTriggerScan={() => setIsScanModalOpen(true)}
             onSelectTicker={(t, tab) => handleOpenSymbolDetail(t, tab || 'overview')}
             onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
@@ -548,18 +615,21 @@ export default function App() {
 
         {activeTab === 'macro' && (
           <MacroEarningsView
+            activeMarket={activeMarket}
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
           />
         )}
 
         {activeTab === 'portfolio' && (
           <PortfolioAllocationView
+            activeMarket={activeMarket}
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
           />
         )}
 
         {activeTab === 'paper' && (
           <PaperTradingView
+            activeMarket={activeMarket}
             onSelectTicker={(t) => handleOpenSymbolDetail(t, 'overview')}
           />
         )}
@@ -657,8 +727,9 @@ export default function App() {
         <ScanRunnerModal
           onClose={() => setIsScanModalOpen(false)}
           onScanCompleted={handleScanCompleted}
-          totalWatchlistCount={watchlist.length}
+          totalWatchlistCount={filteredEvaluations.length}
           onViewAlertHistory={() => setActiveTab('runs')}
+          activeMarket={activeMarket}
         />
       )}
 

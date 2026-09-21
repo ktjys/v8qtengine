@@ -79,3 +79,31 @@ export function buildScanSummaryTelegramMessage(
 • API/Data Failures: ${failureCount} items
 • Timestamp: ${new Date().toISOString()}`;
 }
+
+export function buildExitSignalTelegramMessage(exitItems: Array<{
+  ticker: string;
+  name: string;
+  headline: string;
+  action: string;
+  currentPrice: number;
+  returnPct?: number;
+}>): string {
+  let text = `🚨 <b>[퀀트 매도/청산 및 차익실현 신호 알림]</b>\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `4대 퀀트 매도 규칙(목표익절/트레일링스탑/손절매/추세붕괴)에 따라 다음 종목들의 포지션 정리를 권고합니다.\n\n`;
+
+  exitItems.forEach((item, idx) => {
+    const retText = item.returnPct !== undefined
+      ? ` (진입대비: <b>${item.returnPct >= 0 ? '+' : ''}${item.returnPct.toFixed(1)}%</b>)`
+      : '';
+    text += `${idx + 1}. 📌 <b>${item.ticker}</b> (${item.name})\n`;
+    text += `   • 현재가: $${item.currentPrice.toFixed(2)}${retText}\n`;
+    text += `   • <b>판정:</b> <code>${item.headline}</code>\n`;
+    text += `   • <b>💡 권고 실행:</b> ${item.action}\n\n`;
+  });
+
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `V8 퀀트 리스크 관리 엔진 • 원칙 중심의 기계적 청산`;
+  return text;
+}
+

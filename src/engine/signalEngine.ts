@@ -53,6 +53,7 @@ export function createSignalSnapshot(
     signal_date: dateStr,
     ticker: evaluation.ticker,
     name: evaluation.name,
+    market_region: evaluation.market_region || (evaluation.ticker.endsWith('.KS') || evaluation.ticker.endsWith('.KQ') ? 'KR' : 'US'),
     signal_price: evaluation.price,
     strategy_type: classification.strategy_type,
     asset_type: classification.asset_type,

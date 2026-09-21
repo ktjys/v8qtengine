@@ -27,6 +27,7 @@ import { DipBuyEvaluation, FullTickerEvaluation } from '../types/v8';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { buildDipBuyTelegramMessage } from '../notification/templates';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { StockDisplayBadge } from './StockDisplayBadge';
 import { SortableHeader } from './SortableHeader';
 
 export type DipSortField =
@@ -339,9 +340,12 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                     </span>
                     <div className="min-w-0">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-bold font-mono text-slate-100 text-sm">
-                          {item.ticker}
-                        </span>
+                        <StockDisplayBadge
+                          ticker={item.ticker}
+                          name={item.name}
+                          showSubCode={true}
+                          primaryClassName="font-bold text-slate-100 text-sm"
+                        />
                         <span
                           className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
                             dip.suitability.tier === 'S'
@@ -360,9 +364,6 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                             ETF
                           </span>
                         )}
-                      </div>
-                      <div className="text-xs text-slate-400 truncate max-w-[180px]">
-                        {item.name}
                       </div>
                     </div>
                   </div>
@@ -472,7 +473,7 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                   className="py-3.5 px-4 font-semibold"
                 >
                   <span className="text-slate-500 font-mono text-[11px] mr-1.5">No.</span>
-                  <span>종목코드 / 이름</span>
+                  <span>종목명 (코드)</span>
                 </SortableHeader>
 
                 <SortableHeader<DipSortField>
@@ -554,9 +555,12 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
 
                         <div>
                           <div className="flex items-center space-x-2">
-                            <span className="font-mono font-bold text-sm text-slate-100 group-hover:text-emerald-300 transition-colors">
-                              {item.ticker}
-                            </span>
+                            <StockDisplayBadge
+                              ticker={item.ticker}
+                              name={item.name}
+                              showSubCode={true}
+                              primaryClassName="font-bold text-sm text-slate-100 group-hover:text-emerald-300 transition-colors"
+                            />
                             <span
                               className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
                                 dip.suitability.tier === 'S'
@@ -575,9 +579,6 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                                 ETF
                               </span>
                             )}
-                          </div>
-                          <div className="text-[11px] text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
-                            {item.name}
                           </div>
                         </div>
                       </div>
