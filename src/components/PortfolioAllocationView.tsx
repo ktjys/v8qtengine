@@ -35,6 +35,7 @@ import {
 } from '../types/v8';
 import { PortfolioEngine, UNIVERSE_TICKERS, SECTOR_CAPS } from '../engine/portfolioEngine';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
+import { getStockDisplayInfo } from '../utils/marketUtils';
 
 interface PortfolioAllocationViewProps {
   onSelectTicker?: (ticker: string) => void;
@@ -549,7 +550,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                 onClick={() => setSelectedCorrelationTicker(null)}
                 className="text-xs text-cyan-400 hover:underline self-start sm:self-auto"
               >
-                전체 매트릭스 보기 ({selectedCorrelationTicker} 필터 해제)
+                전체 매트릭스 보기 ({getStockDisplayInfo(selectedCorrelationTicker).primaryName} 필터 해제)
               </button>
             )}
           </div>
@@ -559,27 +560,41 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
             <table className="w-full text-center text-xs font-mono border-collapse">
               <thead>
                 <tr className="bg-slate-950 text-slate-400">
-                  <th className="py-2.5 px-3 text-left font-sans">Ticker</th>
-                  {rebalanceState.correlationMatrix.tickers.map((t) => (
-                    <th key={t} className="py-2.5 px-2 font-bold text-slate-200">
-                      {t}
-                    </th>
-                  ))}
+                  <th className="py-2.5 px-3 text-left font-sans">종목</th>
+                  {rebalanceState.correlationMatrix.tickers.map((t) => {
+                    const info = getStockDisplayInfo(t);
+                    return (
+                      <th
+                        key={t}
+                        className="py-2.5 px-2 font-bold text-slate-200"
+                        title={`${info.primaryName} (${info.subCode})`}
+                      >
+                        <div className="font-sans text-[11px] leading-tight whitespace-nowrap">{info.primaryName}</div>
+                        <div className="font-mono text-[9px] text-slate-500 font-normal">{info.subCode}</div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 bg-slate-900/50">
                 {rebalanceState.correlationMatrix.tickers.map((rowTicker, rowIdx) => (
                   <tr key={rowTicker} className="hover:bg-slate-800/30">
-                    <td className="py-2 px-3 text-left font-bold text-cyan-400 bg-slate-950/60">
+                    <td className="py-2 px-3 text-left bg-slate-950/60">
                       <button
                         onClick={() =>
                           setSelectedCorrelationTicker(
                             selectedCorrelationTicker === rowTicker ? null : rowTicker
                           )
                         }
-                        className="hover:underline"
+                        className="hover:underline text-left"
+                        title={`${getStockDisplayInfo(rowTicker).primaryName} (${getStockDisplayInfo(rowTicker).subCode})`}
                       >
-                        {rowTicker}
+                        <span className="block font-sans font-bold text-cyan-400 text-[11px] leading-tight whitespace-nowrap">
+                          {getStockDisplayInfo(rowTicker).primaryName}
+                        </span>
+                        <span className="block font-mono text-[9px] text-slate-500">
+                          {getStockDisplayInfo(rowTicker).subCode}
+                        </span>
                       </button>
                     </td>
                     {rebalanceState.correlationMatrix.tickers.map((colTicker, colIdx) => {
@@ -608,7 +623,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                         <td
                           key={colTicker}
                           className={`py-2 px-2 border-l border-slate-800/40 ${cellClass} ${bgClass}`}
-                          title={`${rowTicker} ↔ ${colTicker}: ${corr.toFixed(2)}`}
+                          title={`${getStockDisplayInfo(rowTicker).primaryName} ↔ ${getStockDisplayInfo(colTicker).primaryName}: ${corr.toFixed(2)} (${rowTicker} ↔ ${colTicker})`}
                         >
                           {corr.toFixed(2)}
                         </td>
@@ -626,7 +641,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
               <span>
                 {selectedCorrelationTicker
-                  ? `${selectedCorrelationTicker} 관련 주요 상관성 분석`
+                  ? `${getStockDisplayInfo(selectedCorrelationTicker).primaryName} 관련 주요 상관성 분석`
                   : '포트폴리오 내 주요 상관관계 분석'}
               </span>
             </div>
@@ -648,10 +663,13 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                     }`}
                   >
                     <div>
-                      <div className="font-mono font-bold text-sm">
-                        <span>{pair.ticker1}</span>
+                      <div className="font-sans font-bold text-sm">
+                        <span>{getStockDisplayInfo(pair.ticker1).primaryName}</span>
                         <span className="text-slate-500 mx-1.5">↔</span>
-                        <span>{pair.ticker2}</span>
+                        <span>{getStockDisplayInfo(pair.ticker2).primaryName}</span>
+                      </div>
+                      <div className="font-mono text-[10px] text-slate-500 mt-0.5">
+                        {pair.ticker1} ↔ {pair.ticker2}
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5">{pair.label}</div>
                     </div>
