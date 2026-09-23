@@ -12,8 +12,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { AssetClassification, AssetType, FullTickerEvaluation, StrategyType } from '../types/v8';
-import { detectMarketRegion } from '../utils/marketUtils';
+import { detectMarketRegion, getStockDisplayInfo } from '../utils/marketUtils';
 import { SortableHeader } from './SortableHeader';
+import { StockDisplayBadge } from './StockDisplayBadge';
 
 export type ClassificationSortField =
   | 'ticker'
@@ -67,13 +68,17 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
     const c = e.classification || ({} as any);
     if (filterSource !== 'ALL' && c.classification_source !== filterSource) return false;
     if (filterType !== 'ALL' && c.asset_type !== filterType) return false;
-    if (
-      searchTerm &&
-      !(e.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !(e.name || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !(c.strategy_type || '').toLowerCase().includes(searchTerm.toLowerCase())
-    ) {
-      return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const tickerMatch = (e.ticker || '').toLowerCase().includes(term);
+      const nameMatch = (e.name || '').toLowerCase().includes(term);
+      const strategyMatch = (c.strategy_type || '').toLowerCase().includes(term);
+      // Also search Korean stock name from dictionary
+      const dictName = getStockDisplayInfo(e.ticker).primaryName.toLowerCase();
+      const dictMatch = dictName.includes(term);
+      if (!(tickerMatch || nameMatch || strategyMatch || dictMatch)) {
+        return false;
+      }
     }
     return true;
   });
@@ -259,14 +264,14 @@ export const ClassificationView: React.FC<ClassificationViewProps> = ({
                         </span>
                         <div className="min-w-0">
                           <div className="flex items-center space-x-1.5">
-                            <span className="font-bold text-slate-100 font-mono text-sm">{item.ticker}</span>
-                            <span className={`px-1 py-0.2 text-[8px] rounded font-semibold border ${
-                              (item.market_region || detectMarketRegion(item.ticker)) === 'KR'
-                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                            }`}>
-                              {(item.market_region || detectMarketRegion(item.ticker)) === 'KR' ? '🇰🇷 국내' : '🇺🇸 미국'}
-                            </span>
+                            <StockDisplayBadge
+                              ticker={item.ticker}
+                              name={item.name}
+                              showSubCode={true}
+                              showMarketBadge={true}
+                              primaryClassName="font-bold text-cyan-400 text-sm"
+                              subCodeClassName="text-[10px]"
+                            />
                           </div>
                           <div className="text-[11px] text-slate-400 truncate max-w-[150px]">{item.name}</div>
                         </div>

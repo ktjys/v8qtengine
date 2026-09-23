@@ -166,8 +166,8 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
       return;
     }
 
-    const { primaryName } = getStockDisplayInfo(orderTicker);
-    setOrderSuccessMsg(`주문이 성공적으로 체결되었습니다: ${primaryName} (${orderTicker}) ${orderShares}주 @ ${formatCurrencyAmount(orderPrice, activeMarket)}`);
+    const { primaryName, subCode } = getStockDisplayInfo(orderTicker);
+    setOrderSuccessMsg(`주문이 성공적으로 체결되었습니다: ${primaryName} (${subCode}) ${orderShares}주 @ ${formatCurrencyAmount(orderPrice, activeMarket)}`);
     loadData();
     setTimeout(() => {
       setIsOrderModalOpen(false);
@@ -971,9 +971,13 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium text-slate-400">종목 코드/티커</label>
                     {orderTicker && (
-                      <span className="text-[10px] text-cyan-400 truncate max-w-[90px]">
-                        {getStockDisplayInfo(orderTicker).primaryName}
-                      </span>
+                      <StockDisplayBadge
+                        ticker={orderTicker}
+                        showSubCode={false}
+                        showMarketBadge={true}
+                        primaryClassName="text-xs font-bold text-cyan-400"
+                        subCodeClassName="text-[9px]"
+                      />
                     )}
                   </div>
                   <input
@@ -984,6 +988,71 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
                     required
                   />
+                  {/* Quick Select Chips */}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="text-[10px] text-slate-500 self-center mr-1">빠른 선택:</span>
+                    {isKr ? (
+                      [
+                        { ticker: '005930.KS', name: '삼성전자' },
+                        { ticker: '000660.KS', name: 'SK하이닉스' },
+                        { ticker: '373220.KS', name: 'LG에너지솔루션' },
+                        { ticker: '005380.KS', name: '현대차' },
+                        { ticker: '000270.KS', name: '기아' },
+                        { ticker: '207940.KS', name: '삼성바이오로직스' },
+                        { ticker: '035420.KS', name: 'NAVER' },
+                        { ticker: '035720.KS', name: '카카오' },
+                        { ticker: '068270.KS', name: '셀트리온' },
+                        { ticker: '247540.KQ', name: '에코프로비엠' },
+                        { ticker: '196170.KQ', name: '알테오젠' },
+                        { ticker: '042700.KS', name: '한미반도체' },
+                        { ticker: '105560.KS', name: 'KB금융' },
+                        { ticker: '069500.KS', name: 'KODEX 200' },
+                      ].map((item) => (
+                        <button
+                          key={item.ticker}
+                          type="button"
+                          onClick={() => {
+                            setOrderTicker(item.ticker);
+                            setOrderPrice(0); // Will be fetched or user enters
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition-colors"
+                          title={`${item.name} (${item.ticker})`}
+                        >
+                          {item.name}
+                        </button>
+                      ))
+                    ) : (
+                      [
+                        { ticker: 'NVDA', name: '엔비디아' },
+                        { ticker: 'TSLA', name: '테슬라' },
+                        { ticker: 'AAPL', name: '애플' },
+                        { ticker: 'MSFT', name: '마이크로소프트' },
+                        { ticker: 'GOOGL', name: '구글' },
+                        { ticker: 'AMZN', name: '아마존' },
+                        { ticker: 'META', name: '메타' },
+                        { ticker: 'PLTR', name: '팔란티어' },
+                        { ticker: 'AVGO', name: '브로드컴' },
+                        { ticker: 'AMD', name: 'AMD' },
+                        { ticker: 'SPY', name: 'S&P 500' },
+                        { ticker: 'QQQ', name: '나스닥 100' },
+                        { ticker: 'SCHD', name: '배당성장' },
+                        { ticker: 'SMH', name: '반도체 ETF' },
+                      ].map((item) => (
+                        <button
+                          key={item.ticker}
+                          type="button"
+                          onClick={() => {
+                            setOrderTicker(item.ticker);
+                            setOrderPrice(0);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition-colors"
+                          title={`${item.name} (${item.ticker})`}
+                        >
+                          {item.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-slate-400 block mb-1">전략 태그</label>

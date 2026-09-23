@@ -22,8 +22,9 @@ import {
 import { FullTickerEvaluation, IntegratedExitEvaluation, UserHoldPosition } from '../types/v8';
 import { ExitSignalEngine } from '../engine/exitSignalEngine';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
-import { detectMarketRegion } from '../utils/marketUtils';
+import { detectMarketRegion, getStockDisplayInfo } from '../utils/marketUtils';
 import { MarketRegion } from '../types/v8';
+import { StockDisplayBadge } from './StockDisplayBadge';
 
 interface ExitSignalDashboardViewProps {
   evaluations: FullTickerEvaluation[];
@@ -132,10 +133,13 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
 
       // Search term
       if (searchTerm) {
-        const match =
-          item.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.name.toLowerCase().includes(searchTerm.toLowerCase());
-        if (!match) return false;
+        const term = searchTerm.toLowerCase();
+        const tickerMatch = item.ticker.toLowerCase().includes(term);
+        const nameMatch = item.name.toLowerCase().includes(term);
+        // Also search Korean stock name from dictionary
+        const dictName = getStockDisplayInfo(item.ticker).primaryName.toLowerCase();
+        const dictMatch = dictName.includes(term);
+        if (!(tickerMatch || nameMatch || dictMatch)) return false;
       }
       return true;
     });
@@ -359,7 +363,14 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                         onClick={() => onSelectTicker(item.ticker)}
                         className="text-lg font-bold text-white hover:text-cyan-400 transition-colors tracking-tight flex items-center space-x-1"
                       >
-                        <span>{item.ticker}</span>
+                        <StockDisplayBadge
+                          ticker={item.ticker}
+                          name={item.name}
+                          showSubCode={true}
+                          showMarketBadge={false}
+                          primaryClassName="font-bold text-white"
+                          subCodeClassName="text-[10px]"
+                        />
                         <ExternalLink className="w-3.5 h-3.5 opacity-60" />
                       </button>
                       <span className={`px-1 py-0.2 text-[8px] rounded font-semibold border ${
@@ -603,9 +614,18 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                     [
                       { ticker: '005930.KS', name: '삼성전자' },
                       { ticker: '000660.KS', name: 'SK하이닉스' },
+                      { ticker: '373220.KS', name: 'LG에너지솔루션' },
                       { ticker: '005380.KS', name: '현대차' },
-                      { ticker: '069500.KS', name: 'KODEX 200' },
+                      { ticker: '000270.KS', name: '기아' },
+                      { ticker: '207940.KS', name: '삼성바이오로직스' },
                       { ticker: '035420.KS', name: 'NAVER' },
+                      { ticker: '035720.KS', name: '카카오' },
+                      { ticker: '068270.KS', name: '셀트리온' },
+                      { ticker: '247540.KQ', name: '에코프로비엠' },
+                      { ticker: '196170.KQ', name: '알테오젠' },
+                      { ticker: '042700.KS', name: '한미반도체' },
+                      { ticker: '105560.KS', name: 'KB금융' },
+                      { ticker: '069500.KS', name: 'KODEX 200' },
                     ].map((item) => (
                       <button
                         key={item.ticker}
@@ -621,11 +641,20 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                     ))
                   ) : (
                     [
-                      { ticker: 'NVDA', name: 'NVIDIA' },
-                      { ticker: 'AAPL', name: 'Apple' },
-                      { ticker: 'MSFT', name: 'Microsoft' },
-                      { ticker: 'TSLA', name: 'Tesla' },
-                      { ticker: 'SPY', name: 'SPDR S&P 500' },
+                      { ticker: 'NVDA', name: '엔비디아' },
+                      { ticker: 'TSLA', name: '테슬라' },
+                      { ticker: 'AAPL', name: '애플' },
+                      { ticker: 'MSFT', name: '마이크로소프트' },
+                      { ticker: 'GOOGL', name: '구글' },
+                      { ticker: 'AMZN', name: '아마존' },
+                      { ticker: 'META', name: '메타' },
+                      { ticker: 'PLTR', name: '팔란티어' },
+                      { ticker: 'AVGO', name: '브로드컴' },
+                      { ticker: 'AMD', name: 'AMD' },
+                      { ticker: 'SPY', name: 'S&P 500' },
+                      { ticker: 'QQQ', name: '나스닥 100' },
+                      { ticker: 'SCHD', name: '배당성장' },
+                      { ticker: 'SMH', name: '반도체 ETF' },
                     ].map((item) => (
                       <button
                         key={item.ticker}
@@ -636,7 +665,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                         }}
                         className="px-2 py-0.5 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition-colors"
                       >
-                        {item.ticker}
+                        {item.name}
                       </button>
                     ))
                   )}

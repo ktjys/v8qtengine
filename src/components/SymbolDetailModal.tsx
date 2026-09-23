@@ -37,7 +37,7 @@ import {
   StrategyType,
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
-import { detectMarketRegion } from '../utils/marketUtils';
+import { detectMarketRegion, getStockDisplayInfo } from '../utils/marketUtils';
 import { buildSignalTelegramMessage, buildDipBuyTelegramMessage } from '../notification/templates';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { MacroEarningsEngine } from '../engine/macroEarningsEngine';
@@ -45,6 +45,7 @@ import { PaperTradingEngine } from '../engine/paperTradingEngine';
 import { PositionSizingCalculator } from './PositionSizingCalculator';
 import { SymbolDailyScoreChart } from './SymbolDailyScoreChart';
 import { AlertHistoryView } from './AlertHistoryView';
+import { StockDisplayBadge } from './StockDisplayBadge';
 
 interface SymbolDetailModalProps {
   evaluation: FullTickerEvaluation | null;
@@ -185,19 +186,16 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
         {/* Modal Header */}
         <div className="p-3.5 sm:p-5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
-            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-mono font-bold text-white text-sm sm:text-lg shadow-lg shadow-cyan-500/20 shrink-0">
-              {evaluation.ticker}
-            </div>
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
-                <h3 className="text-base sm:text-xl font-bold text-slate-100 truncate">{evaluation.name}</h3>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
-                  (evaluation.market_region || detectMarketRegion(evaluation.ticker)) === 'KR'
-                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                    : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                }`}>
-                  {(evaluation.market_region || detectMarketRegion(evaluation.ticker)) === 'KR' ? '🇰🇷 국내주식' : '🇺🇸 미국주식'}
-                </span>
+                <StockDisplayBadge
+                  ticker={evaluation.ticker}
+                  name={evaluation.name}
+                  showSubCode={true}
+                  showMarketBadge={true}
+                  primaryClassName="text-base sm:text-xl font-bold text-slate-100 truncate"
+                  subCodeClassName="text-[10px] sm:text-xs"
+                />
                 <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold">
                   {formatStockPrice(evaluation.price, evaluation.ticker)}
                 </span>

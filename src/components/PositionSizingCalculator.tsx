@@ -24,6 +24,8 @@ import { RiskSizingEngine } from '../engine/riskSizingEngine';
 import { PaperTradingEngine } from '../engine/paperTradingEngine';
 import { detectMarketRegion } from '../utils/marketUtils';
 import { formatCurrencyAmount, formatStockPrice } from '../utils/formatters';
+import { StockDisplayBadge } from './StockDisplayBadge';
+import { getStockDisplayInfo } from '../utils/marketUtils';
 
 interface PositionSizingCalculatorProps {
   ticker: string;
@@ -102,7 +104,9 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
   // Copy sizing summary to clipboard
   const handleCopySummary = () => {
     const market = isKr ? 'KR' : 'US';
-    const text = `📐 [${ticker}] ATR 동적 손절 & 포지션 사이징 결과
+    const { primaryName, subCode } = getStockDisplayInfo(ticker, companyName);
+    const displayTitle = `${primaryName} (${subCode})`;
+    const text = `📐 [${displayTitle}] ATR 동적 손절 & 포지션 사이징 결과
 • 진입 현재가: ${formatStockPrice(currentPrice, ticker)}
 • 14일 ATR 변동성: ${formatStockPrice(atrProfile.atr14, ticker)} (${atrProfile.atrPct}%)
 • 권장 손절선: ${formatStockPrice(effectiveStopPrice, ticker)} (-${atrProfile.stopLossPct}%)
@@ -130,10 +134,18 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
             <Scale className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-bold text-white">
                 ATR 동적 손절 & 포지션 사이징 계산기
               </h3>
+              <StockDisplayBadge
+                ticker={ticker}
+                name={companyName}
+                showSubCode={true}
+                showMarketBadge={true}
+                primaryClassName="text-sm font-bold text-cyan-400"
+                subCodeClassName="text-[10px]"
+              />
               <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                 1회 리스크 고정형 (Fixed Fractional)
               </span>
