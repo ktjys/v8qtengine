@@ -52,7 +52,8 @@ interface PaperTradingViewProps {
   activeMarket?: MarketRegion;
 }
 
-export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTicker, activeMarket = 'US' }) => {
+export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTicker, activeMarket: propMarket = 'US' }: PaperTradingViewProps) => {
+  const activeMarket: MarketRegion = (propMarket as MarketRegion) === 'KR' ? 'KR' : 'US';
   const [activeSubTab, setActiveSubTab] = useState<'positions' | 'equity' | 'accuracy' | 'history' | 'sizing'>('positions');
   const [accountSummary, setAccountSummary] = useState<PaperAccountSummary | null>(null);
   const [performanceSummary, setPerformanceSummary] = useState<SignalPerformanceSummary | null>(null);
