@@ -39,26 +39,52 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   const [inputBotToken, setInputBotToken] = useState('');
   const [inputChatId, setInputChatId] = useState('');
 
+  const [scheduleMarketFilter, setScheduleMarketFilter] = useState<'ALL' | 'KR' | 'US'>('ALL');
+
   const schedules = [
     {
-      slot: 'POST_MARKET',
-      title: '1회차: 정규장 마감 브리핑',
-      timeKST: '06:30 KST (화~토)',
-      cronUTC: '30 21 * * 1-5',
-      desc: '미국 정규장 종가 확정 후 4대 팩터(기술/모멘텀/펀더/밸류) 최종 집계 및 일봉 확정 시그널 도출',
-      badge: '종가 확정',
-      badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-      icon: '🌅',
+      slot: 'KR_OPEN',
+      market: 'KR',
+      title: '국내장 개장 & 오전 기회종목 브리핑',
+      timeKST: '09:30 KST (월~금)',
+      cronUTC: '30 00 * * 1-5',
+      desc: 'KOSPI / KOSDAQ 정규장 개장(09:00) 후 초기 변동성 소화 및 시초가 갭돌파 유효 종목 발굴',
+      badge: '🇰🇷 국내 개장',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+      icon: '☀️',
+    },
+    {
+      slot: 'KR_CLOSE',
+      market: 'KR',
+      title: '국내장 마감 & 일봉 종가 확정 리포트',
+      timeKST: '15:40 KST (월~금)',
+      cronUTC: '40 06 * * 1-5',
+      desc: 'KOSPI / KOSDAQ 정규장 마감(15:30) 직후 당일 확정 종가 기반 퀀트 4대 팩터 및 익일 진입 시그널 도출',
+      badge: '🇰🇷 국내 마감',
+      badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+      icon: '🏁',
     },
     {
       slot: 'REGULAR_MARKET',
-      title: '2회차: 정규장 개장 & 기회 종목 브리핑',
+      market: 'US',
+      title: '미국장 개장 & 당일 기회종목 브리핑',
       timeKST: '23:00 KST (월~금)',
       cronUTC: '00 14 * * 1-5',
       desc: '미국 정규장 개장 초기 변동성 반영, 당일 진입 유효 기회종목 압축 브리핑 (수면 방해 없는 밤 11시 발송)',
-      badge: '개장 브리핑',
+      badge: '🇺🇸 미국 개장',
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       icon: '🌃',
+    },
+    {
+      slot: 'POST_MARKET',
+      market: 'US',
+      title: '미국장 마감 & 일봉 종가 확정 리포트',
+      timeKST: '06:30 KST (화~토)',
+      cronUTC: '30 21 * * 1-5',
+      desc: '미국 정규장 종가 확정 후 4대 팩터(기술/모멘텀/펀더/밸류) 최종 집계 및 일봉 확정 시그널 도출',
+      badge: '🇺🇸 미국 마감',
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+      icon: '🌅',
     },
   ];
 
@@ -564,7 +590,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      외부 크론 서비스 없이도 서버 내부에서 매일 2회 정해진 시각(06:30, 23:00 밤 11시 KST)에 스스로 자동 실행합니다.
+                      외부 크론 서비스 없이도 서버 내부에서 매일 국내장 2회(09:30, 15:40) 및 미국장 2회(23:00, 06:30) 총 4회 정해진 시각에 스스로 자동 실행합니다.
                     </p>
                   </div>
                 </div>
@@ -578,8 +604,52 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                 )}
               </div>
 
+              {/* Market Filter Tabs */}
+              <div className="flex items-center justify-between pb-1">
+                <div className="text-xs font-bold text-slate-300">
+                  정기 자동 스캔 시간표 ({scheduleMarketFilter === 'ALL' ? '총 4회' : scheduleMarketFilter === 'KR' ? '국내 2회' : '미국 2회'})
+                </div>
+                <div className="flex items-center space-x-1.5 p-0.5 bg-slate-900 border border-slate-800 rounded-lg text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMarketFilter('ALL')}
+                    className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                      scheduleMarketFilter === 'ALL'
+                        ? 'bg-cyan-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    전체 4회
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMarketFilter('KR')}
+                    className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                      scheduleMarketFilter === 'KR'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🇰🇷 국내장 2회
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMarketFilter('US')}
+                    className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                      scheduleMarketFilter === 'US'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🇺🇸 미국장 2회
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
-                {schedules.map((s, idx) => (
+                {schedules
+                  .filter((s) => scheduleMarketFilter === 'ALL' || s.market === scheduleMarketFilter)
+                  .map((s, idx) => (
                   <div
                     key={idx}
                     className="bg-slate-950/70 border border-slate-800/80 rounded-xl sm:rounded-2xl p-3 sm:p-4 space-y-1.5 sm:space-y-2 hover:border-slate-700 transition-all"
@@ -988,10 +1058,13 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                   동기 스캔 모드에서도 야후 파이낸스 타임아웃을 2.5초로 최적화하고 10초 세이프티 가드를 적용하여 어떤 네트워크 환경에서도 연결이 끊기지 않습니다.
                 </p>
                 <p>
-                  <b className="text-purple-300">3. Cloudflare 자체 내장 [Cron Triggers] 지원:</b><br />
-                  Cloudflare Workers는 상주 프로세스가 없어서 일반 Node.js의 <code className="text-slate-400">setInterval</code>은 돌지 않지만, Cloudflare가 자체 제공하는 <b>Cron Triggers(Scheduled Event)</b>를 지원합니다.<br />
-                  이미 <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 크론 스케줄(<code className="text-slate-300 text-[10px]">06:30, 23:00 KST</code>)과 <code className="text-emerald-300 font-mono text-[10px]">worker.ts</code>의 <code className="text-slate-300 text-[10px]">scheduled()</code> 이벤트 핸들러를 등록해 두었습니다.<br />
-                  👉 <b>Cloudflare 대시보드</b> (<span className="text-slate-200 font-semibold">Workers & Pages &gt; v8qtengine &gt; Settings &gt; Triggers &gt; Cron Triggers</span>)에서 확인하실 수 있으며, 외부 크론 없이도 Cloudflare가 시간에 맞춰 Worker를 직접 깨워 텔레그램을 100% 자동 발송합니다!
+                  <b className="text-purple-300">3. Cloudflare 자체 내장 [Cron Triggers] 4회 자동화:</b><br />
+                  Cloudflare Workers 환경에서 국내장과 미국장을 완벽히 통일하여 자동화할 수 있도록 <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 <b>총 4회의 크론 트리거</b>를 모두 등록해 두었습니다:<br />
+                  • 🌅 <b>06:30 KST:</b> 미국장 마감 종가 확정 (<code className="text-cyan-300 text-[10px]">30 21 * * 1-5</code>)<br />
+                  • ☀️ <b>09:30 KST:</b> 국내장 개장 &amp; 시초가 브리핑 (<code className="text-cyan-300 text-[10px]">30 0 * * 1-5</code>)<br />
+                  • 🏁 <b>15:40 KST:</b> 국내장 마감 &amp; 일봉 종가 확정 (<code className="text-cyan-300 text-[10px]">40 6 * * 1-5</code>)<br />
+                  • 🌃 <b>23:00 KST:</b> 미국장 개장 &amp; 기회종목 브리핑 (<code className="text-cyan-300 text-[10px]">0 14 * * 1-5</code>)<br />
+                  👉 <b>Cloudflare 대시보드</b> (<span className="text-slate-200 font-semibold">Workers & Pages &gt; v8qtengine &gt; Settings &gt; Triggers &gt; Cron Triggers</span>)에서 확인하실 수 있으며, 별도의 외부 크론 사이트 등록 없이도 Cloudflare가 시간에 맞춰 Worker의 <code className="text-emerald-300 text-[10px]">scheduled()</code>를 깨워 텔레그램을 100% 자동 발송합니다!
                 </p>
                 <p>
                   <b className="text-rose-400">⚠️ 중복 실행(Double Trigger) 주의:</b><br />
@@ -1026,7 +1099,12 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                     요청 방식(Request Method)을 <b>POST</b> 또는 <b>GET</b>으로 선택합니다.
                   </li>
                   <li>
-                    스케줄 실행 시간을 <b>한국 시간 06:30, 23:00 (밤 11시)</b> (UTC 기준 21:30, 14:00)로 등록하면, 수면 방해 없이 365일 정해진 시간에 퀀트 스캔을 수행하고 텔레그램으로 알림을 자동 발송합니다.
+                    스케줄 실행 시간을 목적에 맞게 등록합니다 (복수 등록 가능):<br />
+                    • <b>🇰🇷 국내장 개장 브리핑:</b> 한국 시각 <b>09:30</b> (UTC <code>30 00 * * 1-5</code>)<br />
+                    • <b>🇰🇷 국내장 마감 브리핑:</b> 한국 시각 <b>15:40</b> (UTC <code>40 06 * * 1-5</code>)<br />
+                    • <b>🇺🇸 미국장 개장 브리핑:</b> 한국 시각 <b>23:00</b> (UTC <code>00 14 * * 1-5</code>)<br />
+                    • <b>🇺🇸 미국장 마감 브리핑:</b> 한국 시각 <b>06:30</b> (UTC <code>30 21 * * 1-5</code>)<br />
+                    등록해 두시면 PC를 켜두지 않아도 365일 정해진 시각에 퀀트 스캔을 수행하고 텔레그램으로 알림을 자동 발송합니다.
                   </li>
                 </ol>
               </div>

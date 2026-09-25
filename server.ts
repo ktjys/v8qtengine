@@ -139,6 +139,11 @@ async function startServer() {
       )?.trim().replace(/^['"]|['"]$/g, '');
 
       const sourceUrl = `${req.protocol}://${req.get('host')}`;
+      const reqMarketRaw = (((queryParams.market as string) || b.market || '') as string).toUpperCase().trim();
+      const reqMarket = (reqMarketRaw === 'KR' || reqMarketRaw === 'US' || reqMarketRaw === 'ALL')
+        ? (reqMarketRaw as 'KR' | 'US' | 'ALL')
+        : undefined;
+
       const isAsync =
         queryParams.async === 'true' ||
         queryParams.async === '1' ||
@@ -147,11 +152,12 @@ async function startServer() {
         b.mode === 'async';
 
       if (isAsync) {
-        console.log(`[server] 🚀 Async cron triggered (botToken: ${botToken ? 'provided' : 'none'}, chat: ${chatId})`);
+        console.log(`[server] 🚀 Async cron triggered (market: ${reqMarket || 'auto'}, botToken: ${botToken ? 'provided' : 'none'}, chat: ${chatId})`);
 
         executeCronScan({
           botToken,
           chatId,
+          market: reqMarket,
           triggeredBy: (headers['user-agent'] as string) || 'CronWebhookAsync',
           sourceUrl,
         })
@@ -175,6 +181,7 @@ async function startServer() {
       const result = await executeCronScan({
         botToken,
         chatId,
+        market: reqMarket,
         triggeredBy: (headers['user-agent'] as string) || 'CronWebhook',
         sourceUrl,
       });
@@ -243,22 +250,42 @@ async function startServer() {
   app.get('/api/v8/schedule/info', (req, res) => {
     res.json({
       success: true,
-      total_schedules: 2,
+      total_schedules: 4,
       schedules: [
         {
           slot: 'POST_MARKET',
           name: '미국 정규장 마감 브리핑 (종가 확정)',
-          timeKST: '06:30 KST (평일 화~토)',
+          timeKST: '06:30 KST (화~토)',
           cronUTC: '30 21 * * 1-5',
-          purpose: '전일 종가 기준 4대 팩터 최종 집계 및 일봉 확정 시그널 도출',
+          purpose: '미국 정규장 종가 확정 후 4대 팩터 최종 집계 및 일봉 확정 시그널 도출',
+          market: 'US',
+          priority: 'HIGH',
+        },
+        {
+          slot: 'KR_OPEN',
+          name: '국내장 개장 & 오전 기회종목 브리핑',
+          timeKST: '09:30 KST (월~금)',
+          cronUTC: '30 00 * * 1-5',
+          purpose: 'KOSPI/KOSDAQ 정규장 개장(09:00) 직후 시초가 돌파 및 오전 모멘텀 포착',
+          market: 'KR',
+          priority: 'HIGH',
+        },
+        {
+          slot: 'KR_CLOSE',
+          name: '국내장 마감 & 일봉 종가 확정 리포트',
+          timeKST: '15:40 KST (월~금)',
+          cronUTC: '40 06 * * 1-5',
+          purpose: 'KOSPI/KOSDAQ 정규장 마감(15:30) 직후 당일 확정 종가 기반 퀀트 4대 팩터 집계',
+          market: 'KR',
           priority: 'HIGH',
         },
         {
           slot: 'REGULAR_MARKET',
-          name: '미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)',
-          timeKST: '23:00 KST (평일 월~금)',
+          name: '미국 정규장 개장 & 당일 기회종목 브리핑',
+          timeKST: '23:00 KST (월~금)',
           cronUTC: '00 14 * * 1-5',
-          purpose: '정규장 개장 후 초기 변동성 및 당일 진입 유효 기회종목 압축 브리핑 (수면 방해 없는 밤 11시 발송)',
+          purpose: '정규장 개장 후 초기 변동성 및 당일 진입 유효 기회종목 압축 브리핑',
+          market: 'US',
           priority: 'HIGH',
         },
       ],

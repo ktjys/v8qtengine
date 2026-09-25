@@ -6,7 +6,7 @@ describe('alertHistoryRepository', () => {
   it('returns seeded alert notifications on initial query', async () => {
     const alerts = await alertHistoryRepository.getAll();
     expect(alerts.length).toBeGreaterThanOrEqual(1);
-    expect(alerts.some((a) => a.strategy_type === 'STRATEGY_B')).toBe(true);
+    expect(alerts.some((a) => a.strategy_type === 'STRATEGY_B' || a.strategy_type === 'DUAL_SCAN_REPORT')).toBe(true);
   });
 
   it('saves a new Strategy B alert and queries it by ticker', async () => {

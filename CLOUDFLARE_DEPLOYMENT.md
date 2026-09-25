@@ -43,23 +43,26 @@ Configure the following in **Pages > Settings > Environment Variables**:
 
 ---
 
-## ⏰ Automated Scanning Schedule (3 Daily Runs)
+## ⏰ Automated Scanning Schedule (4 Daily Runs - 국내장 2회 + 미국장 2회)
 
-The backend `/api/v8/cron-scan` endpoint automatically evaluates the quant decision engine and broadcasts Telegram alerts:
+Cloudflare Workers의 `wrangler.toml`에 4개 트리거가 기본 등록되어 있습니다:
 
-1. **06:30 KST (화~토) - 미국 정규장 마감 브리핑**
+1. **06:30 KST (화~토) - 🌅 [미국장 마감] 종가 확정 브리핑**
    - Cron (UTC): `30 21 * * 1-5`
-   - 전일 종가 기준 4대 팩터(기술/모멘텀/펀더/밸류) 최종 집계 및 일봉 확정 시그널 도출
-2. **22:00 KST (월~금) - 프리마켓 갭 분석 & 관심종목 압축**
-   - Cron (UTC): `00 13 * * 1-5`
-   - 당일 장전 진입 유효 후보군 압축 및 포트폴리오 비중 브리핑
-3. **02:00 KST (화~토) - 장중 급변 & 모멘텀 브레이크아웃 감시**
-   - Cron (UTC): `00 17 * * 1-5`
-   - 장중 거래량 폭증 및 변동성 브레이크아웃 급변 종목 포착 시 실시간 알림
+   - 전일 미국장 종가 기준 4대 팩터 최종 집계 및 일봉 확정 시그널 도출
+2. **09:30 KST (월~금) - ☀️ [국내장 개장] 시초가 & 오전 기회종목 브리핑**
+   - Cron (UTC): `30 0 * * 1-5`
+   - KOSPI / KOSDAQ 시초가 형성 직후 갭상승 및 당일 급등/모멘텀 유망주 브리핑
+3. **15:40 KST (월~금) - 🏁 [국내장 마감] 종가 확정 & 퀀트 리포트**
+   - Cron (UTC): `40 6 * * 1-5`
+   - 국내 정규장 일봉 종가 확정, 4대 팩터 종합 점수 집계 및 우량주 눌림목 추매 신호 발송
+4. **23:00 KST (월~금) - 🌃 [미국장 개장] 개장 & 당일 관심종목 브리핑**
+   - Cron (UTC): `0 14 * * 1-5`
+   - 미국 본장 개장 직후 모멘텀 돌파 및 당일 유효 진입 후보군 압축
 
-### 무료 자동 실행 설정 방법 (2가지):
-- **방법 1 (무료 Webhook):** [cron-job.org](https://cron-job.org)에 가입 후 `https://내서브도메인.pages.dev/api/v8/cron-scan` URL을 등록하고 위 시각으로 설정.
-- **방법 2 (대시보드 즉시 실행):** 상단 네비게이션 바의 **[자동 알림]** ➡️ **[지금 실행하기]** 버튼 클릭.
+### 자동 실행 설정 방법 (2가지):
+- **방법 1 (Cloudflare Workers Cron Triggers - 추천):** `wrangler.toml`의 `[triggers] crons` 설정에 따라 Cloudflare가 정해진 시각에 Worker의 `scheduled()`를 직접 깨워 100% 자동 실행 (추가 설정 불필요).
+- **방법 2 (외부 Webhook):** [cron-job.org](https://cron-job.org) 또는 GitHub Actions에 `https://내서브도메인.pages.dev/api/v8/cron-scan?async=true` URL을 위 UTC 크론 표현식으로 등록.
 
 ---
 

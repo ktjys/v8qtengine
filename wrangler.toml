@@ -18,7 +18,9 @@ SUPABASE_KEY = "sb_publishable__6cC6rZrrlLsIPRcRMQAFg_BknuN793"
 
 [triggers]
 crons = [
-  "30 21 * * 1-5",
-  "0 14 * * 1-5"
+  "30 21 * * 1-5", # 🌅 [미국장 마감] 06:30 KST (화~토 KST / 월~금 UTC 21:30)
+  "30 0 * * 1-5",  # ☀️ [국내장 개장] 09:30 KST (월~금 KST / 월~금 UTC 00:30)
+  "40 6 * * 1-5",  # 🏁 [국내장 마감] 15:40 KST (월~금 KST / 월~금 UTC 06:40)
+  "0 14 * * 1-5"   # 🌃 [미국장 개장] 23:00 KST (월~금 KST / 월~금 UTC 14:00)
 ]
 

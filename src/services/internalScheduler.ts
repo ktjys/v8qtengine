@@ -11,14 +11,28 @@ interface ScheduleSlot {
 const SCHEDULE_SLOTS: ScheduleSlot[] = [
   {
     id: 'POST_MARKET',
-    name: '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)',
+    name: '🌅 [미국장 마감] 미국 정규장 종가 확정 브리핑',
     targetKstHour: 6,
     targetKstMinute: 30,
-    targetDays: [1, 2, 3, 4, 5, 6], // 월~토
+    targetDays: [2, 3, 4, 5, 6], // 화~토 (미국 현지 월~금 장 마감 후)
+  },
+  {
+    id: 'KR_OPEN',
+    name: '☀️ [국내장 개장] KOSPI/KOSDAQ 시초가 & 오전 기회종목 브리핑',
+    targetKstHour: 9,
+    targetKstMinute: 30,
+    targetDays: [1, 2, 3, 4, 5], // 월~금
+  },
+  {
+    id: 'KR_CLOSE',
+    name: '🏁 [국내장 마감] KOSPI/KOSDAQ 종가 확정 & 퀀트 리포트',
+    targetKstHour: 15,
+    targetKstMinute: 40,
+    targetDays: [1, 2, 3, 4, 5], // 월~금
   },
   {
     id: 'REGULAR_MARKET',
-    name: '🌃 [2회차] 미국 정규장 개장 & 당일 관심종목 브리핑 (밤 11시)',
+    name: '🌃 [미국장 개장] 미국 정규장 개장 & 당일 관심종목 브리핑',
     targetKstHour: 23,
     targetKstMinute: 0,
     targetDays: [1, 2, 3, 4, 5], // 월~금 (미국 정규장 개장일 밤 11시)
@@ -136,8 +150,10 @@ class InternalScheduler {
         this.lastExecutedDateSlot = slotKey;
 
         try {
+          const slotMarket = (slot.id === 'KR_OPEN' || slot.id === 'KR_CLOSE') ? 'KR' : 'US';
           const result = await executeCronScan({
             triggeredBy: `InternalScheduler:${slot.id}`,
+            market: slotMarket,
           });
 
           this.lastRunResult = {

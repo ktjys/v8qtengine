@@ -16,7 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { FullTickerEvaluation } from '../types/v8';
-import { groupEvaluationsBySector, SectorGroup, SectorItem } from '../utils/sectorUtils';
+import { groupEvaluationsBySector, SectorGroup, SectorItem, getShortStockDisplayName } from '../utils/sectorUtils';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
 
 interface SectorPerformanceTreemapProps {
@@ -26,6 +26,7 @@ interface SectorPerformanceTreemapProps {
 
 type SizingMetric = 'marketCap' | 'opportunity' | 'equal';
 type ColorMetric = 'change1d' | 'opportunity' | 'rsi';
+export type TreemapLabelMode = 'name' | 'both' | 'ticker';
 
 interface TreemapDatum {
   name: string;
@@ -48,6 +49,7 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
 
   const [sizingMetric, setSizingMetric] = useState<SizingMetric>('marketCap');
   const [colorMetric, setColorMetric] = useState<ColorMetric>('change1d');
+  const [labelMode, setLabelMode] = useState<TreemapLabelMode>('name');
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string>('ALL');
   const [hoveredItem, setHoveredItem] = useState<{
     item: SectorItem;
@@ -295,6 +297,44 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
             </button>
           </div>
 
+          {/* Label display mode: Name (default) vs Name+Code vs Code */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <span className="text-[11px] text-slate-500 px-2 font-medium">표시:</span>
+            <button
+              onClick={() => setLabelMode('name')}
+              title="삼성전자, 엔비디아 등 직관적인 종목명 우선 표시"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                labelMode === 'name'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              종목명
+            </button>
+            <button
+              onClick={() => setLabelMode('both')}
+              title="종목명과 종목코드 함께 표시"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                labelMode === 'both'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              종목명+코드
+            </button>
+            <button
+              onClick={() => setLabelMode('ticker')}
+              title="005930, NVDA 등 코드만 표시"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                labelMode === 'ticker'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              코드
+            </button>
+          </div>
+
           {/* Expand toggle */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -480,51 +520,103 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
                       />
 
                       {/* Content inside Box if size allows */}
-                      {leafWidth >= 32 && leafHeight >= 26 && (
-                        <g transform={`translate(${leafWidth / 2}, ${leafHeight / 2})`}>
-                          {/* Ticker text */}
-                          <text
-                            textAnchor="middle"
-                            y={leafHeight >= 46 ? -6 : 4}
-                            fill="#ffffff"
-                            fontSize={leafWidth > 80 && leafHeight > 60 ? 15 : leafWidth > 50 ? 12 : 10}
-                            fontWeight="bold"
-                            fontFamily="monospace"
-                            className="select-none pointer-events-none drop-shadow"
-                          >
-                            {item.ticker}
-                          </text>
+                      {leafWidth >= 26 && leafHeight >= 20 && (() => {
+                        const shortName = getShortStockDisplayName(item.displayName || item.name, item.ticker);
+                        const primaryText = labelMode === 'ticker' ? (item.subCode || item.ticker) : shortName;
+                        const subCodeText = item.subCode || item.ticker;
+                        const showSubCode = (labelMode === 'both' || (labelMode === 'name' && leafWidth >= 70 && leafHeight >= 58)) && subCodeText;
 
-                          {/* Sub-label: 1D Change */}
-                          {leafHeight >= 42 && (
+                        const isKoreanChar = /[가-힣]/.test(primaryText);
+                        const approxCharWidth = isKoreanChar ? 10.5 : 7.2;
+                        const maxChars = Math.max(2, Math.floor((leafWidth - 6) / approxCharWidth));
+                        const displayLabel = primaryText.length > maxChars ? primaryText.slice(0, Math.max(1, maxChars - 1)) + '…' : primaryText;
+
+                        // Font size calculation based on box size and string length
+                        let fontSize = 10;
+                        if (leafWidth >= 85 && leafHeight >= 64) {
+                          fontSize = isKoreanChar ? 13 : 14;
+                        } else if (leafWidth >= 55 && leafHeight >= 44) {
+                          fontSize = isKoreanChar ? 11 : 12;
+                        } else if (leafWidth >= 38 && leafHeight >= 30) {
+                          fontSize = 9.5;
+                        } else {
+                          fontSize = 8.5;
+                        }
+
+                        return (
+                          <g transform={`translate(${leafWidth / 2}, ${leafHeight / 2})`}>
+                            {/* Primary Label (Stock Name by default) */}
                             <text
                               textAnchor="middle"
-                              y={12}
-                              fill={item.change1d >= 0 ? '#6ee7b7' : '#fda4af'}
-                              fontSize={leafWidth > 80 ? 11 : 9}
-                              fontWeight="600"
-                              fontFamily="monospace"
+                              y={
+                                leafHeight >= 62 && showSubCode
+                                  ? -13
+                                  : leafHeight >= 44
+                                  ? -5
+                                  : leafHeight >= 32
+                                  ? -1
+                                  : 3
+                              }
+                              fill="#ffffff"
+                              fontSize={fontSize}
+                              fontWeight="bold"
+                              fontFamily={isKoreanChar ? "Pretendard, -apple-system, sans-serif" : "monospace"}
                               className="select-none pointer-events-none drop-shadow"
                             >
-                              {item.change1d >= 0 ? '+' : ''}
-                              {item.change1d}%
+                              {displayLabel}
                             </text>
-                          )}
 
-                          {/* Opportunity or Price label if box is large */}
-                          {leafWidth >= 85 && leafHeight >= 75 && (
-                            <text
-                              textAnchor="middle"
-                              y={26}
-                              fill="#94a3b8"
-                              fontSize={9}
-                              className="select-none pointer-events-none"
-                            >
-                              점수 {item.opportunityScore}점
-                            </text>
-                          )}
-                        </g>
-                      )}
+                            {/* Sub Code (e.g. 005930, NVDA) when space permits or in both mode */}
+                            {showSubCode && leafHeight >= 56 && (
+                              <text
+                                textAnchor="middle"
+                                y={leafHeight >= 68 ? 1 : 0}
+                                fill="#94a3b8"
+                                fontSize={9}
+                                fontFamily="monospace"
+                                className="select-none pointer-events-none drop-shadow opacity-90"
+                              >
+                                {subCodeText}
+                              </text>
+                            )}
+
+                            {/* Sub-label: 1D Change */}
+                            {leafHeight >= 36 && (
+                              <text
+                                textAnchor="middle"
+                                y={
+                                  showSubCode && leafHeight >= 56
+                                    ? 15
+                                    : leafHeight >= 44
+                                    ? 11
+                                    : 9
+                                }
+                                fill={item.change1d >= 0 ? '#6ee7b7' : '#fda4af'}
+                                fontSize={leafWidth > 75 ? 11 : 9.5}
+                                fontWeight="bold"
+                                fontFamily="monospace"
+                                className="select-none pointer-events-none drop-shadow"
+                              >
+                                {item.change1d >= 0 ? '+' : ''}
+                                {item.change1d}%
+                              </text>
+                            )}
+
+                            {/* Opportunity or Price label if box is large */}
+                            {leafWidth >= 90 && leafHeight >= 78 && (
+                              <text
+                                textAnchor="middle"
+                                y={28}
+                                fill="#94a3b8"
+                                fontSize={9}
+                                className="select-none pointer-events-none"
+                              >
+                                점수 {item.opportunityScore}점
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })()}
 
                       {/* Status indicator pip on top-right */}
                       {leafWidth >= 40 && leafHeight >= 30 && item.actionable && (
@@ -557,21 +649,32 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
             <div className="w-64 bg-slate-900/95 backdrop-blur-md border border-slate-700/90 rounded-2xl p-3.5 shadow-2xl space-y-2 text-xs">
               {/* Header */}
               <div className="flex items-start justify-between pb-2 border-b border-slate-800">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono font-bold text-base text-white">
-                      {hoveredItem.item.ticker}
+                <div className="min-w-0 pr-2">
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                    <span className="font-bold text-sm sm:text-base text-white truncate max-w-[150px]">
+                      {hoveredItem.item.displayName || hoveredItem.item.name}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono">
-                      {hoveredItem.item.strategyType}
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono font-semibold">
+                      {hoveredItem.item.subCode || hoveredItem.item.ticker}
+                    </span>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded font-semibold border ${
+                        hoveredItem.item.isKorean
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                      }`}
+                    >
+                      {hoveredItem.item.isKorean ? '국내' : '미국'}
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-400 truncate max-w-[150px]">
-                    {hoveredItem.item.name}
-                  </div>
+                  {hoveredItem.item.name && hoveredItem.item.name !== (hoveredItem.item.subCode || hoveredItem.item.ticker) && (
+                    <div className="text-[11px] text-slate-400 truncate max-w-[160px] mt-0.5 font-mono">
+                      {hoveredItem.item.ticker} · {hoveredItem.item.strategyType}
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <div className="font-mono font-bold text-white">
                     {formatStockPrice(hoveredItem.item.price, hoveredItem.item.ticker)}
                   </div>

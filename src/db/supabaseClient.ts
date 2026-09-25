@@ -12,6 +12,8 @@ import {
   INITIAL_WATCHLIST_RAW,
   runPipelineOnSeedData,
 } from '../data/seed/initialData';
+import { KOREAN_WATCHLIST_RAW } from '../data/seed/koreanInitialData';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 export interface DatabaseState {
   assets: Map<string, any>;
@@ -270,25 +272,30 @@ class UniversalDatabaseClient {
         return { success: false, seededCount: 0, error: 'Supabase DB가 연결되어 있지 않습니다.' };
       }
 
+      const allSeedItems = [...INITIAL_WATCHLIST_RAW, ...KOREAN_WATCHLIST_RAW];
+
       // 1. Seed Assets
-      const assetRows = INITIAL_WATCHLIST_RAW.map((item) => ({
-        ticker: item.ticker,
-        name: item.name,
-        asset_type: item.metadata.quoteType === 'ETF' ? 'etf' : 'equity',
-        exchange: 'NASDAQ',
-        sector: item.metadata.sector || 'Technology',
-        industry: item.metadata.industry || 'Semiconductors',
-        currency: 'USD',
-        is_active: true,
-        metadata_json: item.metadata,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
+      const assetRows = allSeedItems.map((item) => {
+        const isKr = detectMarketRegion(item.ticker) === 'KR';
+        return {
+          ticker: item.ticker,
+          name: item.name,
+          asset_type: item.metadata.quoteType === 'ETF' ? 'etf' : 'equity',
+          exchange: isKr ? (item.ticker.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI') : 'NASDAQ',
+          sector: item.metadata.sector || (isKr ? 'Technology' : 'Technology'),
+          industry: item.metadata.industry || (isKr ? 'Semiconductors' : 'Semiconductors'),
+          currency: isKr ? 'KRW' : 'USD',
+          is_active: true,
+          metadata_json: item.metadata,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      });
 
       await this.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
 
       // 2. Seed Watchlist
-      const watchlistRows = INITIAL_WATCHLIST_RAW.map((item) => ({
+      const watchlistRows = allSeedItems.map((item) => ({
         ticker: item.ticker,
         is_active: true,
         memo: item.memo,
@@ -336,7 +343,7 @@ class UniversalDatabaseClient {
 
       await this.supabase.from('scan_runs').upsert(scanRows, { onConflict: 'id' });
 
-      count = INITIAL_WATCHLIST_RAW.length;
+      count = allSeedItems.length;
       return { success: true, seededCount: count };
     } catch (err: any) {
       console.error('[SupabaseClient] seedToActiveDb error:', err);

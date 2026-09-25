@@ -32,31 +32,22 @@ export class ScanService {
       tickers = tickers.filter((t) => detectMarketRegion(t) === options.market);
     }
 
-    // If empty for US, fall back to initial standard US tickers
+    // If empty for either market, fall back to default standard tickers so scans never fail empty
     if (tickers.length === 0) {
       if (options.market === 'KR') {
-        // Return empty scan result gracefully without injecting US stocks
-        const emptyRunLog: ScanRunLog = {
-          run_id: runId,
-          started_at: startTime.toISOString(),
-          finished_at: new Date().toISOString(),
-          market_region: 'KR',
-          status: 'SUCCESS',
-          watchlist_count: 0,
-          evaluated_count: 0,
-          signal_count: 0,
-          failure_count: 0,
-          failed_tickers: [],
-          error_summary: '국내 워치리스트에 등록된 종목이 없습니다. 워치리스트에서 종목을 먼저 추가해주세요.',
-        };
-        return {
-          runLog: emptyRunLog,
-          evaluations: [],
-          newSignals: [],
-          actionableSignals: [],
-          allSignals: await signalRepository.getAll(),
-          watchlist: [],
-        };
+        tickers = [
+          '005930.KS', // 삼성전자
+          '000660.KS', // SK하이닉스
+          '373220.KS', // LG에너지솔루션
+          '207940.KS', // 삼성바이오로직스
+          '005380.KS', // 현대차
+          '069500.KS', // KODEX 200
+          '360750.KS', // TIGER 미국S&P500
+          '133690.KS', // TIGER 미국나스닥100
+          '458730.KS', // TIGER 미국배당다우존스
+          '247540.KQ', // 에코프로비엠
+          '196170.KQ', // 알테오젠
+        ];
       } else if (!options.market || options.market === 'US') {
         tickers = [
           'AAPL', 'AMD', 'AMZN', 'GOOGL', 'HOOD', 'JNJ', 'META', 'MSFT',

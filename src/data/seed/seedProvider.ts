@@ -1,6 +1,10 @@
 import { MarketDataProvider } from '../providers/marketDataProvider';
 import { FundamentalData, NormalizedMarketData, OHLCVBar, QuoteData } from '../providers/types';
-import { INITIAL_WATCHLIST_RAW } from './initialData';
+import { INITIAL_WATCHLIST_RAW, SeedTickerInfo } from './initialData';
+import { KOREAN_WATCHLIST_RAW } from './koreanInitialData';
+import { detectMarketRegion } from '../../utils/marketUtils';
+
+const ALL_SEED_ITEMS: SeedTickerInfo[] = [...INITIAL_WATCHLIST_RAW, ...KOREAN_WATCHLIST_RAW];
 
 // Deterministic PRNG (mulberry32) seeded from the ticker so the same ticker
 // always produces the same synthetic bar series. Backtest reproducibility
@@ -35,29 +39,32 @@ export class SeedDataProvider implements MarketDataProvider {
   readonly name = 'seed';
 
   async getQuote(ticker: string): Promise<QuoteData> {
-    const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === ticker.toUpperCase());
-    const price = seed ? seed.price : 100;
+    const clean = ticker.toUpperCase().trim();
+    const isKr = detectMarketRegion(clean) === 'KR';
+    const seed = ALL_SEED_ITEMS.find((s) => s.ticker.toUpperCase() === clean);
+    const price = seed ? seed.price : (isKr ? 50000 : 100);
     const change = seed ? (seed.price * seed.change1d) / 100 : 0;
     const changePercent = seed ? seed.change1d : 0;
 
     return {
-      ticker: ticker.toUpperCase(),
+      ticker: clean,
       price,
       change,
       changePercent,
-      currency: 'USD',
-      exchange: 'NASDAQ',
-      shortName: seed?.name || ticker.toUpperCase(),
-      longName: seed?.name || ticker.toUpperCase(),
-      marketCap: seed?.metadata.marketCap || 10_000_000_000,
+      currency: isKr ? 'KRW' : 'USD',
+      exchange: isKr ? (clean.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI') : 'NASDAQ',
+      shortName: seed?.name || clean,
+      longName: seed?.name || clean,
+      marketCap: seed?.metadata.marketCap || (isKr ? 5_000_000_000_000 : 10_000_000_000),
       timestamp: new Date().toISOString(),
     };
   }
 
   async getHistorical(ticker: string, range = '1y', interval = '1d', endDate?: string): Promise<OHLCVBar[]> {
-    const clean = ticker.toUpperCase();
-    const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === clean);
-    const basePrice = seed ? seed.price : 100;
+    const clean = ticker.toUpperCase().trim();
+    const isKr = detectMarketRegion(clean) === 'KR';
+    const seed = ALL_SEED_ITEMS.find((s) => s.ticker.toUpperCase() === clean);
+    const basePrice = seed ? seed.price : (isKr ? 50000 : 100);
     const change1d = seed?.change1d ?? 0;
 
     const maxMasterBars = 1260;
@@ -142,11 +149,13 @@ export class SeedDataProvider implements MarketDataProvider {
   }
 
   async getFundamentals(ticker: string): Promise<FundamentalData> {
-    const seed = INITIAL_WATCHLIST_RAW.find((s) => s.ticker.toUpperCase() === ticker.toUpperCase());
+    const clean = ticker.toUpperCase().trim();
+    const isKr = detectMarketRegion(clean) === 'KR';
+    const seed = ALL_SEED_ITEMS.find((s) => s.ticker.toUpperCase() === clean);
     return {
-      ticker: ticker.toUpperCase(),
+      ticker: clean,
       asOfDate: new Date().toISOString().split('T')[0],
-      marketCap: seed?.metadata.marketCap || 10_000_000_000,
+      marketCap: seed?.metadata.marketCap || (isKr ? 5_000_000_000_000 : 10_000_000_000),
       revenueGrowthYoy: seed?.metadata.revenueGrowth,
       earningsGrowthYoy: seed?.metadata.earningsGrowth,
       operatingMargin: seed?.indicators.operatingMargin,
@@ -157,9 +166,9 @@ export class SeedDataProvider implements MarketDataProvider {
       pegRatio: seed?.indicators.pegRatio,
       beta: seed?.metadata.beta || 1.0,
       dividendYield: seed?.metadata.dividendYield,
-      sector: seed?.metadata.sector,
-      industry: seed?.metadata.industry,
-      quoteType: seed?.metadata.quoteType || 'EQUITY',
+      sector: seed?.metadata.sector || (isKr ? 'Technology' : undefined),
+      industry: seed?.metadata.industry || (isKr ? 'Semiconductors' : undefined),
+      quoteType: seed?.metadata.quoteType || (clean.includes('ETF') || clean.endsWith('.KQ') ? 'EQUITY' : 'EQUITY'),
     };
   }
 

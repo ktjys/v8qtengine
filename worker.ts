@@ -1304,6 +1304,9 @@ export default {
           ''
         ).trim().replace(/^['"]|['"]$/g, '');
 
+        const reqMarketRaw = (searchParams.get('market') || bodyData.market || '').toUpperCase().trim();
+        const reqMarket = (reqMarketRaw === 'KR' || reqMarketRaw === 'US' || reqMarketRaw === 'ALL') ? (reqMarketRaw as 'KR' | 'US' | 'ALL') : undefined;
+
         // Check if asynchronous background execution is requested (recommended for external cron services to avoid timeouts)
         const isAsync =
           searchParams.get('async') === 'true' ||
@@ -1316,6 +1319,7 @@ export default {
           const scanTask = executeCronScan({
             botToken: botToken || undefined,
             chatId: chatId || undefined,
+            market: reqMarket,
             triggeredBy: 'WorkerHttpWebhookAsync',
             sourceUrl: url.origin,
           }).catch((err) => {
@@ -1338,6 +1342,7 @@ export default {
         const cronResult = await executeCronScan({
           botToken: botToken || undefined,
           chatId: chatId || undefined,
+          market: reqMarket,
           triggeredBy: 'WorkerHttpWebhook',
           sourceUrl: url.origin,
         });
@@ -1362,7 +1367,8 @@ export default {
   // Cloudflare Workers Native Cron Trigger (Scheduled Event)
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
     await ensureDbConnected(env);
-    console.log('[Cloudflare Cron Trigger] Scheduled event triggered:', event?.cron);
+    const eventCron = (event?.cron || '').trim();
+    console.log('[Cloudflare Cron Trigger] Scheduled event triggered:', eventCron);
 
     const cfg = telegramNotifier.getConfig();
     const botToken = (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || cfg.botToken || '')
@@ -1373,8 +1379,17 @@ export default {
       .trim()
       .replace(/^['"]|['"]$/g, '');
 
+    // Map Cloudflare Cron Trigger to target market
+    let targetMarket: 'KR' | 'US' | undefined;
+    if (eventCron === '30 0 * * 1-5' || eventCron === '40 6 * * 1-5') {
+      targetMarket = 'KR'; // 국내장 개장(09:30 KST) 또는 마감(15:40 KST)
+    } else if (eventCron === '30 21 * * 1-5' || eventCron === '0 14 * * 1-5') {
+      targetMarket = 'US'; // 미국장 마감(06:30 KST) 또는 개장(23:00 KST)
+    }
+
     const scanTask = executeCronScan({
-      triggeredBy: `CloudflareCron:${event?.cron || 'scheduled'}`,
+      triggeredBy: `CloudflareCron:${eventCron || 'scheduled'}`,
+      market: targetMarket,
       botToken: botToken || undefined,
       chatId: chatId || undefined,
     }).catch((err) => {

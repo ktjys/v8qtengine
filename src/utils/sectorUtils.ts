@@ -1,8 +1,12 @@
 import { FullTickerEvaluation } from '../types/v8';
+import { getStockDisplayInfo } from './marketUtils';
 
 export interface SectorItem {
   ticker: string;
   name: string;
+  displayName: string;
+  subCode: string;
+  isKorean: boolean;
   sector: string;
   industry: string;
   price: number;
@@ -28,10 +32,25 @@ export interface SectorGroup {
   opportunityCount: number;
 }
 
+/**
+ * 트리맵 타일 공간에 맞춰 간결한 종목명(한글명/영문명)을 반환하는 헬퍼
+ * 예: "엔비디아 (NVIDIA)" -> "엔비디아", "삼성전자" -> "삼성전자", "Apple Inc." -> "Apple"
+ */
+export function getShortStockDisplayName(primaryName: string, fallbackTicker: string): string {
+  if (!primaryName) return fallbackTicker;
+  const match = primaryName.match(/^([^(]+)\s*\((.+)\)$/);
+  if (match) {
+    return match[1].trim();
+  }
+  // 영문 주식회사 접미사 정리
+  return primaryName.replace(/,\s*(Inc\.|Corp\.|Corporation|Ltd\.|Co\.,\s*Ltd\.|Holdings)$/i, '').trim();
+}
+
 export const KNOWN_TICKER_SECTOR_MAP: Record<
   string,
   { sector: string; industry: string; fallbackMarketCap: number }
 > = {
+  // 미국 주요 종목
   NVDA: { sector: 'Semiconductors', industry: 'AI & GPU Semiconductors', fallbackMarketCap: 3100 },
   AMD: { sector: 'Semiconductors', industry: 'Fabless CPU & GPU', fallbackMarketCap: 250 },
   SMH: { sector: 'Semiconductors', industry: 'VanEck Semiconductor ETF', fallbackMarketCap: 25 },
@@ -53,6 +72,42 @@ export const KNOWN_TICKER_SECTOR_MAP: Record<
   VOO: { sector: 'Broad Market Index ETF', industry: 'Vanguard S&P 500 ETF', fallbackMarketCap: 500 },
   SCHD: { sector: 'Broad Market Index ETF', industry: 'US Dividend 100 Index', fallbackMarketCap: 58 },
   SPCX: { sector: 'Broad Market Index ETF', industry: 'Active Growth ETF', fallbackMarketCap: 1 },
+
+  // 국내 주요 종목 (KOSPI & KOSDAQ)
+  '005930': { sector: 'Semiconductors', industry: '반도체 및 전자 (Semiconductor & Mobile)', fallbackMarketCap: 440 },
+  '005930.KS': { sector: 'Semiconductors', industry: '반도체 및 전자 (Semiconductor & Mobile)', fallbackMarketCap: 440 },
+  '000660': { sector: 'Semiconductors', industry: 'HBM 및 메모리 반도체 (Memory Semiconductor)', fallbackMarketCap: 140 },
+  '000660.KS': { sector: 'Semiconductors', industry: 'HBM 및 메모리 반도체 (Memory Semiconductor)', fallbackMarketCap: 140 },
+  '042700': { sector: 'Semiconductors', industry: '반도체 후공정 장비 (HBM Packaging Equipment)', fallbackMarketCap: 14 },
+  '042700.KS': { sector: 'Semiconductors', industry: '반도체 후공정 장비 (HBM Packaging Equipment)', fallbackMarketCap: 14 },
+  '373220': { sector: 'Technology', industry: '2차전지 배터리 (EV Battery & Energy Storage)', fallbackMarketCap: 90 },
+  '373220.KS': { sector: 'Technology', industry: '2차전지 배터리 (EV Battery & Energy Storage)', fallbackMarketCap: 90 },
+  '247540': { sector: 'Technology', industry: '2차전지 양극재 소재 (Cathode Materials)', fallbackMarketCap: 18 },
+  '247540.KQ': { sector: 'Technology', industry: '2차전지 양극재 소재 (Cathode Materials)', fallbackMarketCap: 18 },
+  '207940': { sector: 'Healthcare', industry: '바이오의약품 CDMO (Biologics CDMO)', fallbackMarketCap: 68 },
+  '207940.KS': { sector: 'Healthcare', industry: '바이오의약품 CDMO (Biologics CDMO)', fallbackMarketCap: 68 },
+  '068270': { sector: 'Healthcare', industry: '바이오시밀러 및 제약 (Biosimilar & Pharma)', fallbackMarketCap: 42 },
+  '068270.KS': { sector: 'Healthcare', industry: '바이오시밀러 및 제약 (Biosimilar & Pharma)', fallbackMarketCap: 42 },
+  '196170': { sector: 'Healthcare', industry: '바이오 플랫폼 및 항암제 (Bio Platform)', fallbackMarketCap: 16 },
+  '196170.KQ': { sector: 'Healthcare', industry: '바이오 플랫폼 및 항암제 (Bio Platform)', fallbackMarketCap: 16 },
+  '005380': { sector: 'Consumer Discretionary', industry: '완성차 및 하이브리드/전기차 (Automotive)', fallbackMarketCap: 52 },
+  '005380.KS': { sector: 'Consumer Discretionary', industry: '완성차 및 하이브리드/전기차 (Automotive)', fallbackMarketCap: 52 },
+  '000270': { sector: 'Consumer Discretionary', industry: '완성차 및 PBV (Automotive)', fallbackMarketCap: 40 },
+  '000270.KS': { sector: 'Consumer Discretionary', industry: '완성차 및 PBV (Automotive)', fallbackMarketCap: 40 },
+  '035420': { sector: 'Communication Services', industry: '인터넷 검색 및 AI 클라우드 (Internet Platforms)', fallbackMarketCap: 32 },
+  '035420.KS': { sector: 'Communication Services', industry: '인터넷 검색 및 AI 클라우드 (Internet Platforms)', fallbackMarketCap: 32 },
+  '035720': { sector: 'Communication Services', industry: '모바일 메신저 및 플랫폼 (Mobile Platforms)', fallbackMarketCap: 18 },
+  '035720.KS': { sector: 'Communication Services', industry: '모바일 메신저 및 플랫폼 (Mobile Platforms)', fallbackMarketCap: 18 },
+  '005490': { sector: 'Materials', industry: '철강 및 이차전지소재 (Steel & Materials)', fallbackMarketCap: 30 },
+  '005490.KS': { sector: 'Materials', industry: '철강 및 이차전지소재 (Steel & Materials)', fallbackMarketCap: 30 },
+  '069500': { sector: 'Broad Market Index ETF', industry: 'KOSPI 200 지수 ETF', fallbackMarketCap: 60 },
+  '069500.KS': { sector: 'Broad Market Index ETF', industry: 'KOSPI 200 지수 ETF', fallbackMarketCap: 60 },
+  '360750': { sector: 'Broad Market Index ETF', industry: 'TIGER 미국 S&P 500 ETF', fallbackMarketCap: 45 },
+  '360750.KS': { sector: 'Broad Market Index ETF', industry: 'TIGER 미국 S&P 500 ETF', fallbackMarketCap: 45 },
+  '133690': { sector: 'Broad Market Index ETF', industry: 'TIGER 미국 나스닥 100 ETF', fallbackMarketCap: 40 },
+  '133690.KS': { sector: 'Broad Market Index ETF', industry: 'TIGER 미국 나스닥 100 ETF', fallbackMarketCap: 40 },
+  '458730': { sector: 'Broad Market Index ETF', industry: 'TIGER 미국 배당다우존스 ETF', fallbackMarketCap: 20 },
+  '458730.KS': { sector: 'Broad Market Index ETF', industry: 'TIGER 미국 배당다우존스 ETF', fallbackMarketCap: 20 },
 };
 
 /**
@@ -110,9 +165,14 @@ export function groupEvaluationsBySector(evaluations: FullTickerEvaluation[]): S
       mktCap = ev.classification?.asset_type === 'etf' ? 100 : 10;
     }
 
+    const displayInfo = getStockDisplayInfo(ev.ticker, ev.name);
+
     const item: SectorItem = {
       ticker: ev.ticker,
-      name: ev.name || ev.ticker,
+      name: displayInfo.primaryName || ev.name || ev.ticker,
+      displayName: displayInfo.primaryName,
+      subCode: displayInfo.subCode,
+      isKorean: displayInfo.isKorean,
       sector,
       industry,
       price: ev.price,

@@ -11,6 +11,7 @@ import { MacroEarningsEngine } from './macroEarningsEngine';
 import { PortfolioEngine } from './portfolioEngine';
 import { ExitSignalEngine } from './exitSignalEngine';
 import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types/v8';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
 let lastCronScanResult: CronScanResult | null = null;
@@ -26,6 +27,7 @@ export interface CronScanOptions {
   chatId?: string | null;
   triggeredBy?: string;
   sourceUrl?: string;
+  market?: 'KR' | 'US' | 'ALL';
 }
 
 export interface CronScanResult {
@@ -91,21 +93,56 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
   const startTime = Date.now();
   const runId = `CRON_${Date.now()}`;
 
-  // 1. Determine KST slot
+  // 1. Determine KST slot and market
   const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
   const kstHour = nowKST.getUTCHours();
   const kstMinute = nowKST.getUTCMinutes();
   const kstTimeStr = `${String(kstHour).padStart(2, '0')}:${String(kstMinute).padStart(2, '0')} KST`;
 
   let slotName = '수동/실시간 스캔';
+  let defaultMarket: 'KR' | 'US' | undefined = undefined;
+
   if (kstHour >= 6 && kstHour <= 8) {
-    slotName = '🌅 [1회차] 미국 정규장 마감 브리핑 (종가 확정)';
+    slotName = '🌅 [미국장 마감] 미국 정규장 종가 확정 브리핑 (06:30 KST)';
+    defaultMarket = 'US';
+  } else if ((kstHour === 9 && kstMinute >= 15) || (kstHour === 10 && kstMinute <= 30)) {
+    slotName = '☀️ [국내장 개장] KOSPI/KOSDAQ 시초가 & 오전 기회종목 브리핑 (09:30 KST)';
+    defaultMarket = 'KR';
+  } else if ((kstHour === 15 && kstMinute >= 30) || (kstHour === 16 && kstMinute <= 30)) {
+    slotName = '🏁 [국내장 마감] KOSPI/KOSDAQ 종가 확정 & 퀀트 리포트 (15:40 KST)';
+    defaultMarket = 'KR';
   } else if (kstHour >= 22 && kstHour <= 23) {
-    slotName = '🌃 [2회차] 미국 정규장 개장 & 당일 기회종목 브리핑 (밤 11시)';
+    slotName = '🌃 [미국장 개장] 미국 정규장 개장 & 당일 기회종목 브리핑 (23:00 KST)';
+    defaultMarket = 'US';
   }
 
+  // Cloudflare Cron Trigger pattern matching
+  const triggeredBy = options.triggeredBy || '';
+  if (triggeredBy.includes('30 0 * * 1-5') || triggeredBy.includes('40 6 * * 1-5')) {
+    defaultMarket = 'KR';
+    if (triggeredBy.includes('30 0 * * 1-5')) {
+      slotName = '☀️ [국내장 개장] KOSPI/KOSDAQ 시초가 & 오전 기회종목 브리핑 (09:30 KST)';
+    } else {
+      slotName = '🏁 [국내장 마감] KOSPI/KOSDAQ 종가 확정 & 퀀트 리포트 (15:40 KST)';
+    }
+  } else if (triggeredBy.includes('30 21 * * 1-5') || triggeredBy.includes('0 14 * * 1-5')) {
+    defaultMarket = 'US';
+    if (triggeredBy.includes('30 21 * * 1-5')) {
+      slotName = '🌅 [미국장 마감] 미국 정규장 종가 확정 브리핑 (06:30 KST)';
+    } else {
+      slotName = '🌃 [미국장 개장] 미국 정규장 개장 & 당일 기회종목 브리핑 (23:00 KST)';
+    }
+  }
+
+  const targetMarket = options.market && options.market !== 'ALL' ? options.market : defaultMarket;
+
+  const formatPrice = (ticker: string, price: number) => {
+    const isKr = detectMarketRegion(ticker) === 'KR';
+    return isKr ? `₩${Math.round(price).toLocaleString('ko-KR')}` : `$${price.toFixed(2)}`;
+  };
+
   try {
-    // 2. Execute Quant Pipeline across all active watchlist items
+    // 2. Execute Quant Pipeline across active watchlist items for the target market
     let evaluations: FullTickerEvaluation[] = [];
     let actionable: FullTickerEvaluation[] = [];
     let watchlistTotalCount = 0;
@@ -120,7 +157,11 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       });
 
       const scanResult = await Promise.race([
-        scanService.executeScan({ saveToDb: true, skipRunLogSave: true }),
+        scanService.executeScan({
+          market: targetMarket,
+          saveToDb: true,
+          skipRunLogSave: true,
+        }),
         timeoutPromise,
       ]);
 
@@ -129,15 +170,34 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
     } catch (scanErr: any) {
       console.error('[CronScan] ScanService failed:', scanErr);
       scanError = scanErr?.message || 'Scan execution failed';
-      // Attempt to read latest real evaluations from DB rather than fake seed prices
+      // Attempt to read latest real evaluations from DB filtered by market
       try {
-        const cached = await evaluationRepository.getAll();
+        let cached = await evaluationRepository.getAll();
+        if (targetMarket) {
+          cached = cached.filter((e) => detectMarketRegion(e.ticker) === targetMarket);
+        }
         if (cached && cached.length > 0) {
           evaluations = cached;
           watchlistTotalCount = cached.length;
         }
       } catch (cacheErr) {
         console.warn('[CronScan] Failed to load cached evaluations from DB:', cacheErr);
+      }
+
+      // If DB also has no evaluations, gracefully fall back to seed data so the trigger NEVER crashes
+      if (evaluations.length === 0) {
+        try {
+          const { runPipelineOnSeedData } = await import('../data/seed/initialData');
+          const seedResult = runPipelineOnSeedData();
+          let seedEvals = seedResult.evaluations;
+          if (targetMarket) {
+            seedEvals = seedEvals.filter((e) => detectMarketRegion(e.ticker) === targetMarket);
+          }
+          evaluations = seedEvals;
+          watchlistTotalCount = seedEvals.length;
+        } catch (seedErr) {
+          console.warn('[CronScan] Failed to load seed fallback evaluations:', seedErr);
+        }
       }
     }
 
@@ -196,7 +256,8 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       console.warn('[CronScan] Macro regime fetch skipped:', macroErr);
     }
 
-    let reportText = `<b>📊 퀀트 엔진 듀얼 전략 자동 스캔 리포트</b>\n`;
+    const marketBadge = targetMarket === 'KR' ? '🇰🇷 국내장' : targetMarket === 'US' ? '🇺🇸 미국장' : '🌐 통합';
+    let reportText = `<b>📊 퀀트 엔진 [${marketBadge}] 듀얼 전략 자동 스캔 리포트</b>\n`;
     reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (${escapeTelegramHtml(slotName)})\n`;
     reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
     reportText += `• <b>모니터링 대상:</b> ${evaluations.length}개 자산\n`;
@@ -223,7 +284,7 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
         const safeReason = escapeTelegramHtml(sig.decision?.reason || '기술적 반등 및 모멘텀 지속');
 
         reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
-        reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+        reportText += `   - 현재가: ${formatPrice(sig.ticker, sig.price ?? 0)} (${arrow} ${changeStr})\n`;
         reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${safeDecision}</code>\n`;
         reportText += `   - 근거: ${safeReason}\n`;
       });
@@ -242,7 +303,7 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
         const safeTicker = escapeTelegramHtml(dip.ticker);
 
         reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
-        reportText += `   - 현재가: $${dip.price.toFixed(2)} (${arrow} ${changeStr})\n`;
+        reportText += `   - 현재가: ${formatPrice(dip.ticker, dip.price)} (${arrow} ${changeStr})\n`;
         reportText += `   - 우량적합도: <b>${dip.suitability.tierLabel}</b> (${dip.suitability.score}점)\n`;
         reportText += `   - 눌림타이밍: <b>${dip.timing.score}점</b> (RSI ${dip.timing.rsi.toFixed(1)}, ${dip.timing.drawdownLabel})\n`;
         reportText += `   - 신호: <b>${dip.signalLabel}</b> (권고: <code>${dip.suggestedDcaRatio}</code>)\n`;
