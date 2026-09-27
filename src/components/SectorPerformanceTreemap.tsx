@@ -14,6 +14,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
+  Search,
+  Download,
+  X,
 } from 'lucide-react';
 import { FullTickerEvaluation } from '../types/v8';
 import { groupEvaluationsBySector, SectorGroup, SectorItem, getShortStockDisplayName } from '../utils/sectorUtils';
@@ -51,6 +54,7 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
   const [colorMetric, setColorMetric] = useState<ColorMetric>('change1d');
   const [labelMode, setLabelMode] = useState<TreemapLabelMode>('name');
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredItem, setHoveredItem] = useState<{
     item: SectorItem;
     x: number;
@@ -77,6 +81,82 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
     const total = evaluations.reduce((acc, curr) => acc + (curr.change1d || 0), 0);
     return Math.round((total / evaluations.length) * 100) / 100;
   }, [evaluations]);
+
+  // Search matching items count
+  const matchedCount = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return 0;
+    let count = 0;
+    for (const g of displayedSectorGroups) {
+      for (const item of g.items) {
+        if (
+          item.ticker.toLowerCase().includes(q) ||
+          item.name.toLowerCase().includes(q) ||
+          item.displayName?.toLowerCase().includes(q) ||
+          item.subCode?.toLowerCase().includes(q)
+        ) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }, [displayedSectorGroups, searchQuery]);
+
+  // CSV Export for Sector Performance Matrix
+  const handleExportCsv = () => {
+    if (!evaluations || evaluations.length === 0) return;
+
+    const headers = [
+      '종목코드',
+      '종목명',
+      '국가',
+      '섹터',
+      '업종',
+      '현재가',
+      '1일등락률(%)',
+      '기회점수(점)',
+      '리스크등급',
+      '행동판단',
+      '시그널발생',
+      'RSI(14)',
+      '1개월수익률(%)',
+      '시가총액(십억$)',
+    ];
+
+    const rows = displayedSectorGroups
+      .flatMap((g) => g.items)
+      .map((item) => [
+        `"${item.ticker}"`,
+        `"${(item.displayName || item.name || '').replace(/"/g, '""')}"`,
+        item.isKorean ? '국내' : '미국',
+        `"${item.sector}"`,
+        `"${(item.industry || '').replace(/"/g, '""')}"`,
+        item.price,
+        item.change1d,
+        item.opportunityScore,
+        item.riskLevel,
+        item.decision,
+        item.actionable ? '진입신호' : '관찰',
+        item.rsi.toFixed(1),
+        item.return1M.toFixed(1),
+        item.marketCapBillions,
+      ]);
+
+    const csvContent =
+      '\uFEFF' +
+      [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `quant_sector_performance_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Resize Observer for responsive canvas sizing
   useEffect(() => {
@@ -346,6 +426,47 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
         </div>
       </div>
 
+      {/* 1.5 Search & CSV Export Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        {/* Quick Search */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="트리맵 내 종목 검색 (예: 삼성전자, 엔비디아, NVDA)..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8.5 pr-8 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/60 transition-all font-sans"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              title="검색어 지우기"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-2 self-end sm:self-auto text-xs shrink-0">
+          {searchQuery.trim() && (
+            <span className="text-[11px] text-cyan-400 font-mono bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-xl animate-fadeIn">
+              🎯 <b>{matchedCount}개</b> 종목 포커스
+            </span>
+          )}
+          <button
+            onClick={handleExportCsv}
+            disabled={evaluations.length === 0}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition-all active:scale-95 shadow-sm"
+            title="현재 섹터 트리맵 데이터를 Excel/CSV 호환 파일로 다운로드합니다."
+          >
+            <Download className="w-3.5 h-3.5 text-cyan-400" />
+            <span>CSV 내보내기</span>
+          </button>
+        </div>
+      </div>
+
       {/* 2. Sector Filter Chips */}
       <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
         <button
@@ -449,22 +570,39 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
                   rx="8"
                 />
 
-                {/* Sector Header Banner */}
+                {/* Sector Header Banner (Click to toggle zoom-in/filter) */}
                 {sectorWidth > 55 && sectorHeight > 30 && (
-                  <g transform="translate(6, 4)">
+                  <g
+                    transform="translate(6, 4)"
+                    className="cursor-pointer group"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSectorFilter((prev) =>
+                        prev === sectorNode.data.name ? 'ALL' : sectorNode.data.name
+                      );
+                    }}
+                  >
+                    <title>
+                      {selectedSectorFilter === sectorNode.data.name
+                        ? '클릭 시 전체 섹터 보기로 복귀'
+                        : `클릭 시 [${sectorNode.data.name}] 섹터만 확대 보기`}
+                    </title>
                     <rect
                       x="0"
                       y="0"
-                      width={Math.min(sectorWidth - 12, 220)}
+                      width={Math.min(sectorWidth - 12, 230)}
                       height="18"
-                      fill="#0f172a"
+                      fill={selectedSectorFilter === sectorNode.data.name ? '#0284c7' : '#0f172a'}
+                      stroke={selectedSectorFilter === sectorNode.data.name ? '#38bdf8' : '#334155'}
+                      strokeWidth="1"
                       rx="4"
-                      opacity="0.85"
+                      opacity="0.9"
+                      className="transition-colors group-hover:fill-slate-800"
                     />
                     <text
                       x="6"
                       y="13"
-                      fill="#94a3b8"
+                      fill={selectedSectorFilter === sectorNode.data.name ? '#ffffff' : '#94a3b8'}
                       fontSize="11"
                       fontWeight="bold"
                       className="font-sans select-none pointer-events-none"
