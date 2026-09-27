@@ -95,6 +95,7 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
 
   // 1. Determine KST slot and market
   const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const kstDay = nowKST.getUTCDay(); // 0: Sun, 1: Mon, ..., 5: Fri, 6: Sat
   const kstHour = nowKST.getUTCHours();
   const kstMinute = nowKST.getUTCMinutes();
   const kstTimeStr = `${String(kstHour).padStart(2, '0')}:${String(kstMinute).padStart(2, '0')} KST`;
@@ -135,6 +136,59 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
   }
 
   const targetMarket = options.market && options.market !== 'ALL' ? options.market : defaultMarket;
+
+  // Weekend & Closed Market Guard for Automated Scheduled Crons
+  const isManualTrigger =
+    triggeredBy === 'ManualTrigger' ||
+    triggeredBy === 'DirectUI' ||
+    triggeredBy === 'ManualUIOrTest' ||
+    options.sourceUrl?.includes('localhost');
+
+  let isClosedMarketDay = false;
+  let closedReason = '';
+
+  if (targetMarket === 'KR') {
+    // 국내 정규장(KOSPI / KOSDAQ): 월~금(1~5) 개장, 토(6) & 일(0) 휴장
+    if (kstDay === 0 || kstDay === 6) {
+      isClosedMarketDay = true;
+      closedReason = `주말 ${kstDay === 0 ? '일요일' : '토요일'}은 국내 증시(한국거래소) 정규장 휴장일입니다.`;
+    }
+  } else if (targetMarket === 'US') {
+    // 미국 정규장:
+    // 06:30 마감 브리핑: 화~토(2~6) 유효 (미국 현지 월~금 장 마감 후). 일(0)과 월(1) 06:30은 휴장 상태
+    if ((kstHour >= 6 && kstHour <= 8) && (kstDay === 0 || kstDay === 1)) {
+      isClosedMarketDay = true;
+      closedReason = `미국 증시 주말 휴장 (${kstDay === 0 ? '일요일' : '월요일'} 아침).`;
+    }
+    // 23:00 개장 브리핑: 월~금(1~5) 유효. 토(6)와 일(0) 밤 23:00은 휴장 상태
+    if ((kstHour >= 22 && kstHour <= 23) && (kstDay === 0 || kstDay === 6)) {
+      isClosedMarketDay = true;
+      closedReason = `미국 증시 주말 휴장 (${kstDay === 0 ? '일요일' : '토요일'} 밤).`;
+    }
+  }
+
+  // 자동 스케줄러 호출 시 주말/휴장일이면 텔레그램 스팸 발송을 방지하고 안전하게 스킵
+  if (isClosedMarketDay && !isManualTrigger) {
+    console.log(`[CronScanEngine] ⏸️ Skipping automated scheduled scan for ${targetMarket} on closed day (${closedReason})`);
+    return {
+      success: true,
+      timestamp: new Date().toISOString(),
+      slot: slotName,
+      kst_time: kstTimeStr,
+      duration_ms: Date.now() - startTime,
+      evaluated_count: 0,
+      actionable_signals_count: 0,
+      actionable_signals: [],
+      telegram_status: {
+        configured: Boolean(telegramNotifier.getConfig().botToken),
+        sent: false,
+        previewOnly: false,
+        target: null,
+        message: `[휴장일 알림 스킵] ${closedReason} 불필요한 자동 브리핑 발송이 안전하게 차단되었습니다.`,
+      },
+      run_id: runId,
+    };
+  }
 
   const formatPrice = (ticker: string, price: number) => {
     const isKr = detectMarketRegion(ticker) === 'KR';
@@ -313,10 +367,13 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
     }
     reportText += `\n`;
 
-    // 3. 통합 매도 & 청산 신호 섹션 (익절/손절/트레일링/추세붕괴)
+    // 3. 통합 매도 & 청산 신호 섹션 (시장 격리: 국내장 리포트에는 국내 종목만, 미국장에는 미국 종목만 표출)
     try {
-      const exitEvals = ExitSignalEngine.evaluateAllExits(evaluations);
-      const actionableExits = exitEvals.filter((e) => e.isActionableSell);
+      const exitEvals = ExitSignalEngine.evaluateAllExits(evaluations, undefined, targetMarket);
+      const actionableExits = exitEvals
+        .filter((e) => e.isActionableSell)
+        .filter((e) => !targetMarket || detectMarketRegion(e.ticker) === targetMarket);
+
       if (actionableExits.length > 0) {
         reportText += `🚨 <b>[통합 매도 & 포지션 청산 권고]</b>\n`;
         actionableExits.slice(0, 3).forEach((exit, idx) => {
@@ -336,10 +393,11 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       console.warn('[CronScan] Exit evaluations skipped:', exitErr);
     }
 
-    // Phase 2: 포트폴리오 리밸런싱 및 섹터 쏠림 가이드
+    // Phase 2: 포트폴리오 리밸런싱 및 섹터 쏠림 가이드 (시장별 격리 적용)
     try {
       const macro = await MacroEarningsEngine.getMacroMarketRegime();
-      const portState = PortfolioEngine.calculatePortfolioState(100000, macro);
+      const portRegion = targetMarket === 'KR' ? 'KR' : 'US';
+      const portState = PortfolioEngine.calculatePortfolioState(100000, macro, portRegion);
       const rebalanceTrims = portState.positions.filter((p) => p.rebalanceAction === 'TRIM');
       const rebalanceAdds = portState.positions.filter((p) => p.rebalanceAction === 'INCREASE');
 

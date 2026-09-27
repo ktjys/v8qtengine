@@ -391,7 +391,7 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
       <div
         ref={containerRef}
         className="relative bg-slate-950 border border-slate-800/90 rounded-2xl overflow-hidden select-none"
-        style={{ height: sectorGroups.length === 0 ? 'auto' : dimensions.height }}
+        style={{ height: sectorGroups.length === 0 || displayedSectorGroups.length === 0 ? 'auto' : dimensions.height }}
       >
         {sectorGroups.length === 0 ? (
           <div className="h-[260px] flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-2 font-sans">
@@ -400,6 +400,19 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
             <p className="text-xs text-slate-500 max-w-sm">
               워치리스트에 종목이 등록되면 실시간 섹터별 시가총액 비중 및 등락률 트리맵이 시각화됩니다.
             </p>
+          </div>
+        ) : displayedSectorGroups.length === 0 ? (
+          <div className="h-[260px] flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-3 font-sans">
+            <Filter className="w-8 h-8 text-cyan-400/60 mb-1" />
+            <div className="font-semibold text-sm text-slate-300">
+              [{selectedSectorFilter}] 섹터에 해당하는 종목이 없습니다
+            </div>
+            <button
+              onClick={() => setSelectedSectorFilter('ALL')}
+              className="px-3 py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold hover:bg-cyan-500/30 transition-all active:scale-95"
+            >
+              전체 섹터 보기로 복귀
+            </button>
           </div>
         ) : (
           <svg
@@ -580,38 +593,90 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
                               </text>
                             )}
 
-                            {/* Sub-label: 1D Change */}
-                            {leafHeight >= 36 && (
-                              <text
-                                textAnchor="middle"
-                                y={
-                                  showSubCode && leafHeight >= 56
-                                    ? 15
-                                    : leafHeight >= 44
-                                    ? 11
-                                    : 9
-                                }
-                                fill={item.change1d >= 0 ? '#6ee7b7' : '#fda4af'}
-                                fontSize={leafWidth > 75 ? 11 : 9.5}
-                                fontWeight="bold"
-                                fontFamily="monospace"
-                                className="select-none pointer-events-none drop-shadow"
-                              >
-                                {item.change1d >= 0 ? '+' : ''}
-                                {item.change1d}%
-                              </text>
-                            )}
+                            {/* Sub-label: Dynamic metric based on active colorMetric */}
+                            {leafHeight >= 36 && (() => {
+                              const subY =
+                                showSubCode && leafHeight >= 56
+                                  ? 15
+                                  : leafHeight >= 44
+                                  ? 11
+                                  : 9;
 
-                            {/* Opportunity or Price label if box is large */}
+                              if (colorMetric === 'opportunity') {
+                                const scoreColor =
+                                  item.opportunityScore >= 75
+                                    ? '#6ee7b7'
+                                    : item.opportunityScore >= 60
+                                    ? '#38bdf8'
+                                    : '#cbd5e1';
+                                return (
+                                  <text
+                                    textAnchor="middle"
+                                    y={subY}
+                                    fill={scoreColor}
+                                    fontSize={leafWidth > 75 ? 11 : 9.5}
+                                    fontWeight="bold"
+                                    fontFamily="monospace"
+                                    className="select-none pointer-events-none drop-shadow"
+                                  >
+                                    {item.opportunityScore}점
+                                  </text>
+                                );
+                              }
+
+                              if (colorMetric === 'rsi') {
+                                const rsiColor =
+                                  item.rsi <= 35
+                                    ? '#6ee7b7'
+                                    : item.rsi >= 65
+                                    ? '#fda4af'
+                                    : '#cbd5e1';
+                                return (
+                                  <text
+                                    textAnchor="middle"
+                                    y={subY}
+                                    fill={rsiColor}
+                                    fontSize={leafWidth > 75 ? 10.5 : 9}
+                                    fontWeight="bold"
+                                    fontFamily="monospace"
+                                    className="select-none pointer-events-none drop-shadow"
+                                  >
+                                    RSI {Math.round(item.rsi)}
+                                  </text>
+                                );
+                              }
+
+                              // Default: 1D Change
+                              return (
+                                <text
+                                  textAnchor="middle"
+                                  y={subY}
+                                  fill={item.change1d >= 0 ? '#6ee7b7' : '#fda4af'}
+                                  fontSize={leafWidth > 75 ? 11 : 9.5}
+                                  fontWeight="bold"
+                                  fontFamily="monospace"
+                                  className="select-none pointer-events-none drop-shadow"
+                                >
+                                  {item.change1d >= 0 ? '+' : ''}
+                                  {item.change1d}%
+                                </text>
+                              );
+                            })()}
+
+                            {/* Supplementary metric label if box is large */}
                             {leafWidth >= 90 && leafHeight >= 78 && (
                               <text
                                 textAnchor="middle"
                                 y={28}
                                 fill="#94a3b8"
                                 fontSize={9}
-                                className="select-none pointer-events-none"
+                                className="select-none pointer-events-none font-mono"
                               >
-                                점수 {item.opportunityScore}점
+                                {colorMetric === 'opportunity'
+                                  ? `1D: ${item.change1d >= 0 ? '+' : ''}${item.change1d}%`
+                                  : colorMetric === 'rsi'
+                                  ? `1D: ${item.change1d >= 0 ? '+' : ''}${item.change1d}%`
+                                  : `점수 ${item.opportunityScore}점`}
                               </text>
                             )}
                           </g>
@@ -642,8 +707,11 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
           <div
             className="absolute z-30 pointer-events-none transition-all duration-75"
             style={{
-              left: Math.min(Math.max(10, hoveredItem.x + 12), dimensions.width - 270),
-              top: Math.min(Math.max(10, hoveredItem.y + 12), dimensions.height - 210),
+              left: Math.min(Math.max(10, hoveredItem.x + 12), Math.max(10, dimensions.width - 275)),
+              top:
+                hoveredItem.y > dimensions.height - 230
+                  ? Math.max(10, hoveredItem.y - 230)
+                  : Math.max(10, hoveredItem.y + 12),
             }}
           >
             <div className="w-64 bg-slate-900/95 backdrop-blur-md border border-slate-700/90 rounded-2xl p-3.5 shadow-2xl space-y-2 text-xs">
@@ -751,27 +819,70 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
         )}
       </div>
 
-      {/* 5. Color Legend & Quick Quant Guide */}
+      {/* 5. Dynamic Color Legend & Quick Quant Guide */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-slate-400">
-        <div className="flex items-center space-x-2">
-          <span className="text-slate-500 font-medium">등락률 범례:</span>
-          <div className="flex items-center space-x-1">
-            <span className="px-1.5 py-0.5 rounded bg-[#881337] text-white text-[10px] font-mono">
-              -4%↓
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-[#be123c] text-white text-[10px] font-mono">
-              -2%
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-[#1e293b] text-slate-300 text-[10px] font-mono">
-              0%
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-[#059669] text-white text-[10px] font-mono">
-              +2%
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-[#047857] text-white text-[10px] font-mono">
-              +4%↑
-            </span>
-          </div>
+        <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
+          <span className="text-slate-500 font-medium">
+            {colorMetric === 'change1d'
+              ? '등락률 범례:'
+              : colorMetric === 'opportunity'
+              ? '기회점수 범례:'
+              : 'RSI 범례:'}
+          </span>
+
+          {colorMetric === 'change1d' && (
+            <div className="flex items-center space-x-1">
+              <span className="px-1.5 py-0.5 rounded bg-[#881337] text-white text-[10px] font-mono">
+                -4%↓
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#be123c] text-white text-[10px] font-mono">
+                -2%
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#1e293b] text-slate-300 text-[10px] font-mono">
+                0%
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#059669] text-white text-[10px] font-mono">
+                +2%
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#047857] text-white text-[10px] font-mono">
+                +4%↑
+              </span>
+            </div>
+          )}
+
+          {colorMetric === 'opportunity' && (
+            <div className="flex items-center space-x-1">
+              <span className="px-1.5 py-0.5 rounded bg-[#334155] text-slate-300 text-[10px] font-mono">
+                &lt;50점 저조
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#0369a1] text-white text-[10px] font-mono">
+                60점대
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#0f766e] text-white text-[10px] font-mono">
+                70점대
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#065f46] text-white text-[10px] font-mono">
+                80점+ 최우수
+              </span>
+            </div>
+          )}
+
+          {colorMetric === 'rsi' && (
+            <div className="flex items-center space-x-1">
+              <span className="px-1.5 py-0.5 rounded bg-[#047857] text-white text-[10px] font-mono">
+                ≤30 과매도(매수존)
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#0f766e] text-white text-[10px] font-mono">
+                31~40 침체
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#1e293b] text-slate-300 text-[10px] font-mono">
+                41~59 중립
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[#9f1239] text-white text-[10px] font-mono">
+                ≥70 과매수(경고)
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center space-x-4 text-[11px]">

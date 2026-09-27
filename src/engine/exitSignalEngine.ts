@@ -5,7 +5,9 @@ import {
   SellUrgency,
   UserHoldPosition,
   ExitSignalDetail,
+  MarketRegion,
 } from '../types/v8';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 export const USER_HOLD_POSITIONS_STORAGE_KEY = 'v8_quant_user_hold_positions';
 
@@ -15,10 +17,12 @@ export class ExitSignalEngine {
    */
   public static getUserPositions(): UserHoldPosition[] {
     try {
-      const stored = localStorage.getItem(USER_HOLD_POSITIONS_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem(USER_HOLD_POSITIONS_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) return parsed;
+        }
       }
     } catch (err) {
       console.warn('[ExitSignalEngine] Failed to load user hold positions:', err);
@@ -67,6 +71,34 @@ export class ExitSignalEngine {
         memo: '코어 인덱스 장기 적립',
         created_at: new Date().toISOString(),
       },
+      {
+        id: 'hold_005930',
+        ticker: '005930.KS',
+        name: '삼성전자',
+        entryPrice: 71500,
+        shares: 50,
+        entryDate: '2026-06-20',
+        targetTakeProfitPct: 15,
+        stopLossPct: -7,
+        trailingStopPct: -6,
+        highestPrice: 76000,
+        memo: 'HBM 및 반도체 업황 턴어라운드',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'hold_000660',
+        ticker: '000660.KS',
+        name: 'SK하이닉스',
+        entryPrice: 185000,
+        shares: 20,
+        entryDate: '2026-07-05',
+        targetTakeProfitPct: 20,
+        stopLossPct: -8,
+        trailingStopPct: -7,
+        highestPrice: 198000,
+        memo: 'HBM3E 공급 모멘텀',
+        created_at: new Date().toISOString(),
+      },
     ];
   }
 
@@ -75,7 +107,9 @@ export class ExitSignalEngine {
    */
   public static saveUserPositions(positions: UserHoldPosition[]): void {
     try {
-      localStorage.setItem(USER_HOLD_POSITIONS_STORAGE_KEY, JSON.stringify(positions));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(USER_HOLD_POSITIONS_STORAGE_KEY, JSON.stringify(positions));
+      }
     } catch (err) {
       console.error('[ExitSignalEngine] Failed to save user positions:', err);
     }
@@ -372,13 +406,28 @@ export class ExitSignalEngine {
   }
 
   /**
-   * 전체 유니버스 + 사용자 보유 종목 통합 매도 평가 산출
+   * 전체 유니버스 + 사용자 보유 종목 통합 매도 평가 산출 (시장별 격리 지원)
    */
   public static evaluateAllExits(
     evaluations: FullTickerEvaluation[],
-    userPositions?: UserHoldPosition[]
+    userPositions?: UserHoldPosition[],
+    marketRegion?: MarketRegion | 'ALL'
   ): IntegratedExitEvaluation[] {
-    const positions = userPositions || this.getUserPositions();
+    // If marketRegion is not explicitly passed, infer from evaluations if all evaluations are of one market
+    let effectiveRegion = marketRegion;
+    if (!effectiveRegion && evaluations && evaluations.length > 0) {
+      const firstRegion = detectMarketRegion(evaluations[0].ticker);
+      const allSame = evaluations.every((e) => detectMarketRegion(e.ticker) === firstRegion);
+      if (allSame) {
+        effectiveRegion = firstRegion;
+      }
+    }
+
+    let positions = userPositions || this.getUserPositions();
+    if (effectiveRegion && effectiveRegion !== 'ALL') {
+      positions = positions.filter((p) => detectMarketRegion(p.ticker) === effectiveRegion);
+    }
+
     const positionMap = new Map<string, UserHoldPosition>();
     for (const pos of positions) {
       positionMap.set(pos.ticker.toUpperCase(), pos);
@@ -388,14 +437,20 @@ export class ExitSignalEngine {
 
     // 1. 모니터링 중인 전체 종목 평가 (보유 종목 매칭 포함)
     for (const ev of evaluations || []) {
+      if (effectiveRegion && effectiveRegion !== 'ALL' && detectMarketRegion(ev.ticker) !== effectiveRegion) {
+        continue;
+      }
       const pos = positionMap.get(ev.ticker.toUpperCase());
       const exitEval = this.evaluateTickerExit(ev, pos);
       results.push(exitEval);
       positionMap.delete(ev.ticker.toUpperCase());
     }
 
-    // 2. 워치리스트에는 없지만 사용자가 보유 중으로 등록한 종목이 있다면 추가
+    // 2. 워치리스트에는 없지만 사용자가 보유 중으로 등록한 종목이 있다면 추가 (동일 시장 필터 준수)
     for (const [ticker, pos] of positionMap.entries()) {
+      if (effectiveRegion && effectiveRegion !== 'ALL' && detectMarketRegion(ticker) !== effectiveRegion) {
+        continue;
+      }
       const syntheticEv: FullTickerEvaluation = {
         ticker,
         name: pos.name || ticker,
