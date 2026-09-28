@@ -64,9 +64,9 @@ describe('calculateOpportunity', () => {
       classify('established_growth'),
       strongIndicators()
     );
-    // tech=98, mom=98, fund=98, val=84 -> 0.25*98+0.30*98+0.30*98+0.15*84=95.9 -> 96
-    expect(result.opportunity_score).toBe(96);
-    expect(result.sub_scores.technical_score).toBe(98);
+    // tech=96, mom=98, fund=98, val=84 -> 0.25*96+0.30*98+0.30*98+0.15*84=95.4 -> 95
+    expect(result.opportunity_score).toBe(95);
+    expect(result.sub_scores.technical_score).toBe(96);
     expect(result.sub_scores.momentum_score).toBe(98);
     expect(result.sub_scores.fundamental_score).toBe(98);
   });

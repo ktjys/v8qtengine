@@ -86,8 +86,13 @@ export function useQuantData({ activeMarket, onError }: UseQuantDataOptions) {
       }
 
       let newEvals: FullTickerEvaluation[] = [];
-      if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations)) {
-        newEvals = loadedEvals.evaluations;
+      const rawEvals = Array.isArray(loadedEvals?.evaluations)
+        ? loadedEvals.evaluations
+        : Array.isArray(loadedEvals?.data)
+        ? loadedEvals.data
+        : null;
+      if (loadedEvals?.success && rawEvals) {
+        newEvals = rawEvals;
       }
 
       let newSignals: SignalSnapshot[] = [];
@@ -132,8 +137,13 @@ export function useQuantData({ activeMarket, onError }: UseQuantDataOptions) {
   const refreshEvaluations = useCallback(async () => {
     try {
       const loadedEvals = await safeFetchJson('/api/v8/evaluations');
-      if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations)) {
-        setState(prev => ({ ...prev, evaluations: loadedEvals.evaluations }));
+      const rawEvals = Array.isArray(loadedEvals?.evaluations)
+        ? loadedEvals.evaluations
+        : Array.isArray(loadedEvals?.data)
+        ? loadedEvals.data
+        : null;
+      if (loadedEvals?.success && rawEvals) {
+        setState(prev => ({ ...prev, evaluations: rawEvals }));
       }
     } catch (err) {
       console.error('Failed to refresh evaluations', err);

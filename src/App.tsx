@@ -116,8 +116,13 @@ export default function App() {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data.success && Array.isArray(data.evaluations) && data.evaluations.length > 0) {
-            newEvaluations = data.evaluations;
+          const list = Array.isArray(data.evaluations)
+            ? data.evaluations
+            : Array.isArray(data.data)
+            ? data.data
+            : [];
+          if (data.success && list.length > 0) {
+            newEvaluations = list;
             successMsg = data.message || '';
           }
         }
@@ -197,16 +202,36 @@ export default function App() {
         setWatchlist([]);
       }
 
-      if (loadedEvals?.success && Array.isArray(loadedEvals.evaluations)) {
+      const rawEvals = Array.isArray(loadedEvals?.evaluations)
+        ? loadedEvals.evaluations
+        : Array.isArray(loadedEvals?.data)
+        ? loadedEvals.data
+        : null;
+
+      if (loadedEvals?.success && rawEvals && rawEvals.length > 0) {
         const evalsToSet = strategyConfig.id !== DEFAULT_STRATEGY_CONFIG.id
-          ? recalculateEvaluationsWithConfig(loadedEvals.evaluations, strategyConfig)
-          : loadedEvals.evaluations;
+          ? recalculateEvaluationsWithConfig(rawEvals, strategyConfig)
+          : rawEvals;
         setEvaluations(evalsToSet);
         try {
           localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(evalsToSet));
         } catch {}
       } else {
-        setEvaluations([]);
+        try {
+          const cached = localStorage.getItem('quant_evaluations_cache_v8');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setEvaluations(parsed);
+            } else {
+              setEvaluations([]);
+            }
+          } else {
+            setEvaluations([]);
+          }
+        } catch {
+          setEvaluations([]);
+        }
       }
 
       if (latestSignals?.success && Array.isArray(latestSignals.signals)) {
@@ -454,10 +479,15 @@ export default function App() {
   };
 
   const handleScanCompleted = async (scanResult?: any) => {
-    if (scanResult?.evaluations && Array.isArray(scanResult.evaluations) && scanResult.evaluations.length > 0) {
-      setEvaluations(scanResult.evaluations);
+    const list = Array.isArray(scanResult?.evaluations)
+      ? scanResult.evaluations
+      : Array.isArray(scanResult?.data)
+      ? scanResult.data
+      : [];
+    if (list.length > 0) {
+      setEvaluations(list);
       try {
-        localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(scanResult.evaluations));
+        localStorage.setItem('quant_evaluations_cache_v8', JSON.stringify(list));
       } catch (e) {}
     }
     showToast('전체 워치리스트 퀀트 파이프라인 평가 및 스냅샷 저장이 완료되었습니다.');

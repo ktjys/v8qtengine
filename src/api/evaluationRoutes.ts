@@ -26,10 +26,15 @@ evaluationRouter.get('/', async (req, res) => {
       ? []
       : evaluations.filter((e) => watchlistTickerSet.has(e.ticker.toUpperCase()));
 
-    res.json(createSuccessResponse(finalEvaluations, {
+    const responseObj = createSuccessResponse(finalEvaluations, {
       count: finalEvaluations.length,
       provider: evaluationService.getProviderName(),
-    }));
+    });
+
+    res.json({
+      ...responseObj,
+      evaluations: finalEvaluations,
+    });
   } catch (err) {
     res.status(500).json(createErrorResponse((err as Error).message));
   }
@@ -43,11 +48,14 @@ evaluationRouter.post('/recalculate', async (req, res) => {
     
     if (allAssets.length === 0) {
       // Seed fallback
-      const seedResult = runV8PipelineOnSeedData ? runV8PipelineOnSeedData() : null;
-      return res.json(createSuccessResponse(seedResult?.evaluations || [], {
-        message: '기본 유니버스 퀀트 평가가 완료되었습니다.',
-        count: seedResult?.evaluations?.length || 0,
-      }));
+      const fallbackEvals = seedResult?.evaluations || [];
+      return res.json({
+        ...createSuccessResponse(fallbackEvals, {
+          message: '기본 유니버스 퀀트 평가가 완료되었습니다.',
+          count: fallbackEvals.length,
+        }),
+        evaluations: fallbackEvals,
+      });
     }
 
     const results = await Promise.all(
@@ -75,11 +83,14 @@ evaluationRouter.post('/recalculate', async (req, res) => {
       await evaluationRepository.saveAll(successfulEvaluations);
     }
 
-    res.json(createSuccessResponse(successfulEvaluations, {
-      message: `${successfulEvaluations.length}개 종목의 DB 기반 퀀트 평가가 새로고침되었습니다.`,
-      count: successfulEvaluations.length,
-      provider: evaluationService.getProviderName(),
-    }));
+    res.json({
+      ...createSuccessResponse(successfulEvaluations, {
+        message: `${successfulEvaluations.length}개 종목의 DB 기반 퀀트 평가가 새로고침되었습니다.`,
+        count: successfulEvaluations.length,
+        provider: evaluationService.getProviderName(),
+      }),
+      evaluations: successfulEvaluations,
+    });
   } catch (err: any) {
     console.error('[EvaluationRouter] Recalculate critical error:', err);
     res.status(500).json(createErrorResponse(err.message || '평가 갱신 실패'));
