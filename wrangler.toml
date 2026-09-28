@@ -11,10 +11,13 @@ not_found_handling = "single-page-application"
 [vars]
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
-TELEGRAM_BOT_TOKEN = "8979603920:AAFN14IeUrhqcNqqFAkUv2ovkU9W5knPaVk"
-TELEGRAM_CHAT_ID = "7774679329"
-SUPABASE_URL = "https://xuzctskacealvvwlmica.supabase.co"
-SUPABASE_KEY = "sb_publishable__6cC6rZrrlLsIPRcRMQAFg_BknuN793"
+# ⚠️ CRITICAL: NEVER commit real secrets to git!
+# Set these via Cloudflare Workers dashboard: Settings > Variables > Environment Variables
+# Or use `wrangler secret put <NAME>` for encrypted secrets
+TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_CHAT_ID = ""
+SUPABASE_URL = ""
+SUPABASE_KEY = ""
 
 [triggers]
 crons = [

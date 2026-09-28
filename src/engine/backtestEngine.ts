@@ -1,9 +1,11 @@
 import { BacktestSummary, SignalSnapshot } from '../types/v8';
 import { computeBreakdowns } from '../backtest/performanceCalculator';
+import { BACKTEST_CONFIG } from '../config/engineConstants';
 
 export function calculateBacktestMetrics(
   signals: SignalSnapshot[]
 ): BacktestSummary {
+  const C = BACKTEST_CONFIG;
   // Deduplicate signals: for each ticker on a given signal_date, ensure only 1 signal is counted
   const dedupMap = new Map<string, SignalSnapshot>();
   for (const s of (signals || [])) {
@@ -85,7 +87,7 @@ export function calculateBacktestMetrics(
       .filter((s) => (s.return_20d ?? 0) < 0)
       .reduce((sum, s) => sum + (s.return_20d ?? 0), 0)
   );
-  const profit_factor = losses > 0 ? Math.round((profits / losses) * 100) / 100 : profits > 0 ? 99 : 1.0;
+  const profit_factor = losses > 0 ? Math.round((profits / losses) * 100) / 100 : profits > 0 ? C.PROFIT_FACTOR_INFINITE : C.PROFIT_FACTOR_NEUTRAL;
 
   const { by_strategy, by_risk, by_opportunity_bucket } = computeBreakdowns(
     completed.map((s) => ({

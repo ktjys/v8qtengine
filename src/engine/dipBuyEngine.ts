@@ -9,6 +9,14 @@ import {
 import { RawMarketIndicators } from './opportunityEngine';
 import { RawRiskInputs } from './riskEngine';
 import { RawYahooMetadata } from './classificationEngine';
+import { DIP_BUY_CONFIG } from '../config/engineConstants';
+
+const BROAD_MARKET_TICKERS = ['VOO', 'SPY', 'IVV', 'VTI', 'VT', 'QQQ', 'QQQM', 'SCHD', 'VUG', 'VYM', 'DIA', 'IWM'] as const;
+const SECTOR_ETF_TICKERS = ['SMH', 'SOXX', 'XLE', 'XLK', 'XLF', 'XLV', 'SCHG'] as const;
+const MEGACAP_QUALITY_EQUITIES = [
+  'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'BRK-A', 'BRK-B',
+  'JNJ', 'V', 'MA', 'LLY', 'UNH', 'PG', 'JPM', 'HD', 'COST', 'KO', 'PEP'
+] as const;
 
 /**
  * 전략 B: 우량대형주 적합도 (Blue-Chip Suitability) 산출
@@ -26,45 +34,40 @@ export function calculateBlueChipSuitability(
   metadata?: RawYahooMetadata,
   riskInputs?: RawRiskInputs
 ): BlueChipSuitability {
+  const C = DIP_BUY_CONFIG;
   const isEtf = classification.asset_type === 'etf';
   const strat = classification.strategy_type;
   const reasons: string[] = [];
 
   // 1. Index / ETF Status (0 ~ 30)
   let indexStatusScore = 15;
-  const broadMarketTickers = ['VOO', 'SPY', 'IVV', 'VTI', 'VT', 'QQQ', 'QQQM', 'SCHD', 'VUG', 'VYM', 'DIA', 'IWM'];
-  const sectorEtfTickers = ['SMH', 'SOXX', 'XLE', 'XLK', 'XLF', 'XLV', 'SCHG'];
-  const megaCapQualityEquities = [
-    'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'BRK-A', 'BRK-B',
-    'JNJ', 'V', 'MA', 'LLY', 'UNH', 'PG', 'JPM', 'HD', 'COST', 'KO', 'PEP'
-  ];
 
   if (isEtf) {
-    if (broadMarketTickers.includes(ticker) || strat === 'broad_market_etf' || strat === 'growth_etf' || strat === 'dividend_etf') {
-      indexStatusScore = 30;
+    if (BROAD_MARKET_TICKERS.includes(ticker as any) || strat === 'broad_market_etf' || strat === 'growth_etf' || strat === 'dividend_etf') {
+      indexStatusScore = C.INDEX_STATUS_BROAD_MARKET_ETF;
       reasons.push('광범위 시장 대표 지수/우량 배당 ETF로 개별 기업 파산 위험이 원천 배제됨 (30점 만점)');
-    } else if (sectorEtfTickers.includes(ticker) || strat === 'sector_etf') {
-      indexStatusScore = 25;
+    } else if (SECTOR_ETF_TICKERS.includes(ticker as any) || strat === 'sector_etf') {
+      indexStatusScore = C.INDEX_STATUS_SECTOR_ETF;
       reasons.push('주요 산업 섹터 1위 ETF로 분산투자 안정성 보유 (25점)');
     } else {
-      indexStatusScore = 20;
+      indexStatusScore = C.INDEX_STATUS_OTHER_ETF;
       reasons.push('인컴/테마형 ETF (20점)');
     }
   } else {
-    if (megaCapQualityEquities.includes(ticker)) {
-      indexStatusScore = 28;
+    if (MEGACAP_QUALITY_EQUITIES.includes(ticker as any)) {
+      indexStatusScore = C.INDEX_STATUS_MEGACAP_QUALITY;
       reasons.push('미국 증시 최상위 메가캡 독점 우량주 (28점)');
     } else if (strat === 'quality') {
-      indexStatusScore = 24;
+      indexStatusScore = C.INDEX_STATUS_QUALITY;
       reasons.push('강력한 해자와 안정적 비즈니스 모델을 갖춘 퀄리티 우량주 (24점)');
     } else if (strat === 'established_growth') {
-      indexStatusScore = 20;
+      indexStatusScore = C.INDEX_STATUS_ESTABLISHED_GROWTH;
       reasons.push('입증된 실적 기반의 대형 성장주 (20점)');
     } else if (strat === 'speculative') {
-      indexStatusScore = 5;
+      indexStatusScore = C.INDEX_STATUS_SPECULATIVE;
       reasons.push('초기/투기성 자산으로 장기 물타기 시 영구 손실 위험 존재 (5점)');
     } else {
-      indexStatusScore = 14;
+      indexStatusScore = C.INDEX_STATUS_GENERAL_EQUITY;
       reasons.push('일반 개별 보통주 (14점)');
     }
   }
@@ -74,22 +77,22 @@ export function calculateBlueChipSuitability(
   const capBillions = indicators.marketCapBillions || (metadata?.marketCap ? metadata.marketCap / 1e9 : (isEtf ? 300 : 25));
 
   if (isEtf) {
-    marketCapScore = 25; // Index ETFs trade effectively with whole-market scale
+    marketCapScore = C.ETF_MCAP_SCORE;
   } else {
     if (capBillions >= 500) {
-      marketCapScore = 25;
+      marketCapScore = C.MCAP_MEGACAP_500B;
       reasons.push(`초대형 메가캡 ($${capBillions.toFixed(0)}B, 25점 만점)`);
     } else if (capBillions >= 150) {
-      marketCapScore = 22;
+      marketCapScore = C.MCAP_LARGE_150B;
       reasons.push(`대형 우량 시총 ($${capBillions.toFixed(0)}B, 22점)`);
     } else if (capBillions >= 60) {
-      marketCapScore = 18;
+      marketCapScore = C.MCAP_MID_LARGE_60B;
       reasons.push(`중대형 시총 ($${capBillions.toFixed(0)}B, 18점)`);
     } else if (capBillions >= 20) {
-      marketCapScore = 12;
+      marketCapScore = C.MCAP_MID_20B;
       reasons.push(`중형주 규모 ($${capBillions.toFixed(0)}B, 12점)`);
     } else {
-      marketCapScore = 4;
+      marketCapScore = C.MCAP_SMALL;
       reasons.push(`소형/중소형 시총 ($${capBillions.toFixed(1)}B, 4점 감점)`);
     }
   }
@@ -97,23 +100,23 @@ export function calculateBlueChipSuitability(
   // 3. Quality & Cash Flow / Moat (0 ~ 25)
   let qualityScore = 15;
   if (isEtf) {
-    qualityScore = 25; // Continuous index reconstitution, no individual cash-flow collapse
+    qualityScore = 25;
   } else {
-    let subQ = 10;
+    let subQ = C.QUALITY_BASE;
     const opMargin = indicators.operatingMargin ?? 0.15;
     const fcfMargin = indicators.freeCashFlowMargin ?? 0.12;
 
-    if (opMargin >= 0.25) subQ += 8;
-    else if (opMargin >= 0.15) subQ += 5;
-    else if (opMargin > 0.05) subQ += 2;
-    else subQ -= 4;
+    if (opMargin >= C.QUALITY_OP_MARGIN_EXCELLENT) subQ += C.QUALITY_OP_MARGIN_EXCELLENT_BONUS;
+    else if (opMargin >= C.QUALITY_OP_MARGIN_GOOD) subQ += C.QUALITY_OP_MARGIN_GOOD_BONUS;
+    else if (opMargin > C.QUALITY_OP_MARGIN_OK) subQ += C.QUALITY_OP_MARGIN_OK_BONUS;
+    else subQ += C.QUALITY_OP_MARGIN_POOR_PENALTY;
 
-    if (fcfMargin >= 0.20) subQ += 7;
-    else if (fcfMargin >= 0.10) subQ += 4;
-    else if (fcfMargin > 0) subQ += 1;
-    else subQ -= 4;
+    if (fcfMargin >= C.QUALITY_FCF_MARGIN_EXCELLENT) subQ += C.QUALITY_FCF_MARGIN_EXCELLENT_BONUS;
+    else if (fcfMargin >= C.QUALITY_FCF_MARGIN_GOOD) subQ += C.QUALITY_FCF_MARGIN_GOOD_BONUS;
+    else if (fcfMargin > 0) subQ += C.QUALITY_FCF_MARGIN_POSITIVE_BONUS;
+    else subQ += C.QUALITY_FCF_MARGIN_NEGATIVE_PENALTY;
 
-    qualityScore = Math.max(0, Math.min(25, subQ));
+    qualityScore = Math.max(C.QUALITY_MIN_SCORE, Math.min(C.QUALITY_MAX_SCORE, subQ));
     if (opMargin >= 0.20 && fcfMargin >= 0.15) {
       reasons.push(`압도적 영업이익률(${(opMargin * 100).toFixed(0)}%) 및 잉여현금흐름 창출력`);
     }
@@ -123,20 +126,19 @@ export function calculateBlueChipSuitability(
   let stabilityScore = 12;
   const beta = riskInputs?.beta ?? metadata?.beta ?? 1.0;
   const rawMaxDD = Math.abs(riskInputs?.maxDrawdown52w ?? indicators.drawdownFromHigh ?? 0.15);
-  // Normalize to 0.0 ~ 1.0 ratio regardless of whether passed as ratio (0.054) or percentage (5.4)
   const maxDDRatio = rawMaxDD > 1.0 ? rawMaxDD / 100 : rawMaxDD;
 
-  let subStab = 10;
-  if (beta <= 1.05) subStab += 5;
-  else if (beta <= 1.35) subStab += 3;
-  else if (beta <= 1.7) subStab -= 2;
-  else subStab -= 6; // High beta penalty
+  let subStab = C.STABILITY_BASE;
+  if (beta <= C.STABILITY_BETA_VERY_LOW) subStab += C.STABILITY_BETA_VERY_LOW_BONUS;
+  else if (beta <= C.STABILITY_BETA_LOW) subStab += C.STABILITY_BETA_LOW_BONUS;
+  else if (beta <= C.STABILITY_BETA_MEDIUM) subStab += C.STABILITY_BETA_MEDIUM_PENALTY;
+  else subStab += C.STABILITY_BETA_HIGH_PENALTY;
 
-  if (maxDDRatio <= 0.20) subStab += 5;
-  else if (maxDDRatio <= 0.35) subStab += 2;
-  else subStab -= 4; // Severe historical crash penalty
+  if (maxDDRatio <= C.STABILITY_MDD_LOW) subStab += C.STABILITY_MDD_LOW_BONUS;
+  else if (maxDDRatio <= C.STABILITY_MDD_MODERATE) subStab += C.STABILITY_MDD_MODERATE_BONUS;
+  else subStab += C.STABILITY_MDD_HIGH_PENALTY;
 
-  stabilityScore = Math.max(0, Math.min(20, subStab));
+  stabilityScore = Math.max(C.STABILITY_MIN_SCORE, Math.min(C.STABILITY_MAX_SCORE, subStab));
 
   // Total Suitability Score
   const totalScore = Math.round(
@@ -146,13 +148,13 @@ export function calculateBlueChipSuitability(
   let tier: BlueChipTier = 'B';
   let tierLabel = '🥈 B등급 (일반대형/선별적립)';
 
-  if (totalScore >= 85) {
+  if (totalScore >= C.TIER_S_THRESHOLD) {
     tier = 'S';
     tierLabel = '💎 S등급 (초우량/인덱스)';
-  } else if (totalScore >= 70) {
+  } else if (totalScore >= C.TIER_A_THRESHOLD) {
     tier = 'A';
     tierLabel = '🥇 A등급 (대형성장우량)';
-  } else if (totalScore >= 55) {
+  } else if (totalScore >= C.TIER_B_THRESHOLD) {
     tier = 'B';
     tierLabel = '🥈 B등급 (일반대형/선별적립)';
   } else {
@@ -184,6 +186,7 @@ export function calculateBlueChipSuitability(
  * - 50일/200일선 지지력 확인
  */
 export function calculateDipTiming(indicators: Partial<RawMarketIndicators>): DipTiming {
+  const C = DIP_BUY_CONFIG;
   const rsi = indicators.rsi14 ?? 50;
   const rawDd = indicators.drawdownFromHigh ?? 0;
   // If positive value passed (e.g. 5.4 or 0.054), convert to negative convention
@@ -206,24 +209,24 @@ export function calculateDipTiming(indicators: Partial<RawMarketIndicators>): Di
   let rsiScore = 15;
   let rsiZone: DipTiming['rsiZone'] = 'HEALTHY';
 
-  if (rsi <= 32) {
-    rsiScore = 40;
+  if (rsi <= C.TIMING_RSI_DEEP_OVERSOLD) {
+    rsiScore = C.TIMING_RSI_DEEP_OVERSOLD_SCORE;
     rsiZone = 'DEEP_OVERSOLD';
     reasons.push(`RSI ${rsi.toFixed(1)}: 극심한 단기 과매도 (바겐세일 구간)`);
-  } else if (rsi <= 45) {
-    rsiScore = 36;
+  } else if (rsi <= C.TIMING_RSI_DIP_ZONE_MAX) {
+    rsiScore = C.TIMING_RSI_DIP_ZONE_SCORE;
     rsiZone = 'DIP_ZONE';
     reasons.push(`RSI ${rsi.toFixed(1)}: 건전한 눌림목 조정 구간 (매력적 가격대)`);
-  } else if (rsi <= 55) {
-    rsiScore = 25;
+  } else if (rsi <= C.TIMING_RSI_HEALTHY_MAX) {
+    rsiScore = C.TIMING_RSI_HEALTHY_SCORE;
     rsiZone = 'HEALTHY';
     reasons.push(`RSI ${rsi.toFixed(1)}: 중립 안정 구간 (정기적립 적합)`);
-  } else if (rsi <= 68) {
-    rsiScore = 14;
+  } else if (rsi <= C.TIMING_RSI_RISING_MAX) {
+    rsiScore = C.TIMING_RSI_RISING_SCORE;
     rsiZone = 'HEALTHY';
     reasons.push(`RSI ${rsi.toFixed(1)}: 주가 상승 진행 중 (소액 적립)`);
   } else {
-    rsiScore = 0;
+    rsiScore = C.TIMING_RSI_OVERBOUGHT_SCORE;
     rsiZone = 'OVERBOUGHT';
     reasons.push(`RSI ${rsi.toFixed(1)}: 단기 과열 구간 (추매 보류 권장)`);
   }
@@ -232,30 +235,30 @@ export function calculateDipTiming(indicators: Partial<RawMarketIndicators>): Di
   let ddScore = 10;
   let drawdownLabel = `${ddPct.toFixed(1)}%`;
 
-  if (ddPct >= -3.0) {
-    ddScore = 12;
+  if (ddPct >= C.DD_NEAR_HIGH_MAX) {
+    ddScore = C.DD_NEAR_HIGH_SCORE;
     drawdownLabel = `신고가 근접 (${ddPct.toFixed(1)}%)`;
     reasons.push('전고점 부근 거래 중 (가격 조정 대기 권고)');
-  } else if (ddPct >= -8.0) {
-    ddScore = 26;
+  } else if (ddPct >= C.DD_SHALLOW_MAX) {
+    ddScore = C.DD_SHALLOW_SCORE;
     drawdownLabel = `얕은 눌림목 (${ddPct.toFixed(1)}%)`;
     reasons.push('1차 얕은 눌림목 조정 (-5% ~ -8%)');
-  } else if (ddPct >= -18.0) {
-    ddScore = 35;
+  } else if (ddPct >= C.DD_GOLDEN_MAX) {
+    ddScore = C.DD_GOLDEN_SCORE;
     drawdownLabel = `황금 눌림목 (${ddPct.toFixed(1)}%)`;
     reasons.push('우량주 황금 눌림목 구간 (-8% ~ -18% 건강한 세일)');
-  } else if (ddPct >= -30.0) {
-    ddScore = 28;
+  } else if (ddPct >= C.DD_DEEP_MAX) {
+    ddScore = C.DD_DEEP_SCORE;
     drawdownLabel = `깊은 할인 (${ddPct.toFixed(1)}%)`;
     reasons.push('시장 충격에 따른 깊은 할인 구간 (-18% ~ -30%)');
   } else {
-    ddScore = 15;
+    ddScore = C.DD_CRASH_SCORE;
     drawdownLabel = `과도한 급락 (${ddPct.toFixed(1)}%)`;
     reasons.push('전고점 대비 -30% 초과 급락 (실적 훼손 여부 확인 필요)');
   }
 
   // Trend & Support Alignment (0 ~ 25)
-  let supportScore = 12;
+  let supportScore = C.SUPPORT_BASE;
   let supportLevel = '200일선 상회 (장기 상승 추세 유지)';
 
   const price = indicators.price;
@@ -263,19 +266,19 @@ export function calculateDipTiming(indicators: Partial<RawMarketIndicators>): Di
   const ma50 = indicators.ma50 || price * 0.95;
 
   const isAboveMa200 = price >= ma200;
-  const isNearMa50 = Math.abs(price - ma50) / ma50 <= 0.03;
+  const isNearMa50 = Math.abs(price - ma50) / ma50 <= C.MA50_PROXIMITY_THRESHOLD;
 
   if (isAboveMa200) {
-    supportScore += 8;
+    supportScore += C.SUPPORT_ABOVE_MA200_BONUS;
     if (isNearMa50) {
-      supportScore += 5;
+      supportScore += C.SUPPORT_NEAR_MA50_BONUS;
       supportLevel = '50일 이동평균선 지지 부근 (눌림목 반등 타점)';
       reasons.push('50일선 부근에서 지지선 형성 중');
     } else {
       supportLevel = '장기 200일선 상회 유지 (장기 상승 기조 견고)';
     }
   } else {
-    supportScore -= 4;
+    supportScore += C.SUPPORT_BELOW_MA200_PENALTY;
     supportLevel = '200일선 하회 (추세 둔화, 보수적 분할 접근)';
     reasons.push('200일선 하회 상태로 천천히 분할 매수 필요');
   }
@@ -306,6 +309,7 @@ export function evaluateDipBuyStrategy(
   metadata?: RawYahooMetadata,
   riskInputs?: RawRiskInputs
 ): DipBuyEvaluation {
+  const C = DIP_BUY_CONFIG;
   const suitability = calculateBlueChipSuitability(ticker, classification, indicators, metadata, riskInputs);
   const timing = calculateDipTiming(indicators);
 
@@ -324,19 +328,19 @@ export function evaluateDipBuyStrategy(
     actionable = false;
   } else {
     // Suitable blue-chip / index ETF
-    if (timing.score >= 72 || timing.rsiZone === 'DEEP_OVERSOLD') {
+    if (timing.score >= C.STRONG_DIP_BUY_TIMING_THRESHOLD || timing.rsiZone === 'DEEP_OVERSOLD') {
       actionSignal = 'STRONG_DIP_BUY';
       signalLabel = '🟢 적극 분할추매';
       actionable = true;
       guidanceMessage = `최적의 우량주 눌림목 기회! (${timing.drawdownLabel}, RSI ${timing.rsi.toFixed(1)})`;
       suggestedDcaRatio = '평소 정기 적립액의 1.5배 ~ 2.0배 확대 매수 권고';
-    } else if (timing.score >= 52) {
+    } else if (timing.score >= C.MODERATE_DCA_TIMING_THRESHOLD) {
       actionSignal = 'MODERATE_DCA';
       signalLabel = '🟡 정기 적립추매';
       actionable = true;
       guidanceMessage = `안정적인 가격대 유지 중. 통상적인 정기 적립 매수에 적합합니다.`;
       suggestedDcaRatio = '정규 1회차 분할 매수 진행';
-    } else if (timing.rsiZone === 'OVERBOUGHT' || timing.score < 35) {
+    } else if (timing.rsiZone === 'OVERBOUGHT' || timing.score < C.OVERBOUGHT_WAIT_TIMING_THRESHOLD) {
       actionSignal = 'OVERBOUGHT_WAIT';
       signalLabel = '⏸️ 추매 보류 (단기과열)';
       actionable = false;
@@ -353,8 +357,8 @@ export function evaluateDipBuyStrategy(
 
   // 종합 추매 매력도 점수 (우량 적합도 40% + 타이밍 60%)
   const dipScore = suitability.isSuitable
-    ? Math.round(suitability.score * 0.35 + timing.score * 0.65)
-    : Math.round(suitability.score * 0.3);
+    ? Math.round(suitability.score * C.DIP_SCORE_SUITABILITY_WEIGHT + timing.score * C.DIP_SCORE_TIMING_WEIGHT)
+    : Math.round(suitability.score * C.DIP_SCORE_UNSUITABLE_SUITABILITY_WEIGHT);
 
   return {
     ticker,

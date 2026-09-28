@@ -6,10 +6,14 @@ export class EvaluationRepository {
   async saveAll(evaluations: FullTickerEvaluation[]): Promise<void> {
     if (!evaluations || evaluations.length === 0) return;
 
+    // Build new map first, then atomically swap
+    const newMap = new Map<string, FullTickerEvaluation>();
     for (const ev of evaluations) {
       const clean = ev.ticker.toUpperCase().trim();
-      dbClient.evaluations.set(clean, ev);
+      newMap.set(clean, ev);
     }
+    // Atomic swap
+    dbClient.evaluations = newMap;
 
     if (!dbClient.isTableAvailable('evaluations') || !dbClient.supabase) {
       return;
@@ -91,16 +95,18 @@ export class EvaluationRepository {
         if (error) {
           dbClient.handleDbError('evaluations', 'getAll', error);
         } else if (Array.isArray(data)) {
-          dbClient.evaluations.clear();
           if (data.length === 0) {
+            // Atomic swap with empty map
+            dbClient.evaluations = new Map();
             return [];
           }
-          const map = new Map<string, FullTickerEvaluation>();
+          // Build new map completely, then atomically swap
+          const newMap = new Map<string, FullTickerEvaluation>();
           const now = new Date().toISOString();
 
           for (const row of data) {
             const ticker = row.ticker?.toUpperCase()?.trim();
-            if (!ticker || map.has(ticker)) continue;
+            if (!ticker || newMap.has(ticker)) continue;
 
             let r: any = row.reason_json;
             if (typeof r === 'string') {
@@ -174,11 +180,12 @@ export class EvaluationRepository {
               },
             };
 
-            map.set(ticker, ev);
-            dbClient.evaluations.set(ticker, ev);
+            newMap.set(ticker, ev);
           }
 
-          return Array.from(map.values());
+          // Atomic swap
+          dbClient.evaluations = newMap;
+          return Array.from(newMap.values());
         }
       } catch (err) {
         dbClient.handleDbError('evaluations', 'getAll', err);

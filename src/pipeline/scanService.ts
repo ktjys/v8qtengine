@@ -8,6 +8,7 @@ import { scanRunRepository } from '../db/repositories/scanRunRepository';
 import { createSignalSnapshot, shouldGenerateSignal } from '../engine/signalEngine';
 import { PipelineExecutionOptions, PipelineScanResult } from './pipelineTypes';
 import { detectMarketRegion } from '../utils/marketUtils';
+import { logger } from '../utils/logger';
 
 export class ScanService {
   async executeScan(
@@ -23,7 +24,11 @@ export class ScanService {
       const activeOnly = watchlist.filter((w) => w.is_active !== false);
       watchlist = activeOnly.length > 0 ? activeOnly : watchlist;
     } catch (wErr) {
-      console.warn('[ScanService] Failed to load watchlist from repo:', wErr);
+      logger.warn('Failed to load watchlist from repo', {
+        component: 'ScanService',
+        operation: 'executeScan',
+        error: String(wErr),
+      });
     }
 
     // Filter by market region if options.market is specified
@@ -147,12 +152,20 @@ export class ScanService {
       try {
         await evaluationRepository.saveAll(evaluations);
       } catch (err) {
-        console.warn('[ScanService] evaluationRepository.saveAll warning:', err);
+        logger.warn('evaluationRepository.saveAll warning', {
+          component: 'ScanService',
+          operation: 'executeScan',
+          error: String(err),
+        });
       }
       try {
         await marketDataService.flushIndicators();
       } catch (err) {
-        console.warn('[ScanService] marketDataService.flushIndicators warning:', err);
+        logger.warn('marketDataService.flushIndicators warning', {
+          component: 'ScanService',
+          operation: 'executeScan',
+          error: String(err),
+        });
       }
     }
 
@@ -180,7 +193,11 @@ export class ScanService {
       try {
         await signalRepository.saveSignals(newSignals);
       } catch (err) {
-        console.warn('[ScanService] signalRepository.saveSignals warning:', err);
+        logger.warn('signalRepository.saveSignals warning', {
+          component: 'ScanService',
+          operation: 'executeScan',
+          error: String(err),
+        });
       }
     }
 
@@ -206,7 +223,13 @@ export class ScanService {
     if (options.saveToDb !== false && !options.skipRunLogSave) {
       try {
         await scanRunRepository.save(scanLog);
-      } catch {}
+      } catch (err) {
+        logger.warn('scanRunRepository.save warning', {
+          component: 'ScanService',
+          operation: 'executeScan',
+          error: String(err),
+        });
+      }
     }
 
     // Assemble final signal list without redundant network queries

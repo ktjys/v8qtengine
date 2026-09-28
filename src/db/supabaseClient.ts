@@ -436,6 +436,9 @@ class UniversalDatabaseClient {
   get evaluations() {
     return this.state.evaluations;
   }
+  set evaluations(newMap: Map<string, any>) {
+    this.state.evaluations = newMap;
+  }
   get signals() {
     return this.state.signals;
   }

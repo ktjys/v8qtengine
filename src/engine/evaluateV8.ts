@@ -11,6 +11,7 @@ import { calculateRisk, RawRiskInputs } from './riskEngine';
 import { makeDecision } from './decisionEngine';
 import { isSignalEligible, DataProvenance } from './dataQualityGate';
 import { calculatePositionSizing } from './positionSizing';
+import { DECISION_CONFIG } from '../config/engineConstants';
 
 /**
  * Point-in-Time 마켓 스냅샷.
@@ -103,7 +104,7 @@ export function evaluateV8(input: EvaluationInput): V8Evaluation {
   );
 
   // Signal 후보 = actionable && 기회 점수 >= 신호 문턱 && 데이터 품질 게이트 통과
-  const signalThreshold = input.signalThreshold ?? 70;
+  const signalThreshold = input.signalThreshold ?? DECISION_CONFIG.DEFAULT_SIGNAL_THRESHOLD;
   const isSignal =
     eligible && decision.actionable && opportunity.opportunity_score >= signalThreshold;
 

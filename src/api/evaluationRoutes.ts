@@ -6,6 +6,7 @@ import { assetRepository } from '../db/repositories/assetRepository';
 import { dbClient } from '../db/supabaseClient';
 import { dailyScoreHistoryService } from '../pipeline/dailyScoreHistoryService';
 import { runV8PipelineOnSeedData } from '../data/seed/initialData';
+import { createSuccessResponse, createErrorResponse } from './apiResponse';
 
 export const evaluationRouter = Router();
 
@@ -25,15 +26,12 @@ evaluationRouter.get('/', async (req, res) => {
       ? []
       : evaluations.filter((e) => watchlistTickerSet.has(e.ticker.toUpperCase()));
 
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString(),
+    res.json(createSuccessResponse(finalEvaluations, {
       count: finalEvaluations.length,
       provider: evaluationService.getProviderName(),
-      evaluations: finalEvaluations,
-    });
+    }));
   } catch (err) {
-    res.status(500).json({ success: false, error: (err as Error).message });
+    res.status(500).json(createErrorResponse((err as Error).message));
   }
 });
 
@@ -46,12 +44,10 @@ evaluationRouter.post('/recalculate', async (req, res) => {
     if (allAssets.length === 0) {
       // Seed fallback
       const seedResult = runV8PipelineOnSeedData ? runV8PipelineOnSeedData() : null;
-      return res.json({
-        success: true,
+      return res.json(createSuccessResponse(seedResult?.evaluations || [], {
         message: '기본 유니버스 퀀트 평가가 완료되었습니다.',
         count: seedResult?.evaluations?.length || 0,
-        evaluations: seedResult?.evaluations || [],
-      });
+      }));
     }
 
     const results = await Promise.all(
@@ -79,16 +75,14 @@ evaluationRouter.post('/recalculate', async (req, res) => {
       await evaluationRepository.saveAll(successfulEvaluations);
     }
 
-    res.json({
-      success: true,
+    res.json(createSuccessResponse(successfulEvaluations, {
       message: `${successfulEvaluations.length}개 종목의 DB 기반 퀀트 평가가 새로고침되었습니다.`,
       count: successfulEvaluations.length,
       provider: evaluationService.getProviderName(),
-      evaluations: successfulEvaluations,
-    });
+    }));
   } catch (err: any) {
     console.error('[EvaluationRouter] Recalculate critical error:', err);
-    res.status(500).json({ success: false, error: err.message || '평가 갱신 실패' });
+    res.status(500).json(createErrorResponse(err.message || '평가 갱신 실패'));
   }
 });
 
@@ -98,9 +92,9 @@ evaluationRouter.get('/history/:ticker', async (req, res) => {
     const ticker = req.params.ticker.toUpperCase();
     const range = (req.query.range as string) || '1y';
     const data = await dailyScoreHistoryService.getDailyScoreHistory(ticker, range);
-    res.json({ success: true, data });
+    res.json(createSuccessResponse(data));
   } catch (err) {
-    res.status(500).json({ success: false, error: (err as Error).message });
+    res.status(500).json(createErrorResponse((err as Error).message));
   }
 });
 
@@ -109,9 +103,9 @@ evaluationRouter.get('/:ticker/history', async (req, res) => {
     const ticker = req.params.ticker.toUpperCase();
     const range = (req.query.range as string) || '1y';
     const data = await dailyScoreHistoryService.getDailyScoreHistory(ticker, range);
-    res.json({ success: true, data });
+    res.json(createSuccessResponse(data));
   } catch (err) {
-    res.status(500).json({ success: false, error: (err as Error).message });
+    res.status(500).json(createErrorResponse((err as Error).message));
   }
 });
 
@@ -119,8 +113,8 @@ evaluationRouter.get('/:ticker', async (req, res) => {
   try {
     const ticker = req.params.ticker.toUpperCase();
     const evaluation = await evaluationService.evaluateTicker(ticker);
-    res.json({ success: true, evaluation });
+    res.json(createSuccessResponse(evaluation));
   } catch (err) {
-    res.status(500).json({ success: false, error: (err as Error).message });
+    res.status(500).json(createErrorResponse((err as Error).message));
   }
 });
