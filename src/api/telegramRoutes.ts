@@ -84,7 +84,7 @@ telegramRouter.post('/test-broadcast', async (req, res) => {
       `🕒 발송 시각: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} KST\n` +
       `━━━━━━━━━━━━━━━━━━━━━\n` +
       `✅ <b>연동 상태:</b> 실시간 메시지 발송 확인 완료\n` +
-      `📈 <b>실시간 종목:</b> NVDA (NVIDIA Corporation)\n` +
+      `📈 <b>실시간 종목:</b> 엔비디아 (NVDA)\n` +
       `💵 <b>실시간 현재가:</b> <b>$${nvdaPrice.toFixed(2)}</b> (${arrow} ${changeStr})\n` +
       `💡 <b>기회 점수:</b> 89점 (STRONG_OPPORTUNITY)\n` +
       `🛡️ <b>리스크 등급:</b> LOW (안전 영역)\n` +

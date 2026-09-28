@@ -1,13 +1,17 @@
 import { DipBuyEvaluation, SignalSnapshot } from '../types/v8';
+import { detectMarketRegion, formatTelegramStockName } from '../utils/marketUtils';
 
 export function buildDipBuyTelegramMessage(dip: DipBuyEvaluation): string {
   const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
   const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
+  const isKr = detectMarketRegion(dip.ticker) === 'KR';
+  const priceStr = isKr ? `₩${Math.round(dip.price).toLocaleString('ko-KR')}` : `$${dip.price.toFixed(2)}`;
+  const stockTitle = formatTelegramStockName(dip.ticker, dip.name);
 
   return `🛡️ [우량주 장기적립 & 눌림목 추매 알림]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 <b>${dip.ticker}</b> (${dip.name})
-• 현재가: $${dip.price.toFixed(2)} (${arrow} ${changeStr})
+📌 ${stockTitle}
+• 현재가: ${priceStr} (${arrow} ${changeStr})
 • 신호 판정: <b>${dip.signalLabel}</b>
 • 추매 권고 비중: <code>${dip.suggestedDcaRatio}</code>
 
@@ -31,6 +35,12 @@ export function buildDipBuyTelegramMessage(dip: DipBuyEvaluation): string {
 }
 
 export function buildSignalTelegramMessage(snapshot: SignalSnapshot): string {
+  const isKr = detectMarketRegion(snapshot.ticker) === 'KR';
+  const priceStr = isKr
+    ? `₩${Math.round(snapshot.signal_price).toLocaleString('ko-KR')}`
+    : `$${snapshot.signal_price.toFixed(2)}`;
+  const stockTitle = formatTelegramStockName(snapshot.ticker, snapshot.name);
+
   const fundText =
     snapshot.fundamental_score !== null ? `${snapshot.fundamental_score} pt` : 'N/A (ETF/지수)';
   const valText =
@@ -38,11 +48,11 @@ export function buildSignalTelegramMessage(snapshot: SignalSnapshot): string {
 
   return `🚨 [V8 QUANT SIGNAL ALERT]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 ${snapshot.ticker} (${snapshot.name})
+📌 ${stockTitle}
 • Asset Type: ${snapshot.asset_type.toUpperCase()}
 • Strategy: ${snapshot.strategy_type}
 • Decision: 🎯 ${snapshot.decision}
-• Entry Target Price: $${snapshot.signal_price.toFixed(2)}
+• Entry Target Price: ${priceStr}
 
 📊 Score Breakdown
 • Opportunity Score: ${snapshot.opportunity_score} / 100
@@ -93,11 +103,16 @@ export function buildExitSignalTelegramMessage(exitItems: Array<{
   text += `4대 퀀트 매도 규칙(목표익절/트레일링스탑/손절매/추세붕괴)에 따라 다음 종목들의 포지션 정리를 권고합니다.\n\n`;
 
   exitItems.forEach((item, idx) => {
+    const isKr = detectMarketRegion(item.ticker) === 'KR';
+    const priceStr = isKr
+      ? `₩${Math.round(item.currentPrice).toLocaleString('ko-KR')}`
+      : `$${item.currentPrice.toFixed(2)}`;
+    const stockTitle = formatTelegramStockName(item.ticker, item.name);
     const retText = item.returnPct !== undefined
       ? ` (진입대비: <b>${item.returnPct >= 0 ? '+' : ''}${item.returnPct.toFixed(1)}%</b>)`
       : '';
-    text += `${idx + 1}. 📌 <b>${item.ticker}</b> (${item.name})\n`;
-    text += `   • 현재가: $${item.currentPrice.toFixed(2)}${retText}\n`;
+    text += `${idx + 1}. 📌 ${stockTitle}\n`;
+    text += `   • 현재가: ${priceStr}${retText}\n`;
     text += `   • <b>판정:</b> <code>${item.headline}</code>\n`;
     text += `   • <b>💡 권고 실행:</b> ${item.action}\n\n`;
   });

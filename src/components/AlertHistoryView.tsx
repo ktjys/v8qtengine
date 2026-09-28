@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { AlertNotificationLog, AlertStrategyType, AlertDeliveryStatus, MarketRegion } from '../types/v8';
 import { ALERT_NOTIFICATIONS_RLS_FIX_SQL } from './DatabaseHealthModal';
+import { getStockDisplayInfo } from '../utils/marketUtils';
 
 interface AlertHistoryViewProps {
   onSelectTicker?: (ticker: string, tab?: string) => void;
@@ -227,7 +228,14 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
 
     if (searchTerm.trim()) {
       const term = searchTerm.toUpperCase().trim();
-      const matchTicker = alert.tickers.some((t) => t.toUpperCase().includes(term));
+      const matchTicker = alert.tickers.some((t) => {
+        const info = getStockDisplayInfo(t);
+        return (
+          t.toUpperCase().includes(term) ||
+          info.primaryName.toUpperCase().includes(term) ||
+          info.subCode.toUpperCase().includes(term)
+        );
+      });
       const matchTitle = alert.title.toUpperCase().includes(term);
       const matchBody = alert.message_body.toUpperCase().includes(term);
       if (!matchTicker && !matchTitle && !matchBody) return false;
@@ -368,8 +376,13 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
           </div>
           <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
             <span>포착 우량주:</span>
-            <span className="text-emerald-300 font-mono font-semibold truncate max-w-[120px] text-right" title={strategyBUniqueTickers.join(', ')}>
-              {strategyBUniqueTickers.length > 0 ? strategyBUniqueTickers.join(', ') : '없음'}
+            <span
+              className="text-emerald-300 font-medium truncate max-w-[140px] text-right"
+              title={strategyBUniqueTickers.map((t) => `${getStockDisplayInfo(t).primaryName} (${getStockDisplayInfo(t).subCode})`).join(', ')}
+            >
+              {strategyBUniqueTickers.length > 0
+                ? strategyBUniqueTickers.map((t) => getStockDisplayInfo(t).primaryName).join(', ')
+                : '없음'}
             </span>
           </div>
         </div>
@@ -389,8 +402,13 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
           </div>
           <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
             <span>포착 모멘텀:</span>
-            <span className="text-blue-300 font-mono font-semibold truncate max-w-[120px] text-right" title={strategyAUniqueTickers.join(', ')}>
-              {strategyAUniqueTickers.length > 0 ? strategyAUniqueTickers.join(', ') : '없음'}
+            <span
+              className="text-blue-300 font-medium truncate max-w-[140px] text-right"
+              title={strategyAUniqueTickers.map((t) => `${getStockDisplayInfo(t).primaryName} (${getStockDisplayInfo(t).subCode})`).join(', ')}
+            >
+              {strategyAUniqueTickers.length > 0
+                ? strategyAUniqueTickers.map((t) => getStockDisplayInfo(t).primaryName).join(', ')
+                : '없음'}
             </span>
           </div>
         </div>
@@ -654,6 +672,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
                         <span className="text-[11px] text-slate-600">포착 종목 없음</span>
                       ) : (
                         alert.tickers.map((ticker) => {
+                          const { primaryName, subCode } = getStockDisplayInfo(ticker);
                           // Check if Strategy B info is available for this ticker
                           const bInfo = alert.details?.strategy_b_tickers?.find(
                             (b) => b.ticker.toUpperCase() === ticker.toUpperCase()
@@ -672,14 +691,15 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
                                   bInfo ? 'dip_buy' : 'overview'
                                 )
                               }
-                              className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-mono font-medium transition-all ${
+                              className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-xs transition-all ${
                                 bInfo
                                   ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/60 hover:bg-emerald-900/80 hover:border-emerald-500'
                                   : 'bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 hover:bg-cyan-900/80 hover:border-cyan-500'
                               }`}
-                              title={`${ticker} 상세 분석 모달 열기`}
+                              title={`${primaryName} (${subCode}) 상세 분석 모달 열기`}
                             >
-                              <span>{ticker}</span>
+                              <span className="font-semibold font-sans">{primaryName}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">({subCode})</span>
                               {bInfo && (
                                 <span className="text-[10px] text-emerald-400 font-sans">
                                   ({bInfo.tier}등급 | {bInfo.dip_score}점)
@@ -739,11 +759,14 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
                       <Shield className="w-3.5 h-3.5" />
                       <span>전략 B 우량주 눌림목 포착 핵심 요약:</span>
                     </span>
-                    {alert.details.strategy_b_tickers.map((b) => (
-                      <span key={b.ticker} className="font-mono text-emerald-200">
-                        <b>{b.ticker}</b>: {b.tier}등급 | 딥스코어 <b>{b.dip_score}점</b> | RSI {b.rsi} | 고점대비 {b.drawdown} → <b>{b.suggested_action}</b>
-                      </span>
-                    ))}
+                    {alert.details.strategy_b_tickers.map((b) => {
+                      const { primaryName, subCode } = getStockDisplayInfo(b.ticker);
+                      return (
+                        <span key={b.ticker} className="font-sans text-emerald-200">
+                          <b>{primaryName}</b> <span className="font-mono text-[11px] text-emerald-400">({subCode})</span>: {b.tier}등급 | 딥스코어 <b>{b.dip_score}점</b> | RSI {b.rsi} | 고점대비 {b.drawdown} → <b>{b.suggested_action}</b>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
 

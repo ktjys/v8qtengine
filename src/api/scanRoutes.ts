@@ -5,6 +5,7 @@ import { AssetClassification, AlertNotificationLog } from '../types/v8';
 import { telegramNotifier } from '../notification/telegramNotifier';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { alertHistoryRepository } from '../db/repositories/alertHistoryRepository';
+import { detectMarketRegion, formatTelegramStockName } from '../utils/marketUtils';
 
 export const scanRouter = Router();
 
@@ -83,14 +84,20 @@ scanRouter.post('/run', async (req, res) => {
     reportText += `• <b>전략 B (우량주 눌림추매):</b> <b>${dipBuyOpportunities.length}건</b>\n`;
     reportText += `• <b>고위험 종목:</b> ${result.evaluations.filter((e) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
 
+    const formatPrice = (ticker: string, price: number) => {
+      const isKr = detectMarketRegion(ticker) === 'KR';
+      return isKr ? `₩${Math.round(price).toLocaleString('ko-KR')}` : `$${price.toFixed(2)}`;
+    };
+
     // 1. 전략 A 섹션
     reportText += `<b>🎯 전략 A: 모멘텀 & 추세돌파 포착 종목</b>\n`;
     if (actionableSignals.length > 0) {
       actionableSignals.slice(0, 5).forEach((sig, idx) => {
         const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
         const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-        reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
-        reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (전일대비: ${arrow} ${changeStr})\n`;
+        const stockTitle = formatTelegramStockName(sig.ticker, sig.name);
+        reportText += `${idx + 1}. ${stockTitle}\n`;
+        reportText += `   - 현재가: ${formatPrice(sig.ticker, sig.price ?? 0)} (전일대비: ${arrow} ${changeStr})\n`;
         reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
         reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 팩터 점수 우수'}\n\n`;
       });
@@ -105,8 +112,9 @@ scanRouter.post('/run', async (req, res) => {
         const evalData = dip.dip_evaluation!;
         const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
         const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
-        reportText += `${idx + 1}. <b>${dip.ticker}</b> (${dip.name})\n`;
-        reportText += `   - 현재가: $${(dip.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+        const stockTitle = formatTelegramStockName(dip.ticker, dip.name);
+        reportText += `${idx + 1}. ${stockTitle}\n`;
+        reportText += `   - 현재가: ${formatPrice(dip.ticker, dip.price ?? 0)} (${arrow} ${changeStr})\n`;
         reportText += `   - 적합도: <b>💎 ${evalData.suitability.tierLabel}</b> (${evalData.suitability.score}점)\n`;
         reportText += `   - 눌림타이밍: <b>${evalData.timing.score}점</b> (RSI ${evalData.timing.rsi.toFixed(1)}, ${evalData.timing.drawdownLabel})\n`;
         reportText += `   - 실행신호: <code>${evalData.actionSignal}</code> (${evalData.signalLabel})\n`;

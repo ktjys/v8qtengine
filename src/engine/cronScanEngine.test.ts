@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { executeCronScan } from './cronScanEngine';
+import { scanService } from '../pipeline/scanService';
 
 describe('cronScanEngine — 주말/휴장일 가드 및 시장 격리', () => {
   it('일요일 또는 토요일에 자동 스케줄러가 KR 시장 스캔을 호출하면 휴장일 가드로 안전하게 스킵된다', async () => {
@@ -28,7 +29,15 @@ describe('cronScanEngine — 주말/휴장일 가드 및 시장 격리', () => {
     vi.useFakeTimers();
     vi.setSystemTime(sundayDate);
 
-    // Mock scanService to avoid actual network/DB execution in test
+    // Mock scanService to avoid actual slow network execution in test
+    vi.spyOn(scanService, 'executeScan').mockResolvedValueOnce({
+      evaluations: [],
+      watchlist: [],
+      newSignals: [],
+      allSignals: [],
+      runLog: {} as any,
+    });
+
     const resultPromise = executeCronScan({
       market: 'KR',
       triggeredBy: 'ManualUIOrTest',

@@ -11,7 +11,7 @@ import { MacroEarningsEngine } from './macroEarningsEngine';
 import { PortfolioEngine } from './portfolioEngine';
 import { ExitSignalEngine } from './exitSignalEngine';
 import { FullTickerEvaluation, ScanRunLog, AlertNotificationLog } from '../types/v8';
-import { detectMarketRegion } from '../utils/marketUtils';
+import { detectMarketRegion, formatTelegramStockName, formatStockDisplayName } from '../utils/marketUtils';
 
 // In-memory cache of the latest cron scan execution (useful for async status polling)
 let lastCronScanResult: CronScanResult | null = null;
@@ -332,12 +332,11 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       actionable.slice(0, 3).forEach((sig, idx) => {
         const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
         const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-        const safeName = escapeTelegramHtml(sig.name);
-        const safeTicker = escapeTelegramHtml(sig.ticker);
+        const stockTitle = formatTelegramStockName(sig.ticker, sig.name);
         const safeDecision = escapeTelegramHtml(sig.decision?.decision || 'BUY');
         const safeReason = escapeTelegramHtml(sig.decision?.reason || '기술적 반등 및 모멘텀 지속');
 
-        reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
+        reportText += `${idx + 1}. ${stockTitle}\n`;
         reportText += `   - 현재가: ${formatPrice(sig.ticker, sig.price ?? 0)} (${arrow} ${changeStr})\n`;
         reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${safeDecision}</code>\n`;
         reportText += `   - 근거: ${safeReason}\n`;
@@ -353,10 +352,9 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       dipOpportunities.slice(0, 3).forEach((dip, idx) => {
         const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
         const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
-        const safeName = escapeTelegramHtml(dip.name);
-        const safeTicker = escapeTelegramHtml(dip.ticker);
+        const stockTitle = formatTelegramStockName(dip.ticker, dip.name);
 
-        reportText += `${idx + 1}. <b>${safeTicker}</b> (${safeName})\n`;
+        reportText += `${idx + 1}. ${stockTitle}\n`;
         reportText += `   - 현재가: ${formatPrice(dip.ticker, dip.price)} (${arrow} ${changeStr})\n`;
         reportText += `   - 우량적합도: <b>${dip.suitability.tierLabel}</b> (${dip.suitability.score}점)\n`;
         reportText += `   - 눌림타이밍: <b>${dip.timing.score}점</b> (RSI ${dip.timing.rsi.toFixed(1)}, ${dip.timing.drawdownLabel})\n`;
@@ -377,14 +375,14 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       if (actionableExits.length > 0) {
         reportText += `🚨 <b>[통합 매도 & 포지션 청산 권고]</b>\n`;
         actionableExits.slice(0, 3).forEach((exit, idx) => {
-          const safeTicker = escapeTelegramHtml(exit.ticker);
+          const stockTitle = formatTelegramStockName(exit.ticker, exit.name);
           const safeHeadline = escapeTelegramHtml(exit.headline);
           const safeAction = escapeTelegramHtml(exit.recommendedAction);
           const retText = exit.returnSinceEntryPct !== undefined
             ? ` (진입대비 ${exit.returnSinceEntryPct >= 0 ? '+' : ''}${exit.returnSinceEntryPct.toFixed(1)}%)`
             : '';
 
-          reportText += `${idx + 1}. <b>${safeTicker}</b>: ${safeHeadline}${retText}\n`;
+          reportText += `${idx + 1}. ${stockTitle}: ${safeHeadline}${retText}\n`;
           reportText += `   └ 💡 <b>실행 권고:</b> ${safeAction}\n`;
         });
         reportText += `\n`;
@@ -408,10 +406,10 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
           reportText += `• ⚠️ ${escapeTelegramHtml(portState.maxConcentrationAlert)}\n`;
         }
         if (rebalanceTrims.length > 0) {
-          reportText += `• <b>비중축소(Trim):</b> ${rebalanceTrims.map((p) => `${p.ticker}(${p.recommendedSharesDelta}주)`).join(', ')}\n`;
+          reportText += `• <b>비중축소(Trim):</b> ${rebalanceTrims.map((p) => `${formatStockDisplayName(p.ticker, p.companyName)}(${p.recommendedSharesDelta}주)`).join(', ')}\n`;
         }
         if (rebalanceAdds.length > 0) {
-          reportText += `• <b>비중확대(Add):</b> ${rebalanceAdds.map((p) => `${p.ticker}(+${p.recommendedSharesDelta}주)`).join(', ')}\n`;
+          reportText += `• <b>비중확대(Add):</b> ${rebalanceAdds.map((p) => `${formatStockDisplayName(p.ticker, p.companyName)}(+${p.recommendedSharesDelta}주)`).join(', ')}\n`;
         }
         reportText += `\n`;
       }

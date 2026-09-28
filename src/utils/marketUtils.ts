@@ -342,3 +342,50 @@ export function getStockDisplayInfo(ticker: string, rawName?: string): {
   return { primaryName, subCode, isKorean: isKr };
 }
 
+/**
+ * 텍스트 기반(텔레그램, 콘솔, 일반 문자열)에서 '종목명 우선'으로 표기하는 문자열을 반환합니다.
+ * 예: '삼성전자 (005930)', 'SK하이닉스 (000660)', '엔비디아 (NVDA)'
+ */
+export function formatStockDisplayName(ticker: string, rawName?: string): string {
+  if (!ticker) return '';
+  const { primaryName, subCode } = getStockDisplayInfo(ticker, rawName);
+  let cleanName = primaryName || rawName || ticker;
+  // subCode 중복 괄호 제거 (예: '엔비디아 (NVIDIA)' -> '엔비디아')
+  cleanName = cleanName.replace(new RegExp(`\\s*\\(${subCode}\\)`, 'i'), '').trim();
+
+  if (!cleanName || cleanName === subCode) {
+    return subCode;
+  }
+  return `${cleanName} (${subCode})`;
+}
+
+/**
+ * 텔레그램 HTML 메시지용 종목명 강조 포맷터
+ * 종목명을 굵게(<b>) 표시하고 종목코드는 괄호로 보조 표기합니다.
+ *
+ * 예시:
+ * - <b>삼성전자</b> (005930)
+ * - <b>SK하이닉스</b> (000660)
+ * - <b>엔비디아</b> (NVDA)
+ */
+export function formatTelegramStockName(ticker: string, rawName?: string): string {
+  if (!ticker) return '';
+  const { primaryName, subCode } = getStockDisplayInfo(ticker, rawName);
+  let cleanName = primaryName || rawName || ticker;
+  cleanName = cleanName.replace(new RegExp(`\\s*\\(${subCode}\\)`, 'i'), '').trim();
+
+  const safeName = cleanName
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const safeCode = subCode
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  if (!cleanName || cleanName === subCode) {
+    return `<b>${safeCode}</b>`;
+  }
+  return `<b>${safeName}</b> (${safeCode})`;
+}
+
