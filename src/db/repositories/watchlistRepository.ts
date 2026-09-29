@@ -1,8 +1,8 @@
 import { dbClient } from '../supabaseClient';
 import { WatchlistItem } from '../../types/v8';
 import { assetRepository } from './assetRepository';
-import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../../constants/limits';
-import { getStockDisplayInfo } from '../../utils/marketUtils';
+import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from '../../constants/limits';
+import { getStockDisplayInfo, detectMarketRegion } from '../../utils/marketUtils';
 
 export class WatchlistRepository {
   async getAll(): Promise<WatchlistItem[]> {
@@ -30,6 +30,7 @@ export class WatchlistRepository {
               is_active: row.is_active ?? true,
               memo: row.memo || '감시 종목',
               created_at: row.created_at || new Date().toISOString(),
+              market_region: row.market_region || detectMarketRegion(row.ticker),
             };
           });
 
@@ -71,6 +72,7 @@ export class WatchlistRepository {
             is_active: data.is_active ?? true,
             memo: data.memo || '감시 종목',
             created_at: data.created_at || new Date().toISOString(),
+            market_region: data.market_region || detectMarketRegion(data.ticker),
           };
           dbClient.watchlist.set(clean, item);
           return item;
@@ -83,15 +85,17 @@ export class WatchlistRepository {
     return dbClient.watchlist.get(clean) || null;
   }
 
-  async add(item: { ticker: string; name?: string; memo?: string; is_active?: boolean }): Promise<WatchlistItem> {
+  async add(item: { ticker: string; name?: string; memo?: string; is_active?: boolean; market_region?: 'US' | 'KR' }): Promise<WatchlistItem> {
     const clean = item.ticker.toUpperCase().trim();
     const existing = dbClient.watchlist.get(clean);
 
-    // Hard limit enforcement: If not already in watchlist, verify current count < MAX_WATCHLIST_CAPACITY
+    const marketRegion = item.market_region || detectMarketRegion(clean);
+
     if (!existing) {
       const currentList = await this.getAll();
-      if (currentList.length >= MAX_WATCHLIST_CAPACITY) {
-        throw new Error(WATCHLIST_CAPACITY_ERROR_MESSAGE);
+      const marketCount = currentList.filter(w => (w.market_region || detectMarketRegion(w.ticker)) === marketRegion).length;
+      if (marketCount >= MAX_WATCHLIST_CAPACITY_PER_MARKET) {
+        throw new Error(getWatchlistCapacityErrorMessage(marketRegion));
       }
     }
 
@@ -146,6 +150,7 @@ export class WatchlistRepository {
       is_active: true,
       memo: item.memo || '사용자 추가 감시 종목',
       created_at: now,
+      market_region: marketRegion,
     };
 
     if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
@@ -156,6 +161,7 @@ export class WatchlistRepository {
             ticker: clean,
             is_active: true,
             memo: newItem.memo,
+            market_region: marketRegion,
           }, { onConflict: 'ticker' });
 
         if (error) {
@@ -192,6 +198,7 @@ export class WatchlistRepository {
           .update({
             is_active: updated.is_active,
             memo: updated.memo || null,
+            market_region: updated.market_region || null,
           })
           .eq('ticker', clean);
 

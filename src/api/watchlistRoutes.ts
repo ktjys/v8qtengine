@@ -2,9 +2,9 @@ import { Router } from 'express';
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { evaluationService } from '../pipeline/evaluationService';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
-import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
+import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from '../constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from '../utils/stockSearchService';
-import { getStockDisplayInfo } from '../utils/marketUtils';
+import { getStockDisplayInfo, detectMarketRegion } from '../utils/marketUtils';
 
 export const watchlistRouter = Router();
 
@@ -19,9 +19,11 @@ watchlistRouter.get('/search', async (req, res) => {
     // 1. Authoritative local stock master database search
     const localMatches = searchStockMaster(q, 10);
 
-    // 2. Fallback to Yahoo Finance search if fewer than 5 results
+    // 2. Yahoo Finance search fallback — also run for Korean text queries,
+    //    since Korean ETF names are not fully covered by the local master DB
+    const isKoreanQuery = /[가-힣]/.test(q);
     let yahooMatches: StockInfo[] = [];
-    if (localMatches.length < 5) {
+    if (localMatches.length < 5 || isKoreanQuery) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2500);
@@ -39,7 +41,10 @@ watchlistRouter.get('/search', async (req, res) => {
           yahooMatches = rawQuotes
             .filter((quote: any) => quote.symbol && !quote.symbol.includes('='))
             .map((quote: any) => {
-              const sym = quote.symbol.toUpperCase();
+              let sym = quote.symbol.toUpperCase();
+              if (/^\d{6}$/.test(sym)) {
+                sym = `${sym}.KS`;
+              }
               const isKr = sym.endsWith('.KS') || sym.endsWith('.KQ');
               const display = getStockDisplayInfo(sym, quote.shortname || quote.longname);
               return {
@@ -55,10 +60,10 @@ watchlistRouter.get('/search', async (req, res) => {
       } catch {}
     }
 
-    // Deduplicate
     const seen = new Set<string>();
     const combined: StockInfo[] = [];
-    for (const item of [...localMatches, ...yahooMatches]) {
+    const rank = (market: string) => (isKoreanQuery ? (market === 'KR' ? 0 : 1) : 0);
+    for (const item of [...localMatches, ...yahooMatches].sort((a, b) => rank(a.market) - rank(b.market))) {
       const key = item.ticker.toUpperCase();
       if (!seen.has(key)) {
         seen.add(key);
@@ -242,10 +247,10 @@ watchlistRouter.post('/', async (req, res) => {
       }
     }
 
-    if (validCandidates.length === 0) {
+if (validCandidates.length === 0) {
       return res.status(400).json({
         success: false,
-        error: rejected.length > 0 
+        error: rejected.length > 0
           ? `입력하신 종목(${rejected.map(r => `${r.ticker}: ${r.reason}`).join(', ')})은 유효하지 않아 제외되었습니다.`
           : '입력하신 모든 종목이 이미 워치리스트에 등록되어 있습니다.',
         already_exists: alreadyExists,
@@ -253,32 +258,47 @@ watchlistRouter.post('/', async (req, res) => {
       });
     }
 
-    // Capacity Check
-    const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - existingList.length);
-    if (remainingSlots <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: WATCHLIST_CAPACITY_ERROR_MESSAGE,
-        current_count: existingList.length,
-        max_capacity: MAX_WATCHLIST_CAPACITY,
-      });
+    const candidatesByMarket = new Map<'US' | 'KR', typeof validCandidates>();
+    for (const candidate of validCandidates) {
+      const market = detectMarketRegion(candidate.ticker);
+      if (!candidatesByMarket.has(market)) {
+        candidatesByMarket.set(market, []);
+      }
+      candidatesByMarket.get(market)!.push(candidate);
     }
 
-    const toAdd = validCandidates.slice(0, remainingSlots);
-    const capacityOverflow = validCandidates.slice(remainingSlots);
-    for (const overflowItem of capacityOverflow) {
-      rejected.push({ ticker: overflowItem.ticker, reason: '워치리스트 슬롯 한도(최대 30개) 초과' });
+    const toAdd: typeof validCandidates = [];
+    for (const [market, marketCandidates] of candidatesByMarket) {
+      const marketList = existingList.filter(w => (w.market_region || detectMarketRegion(w.ticker)) === market);
+      const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - marketList.length);
+      const marketToAdd = marketCandidates.slice(0, remainingSlots);
+      const marketOverflow = marketCandidates.slice(remainingSlots);
+      for (const overflowItem of marketOverflow) {
+        rejected.push({ ticker: overflowItem.ticker, reason: getWatchlistCapacityErrorMessage(market) });
+      }
+      toAdd.push(...marketToAdd);
+    }
+
+    if (toAdd.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: rejected.map(r => `${r.ticker}: ${r.reason}`).join(', '),
+        already_exists: alreadyExists,
+        rejected,
+      });
     }
 
     const addedItems: any[] = [];
     const newEvaluations: any[] = [];
 
     for (const item of toAdd) {
+      const market = detectMarketRegion(item.ticker);
       const added = await watchlistRepository.add({
         ticker: item.ticker,
         name: item.name,
         memo: memo || '사용자 추가 감시 종목',
         is_active: true,
+        market_region: market,
       });
       addedItems.push(added);
 

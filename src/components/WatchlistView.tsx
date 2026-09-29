@@ -45,7 +45,7 @@ import {
 } from '../utils/stockSearchService';
 import { StockDisplayBadge } from './StockDisplayBadge';
 import { SortableHeader } from './SortableHeader';
-import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
+import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from '../constants/limits';
 import { DipBuyMatrix } from './DipBuyMatrix';
 import { StrategyOptimizationBanner } from './StrategyOptimizationBanner';
 import { StrategyOptimizationModal } from './StrategyOptimizationModal';
@@ -286,10 +286,20 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     return sortOrder === 'desc' ? -diff : diff;
   });
 
-  const currentCount = (evaluations || []).length;
-  const isCapacityReached = currentCount >= MAX_WATCHLIST_CAPACITY;
-  const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - currentCount);
-  const capacityPercent = Math.min(100, Math.round((currentCount / MAX_WATCHLIST_CAPACITY) * 100));
+  const marketCounts = useMemo(() => {
+    const counts = { US: 0, KR: 0 } as Record<MarketRegion, number>;
+    for (const item of evaluations || []) {
+      const market = item.market_region || detectMarketRegion(item.ticker);
+      counts[market]++;
+    }
+    return counts;
+  }, [evaluations]);
+
+  const currentMarketCount = marketCounts[activeMarket] || 0;
+  const isCapacityReached = currentMarketCount >= MAX_WATCHLIST_CAPACITY_PER_MARKET;
+  const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - currentMarketCount);
+  const capacityPercent = Math.min(100, Math.round((currentMarketCount / MAX_WATCHLIST_CAPACITY_PER_MARKET) * 100));
+  const totalCount = (evaluations || []).length;
 
   const existingTickerSet = useMemo(() => {
     return new Set((evaluations || []).map((e) => e.ticker.toUpperCase()));
@@ -338,11 +348,13 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   }, [searchTerm, filtered.length, existingTickerSet]);
 
   const handleAddDirectStock = (stockTicker: string, stockName?: string) => {
-    if (remainingSlots <= 0) {
-      alert(WATCHLIST_CAPACITY_ERROR_MESSAGE);
+    const clean = stockTicker.toUpperCase().trim();
+    const market = detectMarketRegion(clean);
+    const marketRemainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - (marketCounts[market] || 0));
+    if (marketRemainingSlots <= 0) {
+      alert(getWatchlistCapacityErrorMessage(market));
       return;
     }
-    const clean = stockTicker.toUpperCase().trim();
     if (existingTickerSet.has(clean)) {
       alert(`'${stockName || clean}'은(는) 이미 워치리스트에 등록되어 있습니다.`);
       return;
@@ -420,10 +432,26 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       return;
     }
 
-    if (remainingSlots <= 0) {
-      alert(WATCHLIST_CAPACITY_ERROR_MESSAGE);
-      return;
+    const tickersByMarket = new Map<MarketRegion, typeof parsedTickers.valid>();
+    for (const v of parsedTickers.valid) {
+      const market = detectMarketRegion(v.ticker);
+      if (!tickersByMarket.has(market)) {
+        tickersByMarket.set(market, []);
+      }
+      tickersByMarket.get(market)!.push(v);
     }
+
+    let hasCapacityError = false;
+    for (const [market, marketTickers] of tickersByMarket) {
+      const marketRemainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - (marketCounts[market] || 0));
+      if (marketTickers.length > marketRemainingSlots) {
+        alert(getWatchlistCapacityErrorMessage(market));
+        hasCapacityError = true;
+        break;
+      }
+    }
+
+    if (hasCapacityError) return;
 
     // Call onAddTicker with the comma-separated list of valid tickers
     const tickersToAdd = parsedTickers.valid.map((v) => v.ticker).join(',');
@@ -496,16 +524,16 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono border ${
                   isCapacityReached
                     ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                    : currentCount >= 25
+                    : currentMarketCount >= 25
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                     : 'bg-slate-800/90 text-slate-300 border-slate-700'
                 }`}
-                title="실시간 주가 수집 및 4대 팩터 스캔 엔진의 성능을 최적으로 유지하기 위해 제공되는 관심종목 관리 슬롯입니다."
+                title="실시간 주가 수집 및 4대 팩터 스캔 엔진의 성능을 최적으로 유지하기 위해 제공되는 관심종목 관리 슬롯입니다. (시장별 독립 30개 제한)"
               >
                 <span className="text-[11px] text-slate-400 font-sans">등록 슬롯:</span>
-                <span className="font-bold text-cyan-400">{currentCount}</span>
+                <span className="font-bold text-cyan-400">{currentMarketCount}</span>
                 <span className="text-slate-500">/</span>
-                <span className="text-slate-400">{MAX_WATCHLIST_CAPACITY}개</span>
+                <span className="text-slate-400">{MAX_WATCHLIST_CAPACITY_PER_MARKET}개</span>
                 <span className="border-l border-slate-700 pl-1.5 ml-0.5 text-[11px] font-sans">
                   {isCapacityReached ? (
                     <span className="text-rose-400 font-semibold">가득 참</span>
@@ -513,12 +541,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     <span className="text-emerald-400 font-medium">+{remainingSlots}개 가능</span>
                   )}
                 </span>
+                <span className="border-l border-slate-700 pl-1.5 ml-0.5 text-[11px] font-sans text-slate-500">
+                  (전체: {totalCount}개 · US: {marketCounts.US || 0}개 · KR: {marketCounts.KR || 0}개)
+                </span>
               </div>
             </div>
             <p className="text-xs text-slate-400 mt-1">
               관심종목에 등록된 전종목에 대해 4대 팩터(기술/모멘텀/펀더멘털/밸류)와 독립 리스크를 실시간 산출합니다.
               <span className="text-slate-500 ml-1 hidden sm:inline">
-                (최대 {MAX_WATCHLIST_CAPACITY}개 슬롯 · 잔여 {remainingSlots}개)
+                (시장별 최대 {MAX_WATCHLIST_CAPACITY_PER_MARKET}개 슬롯 · {activeMarket} 잔여 {remainingSlots}개 · 전체 {totalCount}개)
               </span>
             </p>
           </div>
@@ -587,8 +618,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 }`}
                 title={
                   isCapacityReached
-                    ? `워치리스트 등록 한도(${MAX_WATCHLIST_CAPACITY}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
-                    : `워치리스트에 새 종목 추가 (현재 ${currentCount}/${MAX_WATCHLIST_CAPACITY}개 슬롯 사용 중, ${remainingSlots}개 추가 가능)`
+                    ? `현재 시장(${activeMarket}) 워치리스트 등록 한도(${MAX_WATCHLIST_CAPACITY_PER_MARKET}개)에 도달했습니다. 추가하려면 기존 종목을 삭제하세요.`
+                    : `워치리스트에 새 종목 추가 (${activeMarket} 시장: 현재 ${currentMarketCount}/${MAX_WATCHLIST_CAPACITY_PER_MARKET}개 슬롯 사용 중, ${remainingSlots}개 추가 가능)`
                 }
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -795,6 +826,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                       ))}
                     </div>
                   </div>
+                )}
+                {evaluations.length === 0 && (
+                  <p className="text-xs text-slate-500 pt-2">
+                    {activeMarket === 'KR' ? '국내 추천 종목(LG에너지솔루션, 삼성전자, SK하이닉스 등)' : '미국 추천 종목(AAPL, NVDA, TSLA 등)'}을 추가해보세요. (시장별 최대 {MAX_WATCHLIST_CAPACITY_PER_MARKET}개)
+                  </p>
                 )}
               </div>
             ) : (
@@ -1038,7 +1074,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                       </div>
                       <p className="text-xs text-slate-500">
                         {evaluations.length === 0
-                          ? '상단의 [+ 종목 추가] 버튼을 누르고 국내 추천 종목(LG에너지솔루션, 삼성전자, SK하이닉스 등)을 바로 추가해보세요.'
+                          ? `상단의 [+ 종목 추가] 버튼을 누르고 ${activeMarket === 'KR' ? '국내 추천 종목(LG에너지솔루션, 삼성전자, SK하이닉스 등)' : '미국 추천 종목(AAPL, NVDA, TSLA 등)'}을 바로 추가해보세요. (시장별 최대 ${MAX_WATCHLIST_CAPACITY_PER_MARKET}개)`
                           : '필터 조건을 변경하거나 검색어를 지워보세요.'}
                       </p>
 
@@ -1319,12 +1355,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   className={`text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full border ${
                     isCapacityReached
                       ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                      : currentCount >= 25
+                      : currentMarketCount >= 25
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                       : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
                   }`}
                 >
-                  슬롯: {currentCount} / {MAX_WATCHLIST_CAPACITY}개 ({isCapacityReached ? '가득 참' : `${remainingSlots}개 가능`})
+                  {activeMarket} 슬롯: {currentMarketCount} / {MAX_WATCHLIST_CAPACITY_PER_MARKET}개 ({isCapacityReached ? '가득 참' : `${remainingSlots}개 가능`})
                 </span>
                 <button
                   onClick={() => setShowAddModal(false)}
@@ -1341,20 +1377,20 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
                 <div>
                   <p className="font-semibold text-rose-200">
-                    워치리스트 등록 슬롯({MAX_WATCHLIST_CAPACITY}개)이 모두 찼습니다.
+                    {activeMarket}장 워치리스트 등록 슬롯({MAX_WATCHLIST_CAPACITY_PER_MARKET}개)이 모두 찼습니다.
                   </p>
                   <p className="text-[11px] text-rose-300/90 mt-0.5 leading-relaxed">
-                    실시간 스캔 속도 및 Yahoo Finance API 안정성을 유지하기 위해 워치리스트는 최대 {MAX_WATCHLIST_CAPACITY}개까지 관리됩니다. 새 종목을 등록하시려면 기존 종목을 삭제해 주세요.
+                    실시간 스캔 속도 및 Yahoo Finance API 안정성을 유지하기 위해 시장별로 최대 {MAX_WATCHLIST_CAPACITY_PER_MARKET}개까지 관리됩니다. 새 종목을 등록하시려면 기존 종목을 삭제해 주세요.
                   </p>
                 </div>
               </div>
             ) : (
               <div className="p-2.5 bg-slate-950/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs text-slate-400">
-                <span>등록 가능 슬롯: <b className="text-cyan-400 font-mono">{remainingSlots}개</b> 남음</span>
+                <span>{activeMarket}장 등록 가능 슬롯: <b className="text-cyan-400 font-mono">{remainingSlots}개</b> 남음</span>
                 <div className="w-28 bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={`h-full transition-all ${
-                      currentCount >= 25 ? 'bg-amber-400' : 'bg-cyan-500'
+                      currentMarketCount >= 25 ? 'bg-amber-400' : 'bg-cyan-500'
                     }`}
                     style={{ width: `${capacityPercent}%` }}
                   />

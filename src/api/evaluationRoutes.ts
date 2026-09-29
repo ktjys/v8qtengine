@@ -47,8 +47,7 @@ evaluationRouter.post('/recalculate', async (req, res) => {
     const allAssets = await assetRepository.getAll();
     
     if (allAssets.length === 0) {
-      // Seed fallback
-      const fallbackEvals = seedResult?.evaluations || [];
+      const fallbackEvals = runV8PipelineOnSeedData().evaluations;
       return res.json({
         ...createSuccessResponse(fallbackEvals, {
           message: '기본 유니버스 퀀트 평가가 완료되었습니다.',

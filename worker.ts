@@ -17,8 +17,9 @@ import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { telegramNotifier } from './src/notification/telegramNotifier';
-import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './src/constants/limits';
+import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from './src/constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from './src/utils/stockSearchService';
+import { detectMarketRegion } from './src/utils/marketUtils';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -315,12 +316,12 @@ export default {
             }
 
             // Quick Yahoo search validation
-            let tickerName = candidateTickers.length === 1 && customName ? customName : ticker;
+            let tickerName = resolvedCandidates.length === 1 && customName ? customName : item.ticker;
             try {
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 2500);
               const searchRes = await fetch(
-                `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&quotesCount=3&newsCount=0`,
+                `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(item.ticker)}&quotesCount=3&newsCount=0`,
                 {
                   signal: controller.signal,
                   headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -331,19 +332,19 @@ export default {
                 const data: any = await searchRes.json();
                 const quotes = data.quotes || [];
                 if (quotes.length === 0) {
-                  rejected.push({ ticker, reason: '시장에 상장되지 않은 종목 코드' });
+                  rejected.push({ ticker: item.ticker, reason: '시장에 상장되지 않은 종목 코드' });
                   continue;
                 }
-                const exactMatch = quotes.find((q: any) => (q.symbol || '').toUpperCase() === ticker);
+                const exactMatch = quotes.find((q: any) => (q.symbol || '').toUpperCase() === item.ticker);
                 if (exactMatch) {
-                  tickerName = exactMatch.shortname || exactMatch.longname || ticker;
+                  tickerName = exactMatch.shortname || exactMatch.longname || item.ticker;
                 }
               }
             } catch (searchErr) {
-              console.warn('[Worker] Yahoo validation fallback for', ticker);
+              console.warn('[Worker] Yahoo validation fallback for', item.ticker);
             }
 
-            validCandidates.push({ ticker, name: tickerName });
+            validCandidates.push({ ticker: item.ticker, name: tickerName });
           }
 
           if (validCandidates.length === 0) {
@@ -357,21 +358,38 @@ export default {
             }, 400);
           }
 
-          // Hard Limit Enforcement (Max 30 items)
-          const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - existingList.length);
-          if (remainingSlots <= 0) {
-            return jsonResponse({
-              success: false,
-              error: WATCHLIST_CAPACITY_ERROR_MESSAGE,
-              current_count: existingList.length,
-              max_capacity: MAX_WATCHLIST_CAPACITY,
-            }, 400);
+          const candidatesByMarket = new Map<'US' | 'KR', typeof validCandidates>();
+          for (const candidate of validCandidates) {
+            const market = detectMarketRegion(candidate.ticker);
+            if (!candidatesByMarket.has(market)) {
+              candidatesByMarket.set(market, []);
+            }
+            candidatesByMarket.get(market)!.push(candidate);
           }
 
-          const toAdd = validCandidates.slice(0, remainingSlots);
-          const capacityOverflow = validCandidates.slice(remainingSlots);
-          for (const overflowItem of capacityOverflow) {
-            rejected.push({ ticker: overflowItem.ticker, reason: '워치리스트 슬롯 한도(최대 30개) 초과' });
+          const toAdd: typeof validCandidates = [];
+          for (const [market, marketCandidates] of candidatesByMarket) {
+            const marketList = existingList.filter(w => (w.market_region || detectMarketRegion(w.ticker)) === market);
+            const marketRemainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - marketList.length);
+            if (marketRemainingSlots === 0) {
+              rejected.push({ ticker: marketCandidates[0].ticker, reason: getWatchlistCapacityErrorMessage(market) });
+              continue;
+            }
+            const marketToAdd = marketCandidates.slice(0, marketRemainingSlots);
+            const marketOverflow = marketCandidates.slice(marketRemainingSlots);
+            for (const overflowItem of marketOverflow) {
+              rejected.push({ ticker: overflowItem.ticker, reason: getWatchlistCapacityErrorMessage(market) });
+            }
+            toAdd.push(...marketToAdd);
+          }
+
+          if (toAdd.length === 0) {
+            return jsonResponse({
+              success: false,
+              error: rejected.map(r => `${r.ticker}: ${r.reason}`).join(', '),
+              already_exists: alreadyExists,
+              rejected,
+            }, 400);
           }
 
           const addedItems: any[] = [];
@@ -390,6 +408,7 @@ export default {
               name: item.name,
               memo: memo || '신규 추가 종목',
               is_active: true,
+              market_region: detectMarketRegion(item.ticker),
             });
             addedItems.push(added);
 

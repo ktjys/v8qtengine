@@ -27,7 +27,6 @@ import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 import { DatabaseHealthModal } from './components/DatabaseHealthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './constants/limits';
 import { calculateBacktestMetrics } from './engine/backtestEngine';
 import {
   DEFAULT_STRATEGY_CONFIG,
