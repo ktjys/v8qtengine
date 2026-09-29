@@ -4,6 +4,7 @@ import { evaluationService } from '../pipeline/evaluationService';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from '../utils/stockSearchService';
+import { getStockDisplayInfo } from '../utils/marketUtils';
 
 export const watchlistRouter = Router();
 
@@ -18,12 +19,12 @@ watchlistRouter.get('/search', async (req, res) => {
     // 1. Authoritative local stock master database search
     const localMatches = searchStockMaster(q, 10);
 
-    // 2. Fallback to Yahoo Finance search if fewer than 5 results and query has alphanumeric chars
+    // 2. Fallback to Yahoo Finance search if fewer than 5 results
     let yahooMatches: StockInfo[] = [];
-    if (localMatches.length < 5 && /^[a-zA-Z0-9\s.-]+$/.test(q)) {
+    if (localMatches.length < 5) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
         const yRes = await fetch(
           `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=6&newsCount=0`,
           {
@@ -34,16 +35,22 @@ watchlistRouter.get('/search', async (req, res) => {
         clearTimeout(timeoutId);
         if (yRes.ok) {
           const yData = (await yRes.json()) as any;
-          const quotes = yData.quotes || [];
-          yahooMatches = quotes
+          const rawQuotes = yData.quotes || yData.finance?.result?.[0]?.quotes || [];
+          yahooMatches = rawQuotes
             .filter((quote: any) => quote.symbol && !quote.symbol.includes('='))
-            .map((quote: any) => ({
-              ticker: quote.symbol.toUpperCase(),
-              name: quote.shortname || quote.longname || quote.symbol,
-              englishName: quote.longname || quote.shortname,
-              market: quote.symbol.endsWith('.KS') || quote.symbol.endsWith('.KQ') ? 'KR' : 'US',
-              exchange: quote.exchange,
-            }));
+            .map((quote: any) => {
+              const sym = quote.symbol.toUpperCase();
+              const isKr = sym.endsWith('.KS') || sym.endsWith('.KQ');
+              const display = getStockDisplayInfo(sym, quote.shortname || quote.longname);
+              return {
+                ticker: sym,
+                name: display.primaryName || quote.shortname || quote.longname || sym,
+                englishName: quote.longname || quote.shortname || sym,
+                market: (isKr ? 'KR' : 'US') as 'KR' | 'US',
+                exchange: quote.exchange || (isKr ? (sym.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI') : 'US'),
+                sector: quote.sector || quote.industry || (isKr ? '국내 상장 종목' : '해외 주식'),
+              };
+            });
         }
       } catch {}
     }

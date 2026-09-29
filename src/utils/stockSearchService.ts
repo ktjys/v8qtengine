@@ -1,15 +1,11 @@
-/**
- * Stock Search & Ticker Resolution Engine
- * - 한글 종목명, 영문 종목명, 약칭/별칭, 6자리 종목코드, 표준 티커 심볼을 모두 지원하는 검색 및 변환 엔진
- * - 국내장(KOSPI, KOSDAQ) 및 미국장(S&P500, NASDAQ) 주요 전종목 완벽 커버
- */
+import { getStockDisplayInfo } from './marketUtils';
 
 export interface StockInfo {
   ticker: string;          // e.g. '373220.KS', '005930.KS', 'NVDA'
   name: string;            // e.g. 'LG에너지솔루션', '삼성전자', '엔비디아'
   englishName?: string;    // e.g. 'LG Energy Solution', 'Samsung Electronics', 'NVIDIA Corp'
   market: 'KR' | 'US';
-  exchange?: 'KOSPI' | 'KOSDAQ' | 'NASDAQ' | 'NYSE' | 'AMEX' | 'ETF';
+  exchange?: 'KOSPI' | 'KOSDAQ' | 'NASDAQ' | 'NYSE' | 'AMEX' | 'ETF' | string;
   aliases?: string[];      // e.g. ['엘지에너지솔루션', 'lg엔솔', '엔솔']
   sector?: string;
 }
@@ -307,21 +303,21 @@ export const STOCK_MASTER_DATABASE: StockInfo[] = [
   },
   {
     ticker: '012450.KS',
-    name: '한화시스템',
-    englishName: 'Hanwha Systems',
-    market: 'KR',
-    exchange: 'KOSPI',
-    aliases: ['한화시스템', '012450', '012450.ks'],
-    sector: '방산 / IT',
-  },
-  {
-    ticker: '092400.KS',
     name: '한화에어로스페이스',
     englishName: 'Hanwha Aerospace',
     market: 'KR',
     exchange: 'KOSPI',
-    aliases: ['한화에어로스페이스', '한화에어로', '092400', '092400.ks'],
+    aliases: ['한화에어로스페이스', '한화에어로', '012450', '012450.ks', '092400', '092400.ks'],
     sector: '항공우주 / 방산',
+  },
+  {
+    ticker: '272210.KS',
+    name: '한화시스템',
+    englishName: 'Hanwha Systems',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['한화시스템', '272210', '272210.ks'],
+    sector: '방산 / IT',
   },
   {
     ticker: '009540.KS',
@@ -1096,6 +1092,420 @@ export const STOCK_MASTER_DATABASE: StockInfo[] = [
     aliases: ['tqqq', '티큐', '티큐큐큐', '나스닥3배'],
     sector: '나스닥 3X 레버리지',
   },
+  {
+    ticker: '003230.KS',
+    name: '삼양식품',
+    englishName: 'Samyang Foods',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['삼양식품', '불닭', '003230', '003230.ks'],
+    sector: '음식료 / K-푸드',
+  },
+  {
+    ticker: '196170.KQ',
+    name: '알테오젠',
+    englishName: 'Alteogen',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['알테오젠', '196170', '196170.kq'],
+    sector: '바이오 / 플랫폼',
+  },
+  {
+    ticker: '259960.KS',
+    name: '크래프톤',
+    englishName: 'Krafton',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['크래프톤', '배그', '259960', '259960.ks'],
+    sector: '게임 / 소프트웨어',
+  },
+  {
+    ticker: '034020.KS',
+    name: '두산에너빌리티',
+    englishName: 'Doosan Enerbility',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['두산에너빌리티', '두산중공업', '에너빌리티', '034020', '034020.ks'],
+    sector: '원전 / 에너지',
+  },
+  {
+    ticker: '454910.KS',
+    name: '두산로보틱스',
+    englishName: 'Doosan Robotics',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['두산로보틱스', '454910', '454910.ks'],
+    sector: '로봇 / 자동화',
+  },
+  {
+    ticker: '267260.KS',
+    name: 'HD현대일렉트릭',
+    englishName: 'HD Hyundai Electric',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['hd현대일렉트릭', '현대일렉트릭', '현대일렉', '267260', '267260.ks'],
+    sector: '전력인프라 / 변압기',
+  },
+  {
+    ticker: '329180.KS',
+    name: 'HD현대중공업',
+    englishName: 'HD Hyundai Heavy Industries',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['hd현대중공업', '현대중공업', '329180', '329180.ks'],
+    sector: '조선 / 해양플랜트',
+  },
+  {
+    ticker: '141080.KQ',
+    name: '리가켐바이오',
+    englishName: 'LigaChem Biosciences',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['리가켐바이오', '레고켐바이오', '레고켐', '141080', '141080.kq'],
+    sector: '바이오 / ADC',
+  },
+  {
+    ticker: '277810.KQ',
+    name: '레인보우로보틱스',
+    englishName: 'Rainbow Robotics',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['레인보우로보틱스', '레인보우', '277810', '277810.kq'],
+    sector: '로봇 / 협동로봇',
+  },
+  {
+    ticker: '348370.KQ',
+    name: '엔켐',
+    englishName: 'Enchem',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['엔켐', '348370', '348370.kq'],
+    sector: '2차전지 / 전해액',
+  },
+  {
+    ticker: '000250.KQ',
+    name: '삼천당제약',
+    englishName: 'Samchundang Pharm',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['삼천당제약', '삼천당', '000250', '000250.kq'],
+    sector: '제약 / 바이오',
+  },
+  {
+    ticker: '450080.KS',
+    name: '에코프로머티',
+    englishName: 'Ecopro Materials',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['에코프로머티', '에코프로머티리얼즈', '450080', '450080.ks'],
+    sector: '2차전지 / 전구체',
+  },
+  {
+    ticker: '010120.KS',
+    name: 'LS ELECTRIC',
+    englishName: 'LS Electric',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['ls일렉트릭', 'lselectric', '010120', '010120.ks'],
+    sector: '전력인프라 / 스마트그리드',
+  },
+  {
+    ticker: '298040.KS',
+    name: '효성중공업',
+    englishName: 'Hyosung Heavy Industries',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['효성중공업', '효중', '298040', '298040.ks'],
+    sector: '전력인프라 / 중공업',
+  },
+  {
+    ticker: '064350.KS',
+    name: '현대로템',
+    englishName: 'Hyundai Rotem',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['현대로템', '로템', '064350', '064350.ks'],
+    sector: '방산 / 철도',
+  },
+  {
+    ticker: '079550.KS',
+    name: 'LIG넥스원',
+    englishName: 'LIG Nex1',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['lig넥스원', '넥스원', '079550', '079550.ks'],
+    sector: '방산 / 유도무기',
+  },
+  {
+    ticker: '352820.KS',
+    name: '하이브',
+    englishName: 'HYBE',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['하이브', 'hybe', '빅히트', '352820', '352820.ks'],
+    sector: '엔터테인먼트 / K-POP',
+  },
+  {
+    ticker: '042700.KS',
+    name: '한미반도체',
+    englishName: 'Hanmi Semiconductor',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['한미반도체', '042700', '042700.ks'],
+    sector: '반도체 / TC본더 / HBM',
+  },
+  {
+    ticker: '000100.KS',
+    name: '유한양행',
+    englishName: 'Yuhan Corporation',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['유한양행', '000100', '000100.ks'],
+    sector: '제약 / 바이오',
+  },
+  {
+    ticker: '377300.KS',
+    name: '카카오페이',
+    englishName: 'Kakao Pay',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['카카오페이', '카페', '377300', '377300.ks'],
+    sector: '핀테크 / 금융플랫폼',
+  },
+  {
+    ticker: '323410.KS',
+    name: '카카오뱅크',
+    englishName: 'KakaoBank',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['카카오뱅크', '카뱅', '323410', '323410.ks'],
+    sector: '인터넷전문은행 / 금융',
+  },
+  {
+    ticker: '010130.KS',
+    name: '고려아연',
+    englishName: 'Korea Zinc',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['고려아연', '010130', '010130.ks'],
+    sector: '비철금속 / 신재생',
+  },
+  {
+    ticker: '041510.KQ',
+    name: '에스엠',
+    englishName: 'SM Entertainment',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['에스엠', 'sm', '041510', '041510.kq'],
+    sector: '엔터테인먼트 / K-POP',
+  },
+  {
+    ticker: '035900.KQ',
+    name: 'JYP Ent.',
+    englishName: 'JYP Entertainment',
+    market: 'KR',
+    exchange: 'KOSDAQ',
+    aliases: ['jyp', '제이와이피', '035900', '035900.kq'],
+    sector: '엔터테인먼트 / K-POP',
+  },
+  {
+    ticker: '068270.KS',
+    name: '셀트리온',
+    englishName: 'Celltrion',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['셀트리온', '068270', '068270.ks'],
+    sector: '바이오시밀러',
+  },
+  {
+    ticker: '090430.KS',
+    name: '아모레퍼시픽',
+    englishName: 'Amorepacific',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['아모레퍼시픽', '아모레', '090430', '090430.ks'],
+    sector: '화장품 / 뷰티',
+  },
+  {
+    ticker: '047810.KS',
+    name: '한국항공우주',
+    englishName: 'Korea Aerospace Industries (KAI)',
+    market: 'KR',
+    exchange: 'KOSPI',
+    aliases: ['한국항공우주', 'kai', '카이', '047810', '047810.ks'],
+    sector: '방산 / 항공우주',
+  },
+  {
+    ticker: 'PLTR',
+    name: '팔란티어 (Palantir)',
+    englishName: 'Palantir Technologies',
+    market: 'US',
+    exchange: 'NYSE',
+    aliases: ['팔란티어', '플트', 'pltr', 'palantir'],
+    sector: '빅데이터 / AI엔터프라이즈',
+  },
+  {
+    ticker: 'ARM',
+    name: '암 (Arm Holdings)',
+    englishName: 'Arm Holdings plc',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['arm', '암', '암홀딩스'],
+    sector: '반도체 IP / 아키텍처',
+  },
+  {
+    ticker: 'SMCI',
+    name: '슈퍼마이크로컴퓨터 (SMCI)',
+    englishName: 'Super Micro Computer',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['smci', '슈마컴', '슈퍼마이크로'],
+    sector: 'AI 서버인프라',
+  },
+  {
+    ticker: 'AVGO',
+    name: '브로드컴 (Broadcom)',
+    englishName: 'Broadcom Inc.',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['avgo', '브로드컴', 'broadcom'],
+    sector: '통신 반도체 / AI ASIC',
+  },
+  {
+    ticker: 'COIN',
+    name: '코인베이스 (Coinbase)',
+    englishName: 'Coinbase Global',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['coin', '코인베이스', 'coinbase'],
+    sector: '가상자산 거래소 / 핀테크',
+  },
+  {
+    ticker: 'SOFI',
+    name: '소파이 (SoFi)',
+    englishName: 'SoFi Technologies',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['sofi', '소파이'],
+    sector: '핀테크 / 디지털뱅킹',
+  },
+  {
+    ticker: 'LLY',
+    name: '일라이 릴리 (Eli Lilly)',
+    englishName: 'Eli Lilly and Company',
+    market: 'US',
+    exchange: 'NYSE',
+    aliases: ['lly', '일라이릴리', '릴리'],
+    sector: '제약 / 비만치료제',
+  },
+  {
+    ticker: 'NVO',
+    name: '노보 노디스크 (Novo Nordisk)',
+    englishName: 'Novo Nordisk',
+    market: 'US',
+    exchange: 'NYSE',
+    aliases: ['nvo', '노보노디스크', '위고비'],
+    sector: '제약 / 비만치료제',
+  },
+  {
+    ticker: 'APP',
+    name: '앱러빈 (AppLovin)',
+    englishName: 'AppLovin Corp',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['app', '앱러빈', 'applovin'],
+    sector: 'AI 광고플랫폼',
+  },
+  {
+    ticker: 'ASTS',
+    name: 'AST 스페이스모바일',
+    englishName: 'AST SpaceMobile',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['asts', '스페이스모바일', '위성통신'],
+    sector: '우주 위성통신',
+  },
+  {
+    ticker: 'BBAI',
+    name: '빅베어 AI (BigBear.ai)',
+    englishName: 'BigBear.ai Holdings',
+    market: 'US',
+    exchange: 'NYSE',
+    aliases: ['bbai', '빅베어', '빅베어ai'],
+    sector: 'AI 국방 / 비전',
+  },
+  {
+    ticker: 'RKLB',
+    name: '로켓랩 (Rocket Lab)',
+    englishName: 'Rocket Lab USA',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['rklb', '로켓랩'],
+    sector: '우주 발사체 / 위성',
+  },
+  {
+    ticker: 'IONQ',
+    name: '아이온큐 (IonQ)',
+    englishName: 'IonQ Inc',
+    market: 'US',
+    exchange: 'NYSE',
+    aliases: ['ionq', '아이온큐', '양자컴퓨팅'],
+    sector: '양자 컴퓨팅',
+  },
+  {
+    ticker: 'HOOD',
+    name: '로빈후드 (Robinhood)',
+    englishName: 'Robinhood Markets',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['hood', '로빈후드'],
+    sector: '리테일 브로커리지 / 핀테크',
+  },
+  {
+    ticker: 'CRWD',
+    name: '크라우드스트라이크 (CrowdStrike)',
+    englishName: 'CrowdStrike Holdings',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['crwd', '크라우드스트라이크'],
+    sector: '사이버 보안 / EDR',
+  },
+  {
+    ticker: 'PANW',
+    name: '팔로알토 네트웍스 (Palo Alto)',
+    englishName: 'Palo Alto Networks',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['panw', '팔로알토'],
+    sector: '사이버 보안',
+  },
+  {
+    ticker: 'MSTR',
+    name: '마이크로스트래티지 (MSTR)',
+    englishName: 'MicroStrategy Inc',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['mstr', '마이크로스트래티지', '비트코인프록시'],
+    sector: '비트코인 보유사 / 엔터프라이즈',
+  },
+  {
+    ticker: 'TSM',
+    name: 'TSMC (TSM)',
+    englishName: 'Taiwan Semiconductor Manufacturing',
+    market: 'US',
+    exchange: 'NYSE',
+    aliases: ['tsm', 'tsmc', '티에스엠씨'],
+    sector: '파운드리 반도체',
+  },
+  {
+    ticker: 'ASML',
+    name: 'ASML 홀딩 (ASML)',
+    englishName: 'ASML Holding N.V.',
+    market: 'US',
+    exchange: 'NASDAQ',
+    aliases: ['asml', '에이에스엠엘', '노광장비'],
+    sector: '반도체 EUV 노광장비',
+  },
 ];
 
 /**
@@ -1112,6 +1522,7 @@ function normalizeQuery(q: string): string {
  * 사용자 입력 문자열(종목명, 티커, 약칭 등)을 authoritative 티커 및 종목 정보로 단일 변환(해석)합니다.
  * 예: 'lg에너지솔루션' -> { ticker: '373220.KS', name: 'LG에너지솔루션', market: 'KR', resolved: true }
  * 예: '373220' -> { ticker: '373220.KS', name: 'LG에너지솔루션', market: 'KR', resolved: true }
+ * 예: '003230.KS' -> { ticker: '003230.KS', name: '삼양식품', market: 'KR', resolved: true }
  * 예: '삼성전자' -> { ticker: '005930.KS', name: '삼성전자', market: 'KR', resolved: true }
  * 예: 'AAPL' -> { ticker: 'AAPL', name: '애플 (Apple)', market: 'US', resolved: true }
  */
@@ -1144,6 +1555,31 @@ export function resolveSingleQuery(rawQuery: string): {
     };
   }
 
+  // 1-1. 6자리 티커 코드 + .KS / .KQ 정규식 일치 (마스터 DB 미등록이어도 모든 국내 정상 티커로 승인)
+  if (/^\d{6}\.(KS|KQ)$/i.test(upper)) {
+    const code = upper.substring(0, 6);
+    const matchedByCode = STOCK_MASTER_DATABASE.find(
+      (s) => s.ticker.replace(/\.(KS|KQ)$/i, '') === code
+    );
+    if (matchedByCode) {
+      return {
+        ticker: upper,
+        name: matchedByCode.name,
+        market: 'KR',
+        resolved: true,
+        matchType: 'exact_ticker',
+      };
+    }
+    const display = getStockDisplayInfo(upper);
+    return {
+      ticker: upper,
+      name: display.primaryName || upper,
+      market: 'KR',
+      resolved: true,
+      matchType: 'code_digit',
+    };
+  }
+
   // 2. 6자리 순수 숫자 코드인 경우 (예: '373220' -> '373220.KS')
   if (/^\d{6}$/.test(upper)) {
     const matchedByCode = STOCK_MASTER_DATABASE.find(
@@ -1158,10 +1594,10 @@ export function resolveSingleQuery(rawQuery: string): {
         matchType: 'code_digit',
       };
     }
-    // 미등록 6자리 코드라도 기본 KOSPI(.KS) 티커로 반환
+    const display = getStockDisplayInfo(`${upper}.KS`);
     return {
       ticker: `${upper}.KS`,
-      name: upper,
+      name: display.primaryName || upper,
       market: 'KR',
       resolved: true,
       matchType: 'code_digit',
@@ -1227,9 +1663,20 @@ export function resolveSingleQuery(rawQuery: string): {
 
   // 5. 미국 티커 형식 검사 (1~6자 영문)
   if (/^[A-Z]{1,6}([.-][A-Z]{1,3})?$/.test(upper)) {
+    const matched = STOCK_MASTER_DATABASE.find((s) => s.ticker.toUpperCase() === upper);
+    if (matched) {
+      return {
+        ticker: matched.ticker,
+        name: matched.name,
+        market: matched.market,
+        resolved: true,
+        matchType: 'exact_ticker',
+      };
+    }
+    const display = getStockDisplayInfo(upper);
     return {
       ticker: upper,
-      name: upper,
+      name: display.primaryName || upper,
       market: 'US',
       resolved: true,
       matchType: 'fallback_ticker',
@@ -1248,6 +1695,7 @@ export function resolveSingleQuery(rawQuery: string): {
 /**
  * 실시간 자동완성 검색 API 함수
  * - 종목명, 티커, 영문명, 별칭을 검색하여 매칭도 높은 순으로 최대 `limit`건 반환
+ * - 6자리 종목코드나 티커 직접 입력 시 자동완성 항목 즉시 합성 주입
  */
 export function searchStockMaster(query: string, limit = 10): StockInfo[] {
   const trimmed = query.trim();
@@ -1299,6 +1747,43 @@ export function searchStockMaster(query: string, limit = 10): StockInfo[] {
 
     if (score > 0) {
       results.push({ stock, score });
+    }
+  }
+
+  // 6자리 국내 종목코드 또는 표준 티커 직접 입력 시 검색 결과에 즉시 합성 등록 항목 추가
+  if (/^\d{6}(\.(KS|KQ))?$/i.test(trimmed)) {
+    const norm = /^\d{6}$/.test(trimmed) ? `${trimmed}.KS` : trimmed.toUpperCase();
+    if (!results.some((r) => r.stock.ticker.toUpperCase() === norm.toUpperCase())) {
+      const display = getStockDisplayInfo(norm);
+      results.unshift({
+        stock: {
+          ticker: norm,
+          name: display.primaryName || norm,
+          englishName: norm,
+          market: 'KR',
+          exchange: norm.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI',
+          sector: '국내 상장 주식',
+          aliases: [trimmed, norm],
+        },
+        score: 3000,
+      });
+    }
+  } else if (/^[A-Za-z]{1,6}([.-][A-Za-z]{1,3})?$/.test(trimmed) && trimmed.length >= 2) {
+    const norm = trimmed.toUpperCase();
+    if (!results.some((r) => r.stock.ticker.toUpperCase() === norm)) {
+      const display = getStockDisplayInfo(norm);
+      results.unshift({
+        stock: {
+          ticker: norm,
+          name: display.primaryName || norm,
+          englishName: norm,
+          market: 'US',
+          exchange: 'US',
+          sector: '미국 상장 주식',
+          aliases: [trimmed, norm],
+        },
+        score: 3000,
+      });
     }
   }
 

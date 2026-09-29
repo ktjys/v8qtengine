@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   Filter,
   Info,
   LineChart,
+  Loader2,
   Plus,
   Radio,
   RefreshCw,
@@ -122,6 +123,36 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [newMemo, setNewMemo] = useState('');
   const [searchModalQuery, setSearchModalQuery] = useState('');
   const [addModeTab, setAddModeTab] = useState<'search' | 'batch'>('search');
+  const [liveApiResults, setLiveApiResults] = useState<StockInfo[]>([]);
+  const [isSearchingLive, setIsSearchingLive] = useState(false);
+
+  useEffect(() => {
+    const query = searchModalQuery.trim();
+    if (!query) {
+      setLiveApiResults([]);
+      setIsSearchingLive(false);
+      return;
+    }
+
+    setIsSearchingLive(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v8/watchlist/search?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.results)) {
+            setLiveApiResults(data.results);
+          }
+        }
+      } catch {
+        // Ignore network errors gracefully
+      } finally {
+        setIsSearchingLive(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchModalQuery]);
 
   const handleSort = (field: WatchlistSortField) => {
     if (sortField === field) {
@@ -265,11 +296,37 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   }, [evaluations]);
 
   const modalSearchResults = useMemo(() => {
-    if (!searchModalQuery.trim()) {
+    const q = searchModalQuery.trim();
+    if (!q) {
       return searchStockMaster('', 12).filter((s) => s.market === activeMarket);
     }
-    return searchStockMaster(searchModalQuery.trim(), 12);
-  }, [searchModalQuery, activeMarket]);
+    const local = searchStockMaster(q, 12);
+    const seen = new Set(local.map((s) => s.ticker.toUpperCase()));
+    const combined = [...local];
+    for (const item of liveApiResults) {
+      const key = item.ticker.toUpperCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(item);
+      }
+    }
+    return combined.slice(0, 16);
+  }, [searchModalQuery, activeMarket, liveApiResults]);
+
+  const directCandidate = useMemo(() => {
+    const q = searchModalQuery.trim();
+    if (!q) return null;
+    const res = resolveSingleQuery(q);
+    const isAlreadyAdded = res.resolved && existingTickerSet.has(res.ticker.toUpperCase());
+    return {
+      query: q,
+      resolved: res.resolved,
+      ticker: res.ticker,
+      name: res.name || getStockDisplayInfo(res.ticker).primaryName || res.ticker,
+      market: res.market,
+      isAlreadyAdded,
+    };
+  }, [searchModalQuery, existingTickerSet]);
 
   const emptySearchMasterMatches = useMemo(() => {
     if (!searchTerm.trim() || filtered.length > 0) return [];
@@ -1338,17 +1395,23 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="block text-slate-300 font-semibold">
-                      종목명 검색 (티커 몰라도 검색 가능)
+                      종목명 / 티커 / 종목코드 검색
                     </label>
-                    <span className="text-[11px] text-cyan-400 font-medium">
-                      초성/약칭/별칭 완벽 지원
-                    </span>
+                    <div className="flex items-center space-x-1.5 text-[11px] text-cyan-400 font-medium">
+                      {isSearchingLive && (
+                        <span className="flex items-center gap-1 text-slate-400 font-mono text-[10px]">
+                          <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                          <span>실시간 검색 중...</span>
+                        </span>
+                      )}
+                      <span>초성·약칭·코드 100% 지원</span>
+                    </div>
                   </div>
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="예: LG에너지솔루션, 엔솔, 삼성전자, 삼전, 에코프로, 카카오, 현대차, 테슬라, NVDA..."
+                      placeholder="예: 삼전, 엔솔, 한화에어로, 알테오젠, 삼양식품, 005930, PLTR, ARM, TSLA..."
                       value={searchModalQuery}
                       onChange={(e) => setSearchModalQuery(e.target.value)}
                       disabled={isCapacityReached}
@@ -1376,13 +1439,63 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   <span className="text-[10px] text-cyan-400">+ 담기 클릭 시 즉시 평가 및 추가</span>
                 </div>
 
+                {/* Direct Match Quick Card if candidate resolved and not first in results */}
+                {directCandidate && directCandidate.resolved && searchModalQuery.trim() && (
+                  <div className="p-2.5 bg-cyan-950/30 border border-cyan-500/30 rounded-xl flex items-center justify-between">
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-100">
+                        <span className="text-cyan-400 font-mono">[{directCandidate.ticker}]</span>
+                        <span className="truncate">{directCandidate.name}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        {directCandidate.market === 'KR' ? '국내 주식' : '미국 주식'} · 즉시 등록 가능
+                      </span>
+                    </div>
+                    {directCandidate.isAlreadyAdded ? (
+                      <span className="px-2 py-1 text-[10px] font-semibold text-slate-400 bg-slate-800 rounded-lg shrink-0">
+                        이미 등록됨
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAddDirectStock(directCandidate.ticker, directCandidate.name)}
+                        disabled={isCapacityReached}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg shadow-sm shrink-0 transition-all flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>즉시 추가</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-800/40">
                   {modalSearchResults.length === 0 ? (
-                    <div className="py-8 text-center text-slate-500 text-xs">
-                      검색어 &apos;{searchModalQuery}&apos;에 일치하는 마스터 종목이 없습니다.
-                      <p className="text-[10px] text-slate-600 mt-1">
-                        우측 &apos;직접 입력&apos; 탭에서 6자리 종목코드나 표준 티커를 직접 입력하실 수 있습니다.
+                    <div className="py-6 text-center space-y-3">
+                      <p className="text-slate-400 text-xs">
+                        마스터 목록에서 &apos;{searchModalQuery}&apos;의 일치 항목을 찾지 못했습니다.
                       </p>
+                      <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-left space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-slate-100 text-xs">{searchModalQuery}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              입력하신 티커/이름으로 직접 워치리스트에 등록하시겠습니까?
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAddDirectStock(searchModalQuery, searchModalQuery)}
+                            disabled={isCapacityReached}
+                            className="px-3 py-1.5 text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg shadow-sm"
+                          >
+                            + 직접 등록
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 border-t border-slate-800/60 pt-2 leading-relaxed">
+                          💡 <b>전 종목 지원 안내</b>: 한국 상장 종목은 <b>6자리 종목코드</b>(예: 005930, 012450) 또는 .KS/.KQ, 미국 상장 종목은 <b>표준 티커</b>(예: AAPL, PLTR, ARM)를 입력하시면 <b>한국/미국의 모든 정상 상장 종목</b>이 100% 등록 및 실시간 분석됩니다.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     modalSearchResults.map((stock) => {
