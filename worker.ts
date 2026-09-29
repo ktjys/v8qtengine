@@ -18,6 +18,7 @@ import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { telegramNotifier } from './src/notification/telegramNotifier';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from './src/constants/limits';
+import { resolveSingleQuery, searchStockMaster, StockInfo } from './src/utils/stockSearchService';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -188,6 +189,16 @@ export default {
       }
     }
 
+    // Watchlist Search
+    if (path === '/api/v8/watchlist/search') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q) {
+        return jsonResponse({ success: true, results: [] });
+      }
+      const localMatches = searchStockMaster(q, 10);
+      return jsonResponse({ success: true, query: q, results: localMatches });
+    }
+
     // Watchlist
     if (path === '/api/v8/watchlist' || path.startsWith('/api/v8/watchlist/')) {
       // Bulk Delete / Clear / Clear Dummy
@@ -252,14 +263,28 @@ export default {
             return jsonResponse({ success: false, error: '추가할 티커가 입력되지 않았습니다.' }, 400);
           }
 
-          const TICKER_REGEX = /^[A-Z]{1,6}([.-][A-Z]{1,3})?$/;
-          const tokens = Array.isArray(rawInput)
-            ? rawInput.map((t: any) => String(t).trim().toUpperCase()).filter(Boolean)
-            : String(rawInput).split(/[,\s\n\r/]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
-          const candidateTickers = Array.from(new Set(tokens));
+          const TICKER_REGEX = /^([A-Z]{1,6}([.-][A-Z]{1,3})?|\d{6}(\.(KS|KQ))?)$/;
+          let tokens: string[] = [];
+          if (Array.isArray(rawInput)) {
+            tokens = rawInput.map((t: any) => String(t).trim()).filter(Boolean);
+          } else if (String(rawInput).includes(',')) {
+            tokens = String(rawInput).split(',').map((t) => t.trim()).filter(Boolean);
+          } else {
+            tokens = String(rawInput).split(/[\s\n\r/]+/).map((t) => t.trim()).filter(Boolean);
+          }
 
-          if (candidateTickers.length === 0) {
-            return jsonResponse({ success: false, error: '유효한 티커가 감지되지 않았습니다.' }, 400);
+          const resolvedCandidates = tokens.map((t) => {
+            const res = resolveSingleQuery(t);
+            return {
+              ticker: res.resolved ? res.ticker : t.toUpperCase(),
+              name: res.resolved ? res.name : undefined,
+              original: t,
+              resolved: res.resolved,
+            };
+          });
+
+          if (resolvedCandidates.length === 0) {
+            return jsonResponse({ success: false, error: '유효한 종목명 또는 티커가 감지되지 않았습니다.' }, 400);
           }
 
           const existingList = await watchlistRepository.getAll();
@@ -269,14 +294,23 @@ export default {
           const rejected: Array<{ ticker: string; reason: string }> = [];
           const validCandidates: Array<{ ticker: string; name: string }> = [];
 
-          for (const ticker of candidateTickers) {
-            if (existingTickerSet.has(ticker)) {
-              alreadyExists.push(ticker);
+          for (const item of resolvedCandidates) {
+            const upperTicker = item.ticker.toUpperCase();
+            if (existingTickerSet.has(upperTicker)) {
+              alreadyExists.push(item.ticker);
               continue;
             }
 
-            if (!TICKER_REGEX.test(ticker)) {
-              rejected.push({ ticker, reason: '티커 기호 형식 오류 (1~6자 영문)' });
+            if (item.resolved) {
+              validCandidates.push({
+                ticker: item.ticker,
+                name: (resolvedCandidates.length === 1 && customName) ? customName : (item.name || item.ticker),
+              });
+              continue;
+            }
+
+            if (!TICKER_REGEX.test(item.ticker)) {
+              rejected.push({ ticker: item.original, reason: '티커 기호 또는 종목명을 인식할 수 없습니다' });
               continue;
             }
 

@@ -35,7 +35,13 @@ import {
   StrategyType,
 } from '../types/v8';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
-import { detectMarketRegion } from '../utils/marketUtils';
+import { detectMarketRegion, getStockDisplayInfo } from '../utils/marketUtils';
+import {
+  STOCK_MASTER_DATABASE,
+  StockInfo,
+  resolveSingleQuery,
+  searchStockMaster,
+} from '../utils/stockSearchService';
 import { StockDisplayBadge } from './StockDisplayBadge';
 import { SortableHeader } from './SortableHeader';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
@@ -114,6 +120,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [newTicker, setNewTicker] = useState('');
   const [newName, setNewName] = useState('');
   const [newMemo, setNewMemo] = useState('');
+  const [searchModalQuery, setSearchModalQuery] = useState('');
+  const [addModeTab, setAddModeTab] = useState<'search' | 'batch'>('search');
 
   const handleSort = (field: WatchlistSortField) => {
     if (sortField === field) {
@@ -131,12 +139,34 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   // Filtering
   const filtered = (evaluations || []).filter((item) => {
     if (!item) return false;
-    // Search
-    const matchSearch =
-      (item.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.classification?.strategy_type || '').toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchSearch) return false;
+    // Enhanced Search: matches ticker, English name, Korean display name, subcode, aliases, and strategy
+    if (searchTerm.trim()) {
+      const searchClean = searchTerm.toLowerCase().replace(/[\s\-_.]/g, '');
+      const tickerClean = (item.ticker || '').toLowerCase().replace(/[\s\-_.]/g, '');
+      const rawNameClean = (item.name || '').toLowerCase().replace(/[\s\-_.]/g, '');
+      const displayInfo = getStockDisplayInfo(item.ticker, item.name);
+      const primaryClean = (displayInfo.primaryName || '').toLowerCase().replace(/[\s\-_.]/g, '');
+      const subCodeClean = (displayInfo.subCode || '').toLowerCase().replace(/[\s\-_.]/g, '');
+
+      const masterStock = STOCK_MASTER_DATABASE.find(
+        (s) =>
+          s.ticker.toUpperCase() === item.ticker.toUpperCase() ||
+          s.ticker.replace(/\.(KS|KQ)$/i, '').toUpperCase() === item.ticker.toUpperCase()
+      );
+      const aliasMatches = masterStock?.aliases?.some((a) =>
+        a.toLowerCase().replace(/[\s\-_.]/g, '').includes(searchClean)
+      );
+
+      const matchSearch =
+        tickerClean.includes(searchClean) ||
+        rawNameClean.includes(searchClean) ||
+        primaryClean.includes(searchClean) ||
+        subCodeClean.includes(searchClean) ||
+        Boolean(aliasMatches) ||
+        (item.classification?.strategy_type || '').toLowerCase().includes(searchClean);
+
+      if (!matchSearch) return false;
+    }
 
     // Asset Type
     if (filterAssetType !== 'ALL' && item.classification?.asset_type !== filterAssetType) {
@@ -230,43 +260,95 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const remainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY - currentCount);
   const capacityPercent = Math.min(100, Math.round((currentCount / MAX_WATCHLIST_CAPACITY) * 100));
 
-  // Real-time multi-ticker input parser & validator
+  const existingTickerSet = useMemo(() => {
+    return new Set((evaluations || []).map((e) => e.ticker.toUpperCase()));
+  }, [evaluations]);
+
+  const modalSearchResults = useMemo(() => {
+    if (!searchModalQuery.trim()) {
+      return searchStockMaster('', 12).filter((s) => s.market === activeMarket);
+    }
+    return searchStockMaster(searchModalQuery.trim(), 12);
+  }, [searchModalQuery, activeMarket]);
+
+  const emptySearchMasterMatches = useMemo(() => {
+    if (!searchTerm.trim() || filtered.length > 0) return [];
+    const matches = searchStockMaster(searchTerm.trim(), 4);
+    return matches.map((m) => ({
+      ...m,
+      isAlreadyAdded: existingTickerSet.has(m.ticker.toUpperCase()),
+    }));
+  }, [searchTerm, filtered.length, existingTickerSet]);
+
+  const handleAddDirectStock = (stockTicker: string, stockName?: string) => {
+    if (remainingSlots <= 0) {
+      alert(WATCHLIST_CAPACITY_ERROR_MESSAGE);
+      return;
+    }
+    const clean = stockTicker.toUpperCase().trim();
+    if (existingTickerSet.has(clean)) {
+      alert(`'${stockName || clean}'은(는) 이미 워치리스트에 등록되어 있습니다.`);
+      return;
+    }
+    const finalName = stockName || getStockDisplayInfo(clean).primaryName || clean;
+    onAddTicker(clean, finalName, newMemo.trim() || '실시간 검색 추가');
+    setSearchModalQuery('');
+    setShowAddModal(false);
+  };
+
+  // Real-time multi-ticker & Korean stock name input parser & validator
   const parsedTickers = useMemo(() => {
     if (!newTicker.trim()) {
-      return { valid: [], invalid: [], alreadyExists: [] };
+      return {
+        valid: [] as Array<{ ticker: string; name: string }>,
+        invalid: [] as string[],
+        alreadyExists: [] as Array<{ ticker: string; name: string }>,
+      };
     }
-    // TICKER_REGEX supports US tickers (AAPL, BRK.B, etc.) and Korean tickers (005930.KS, 069500.KS, 035420.KS, 247540.KQ or raw 6 digits 005930)
     const TICKER_REGEX = /^([A-Z]{1,6}([.-][A-Z]{1,3})?|[0-9]{6}(\.(KS|KQ))?)$/;
-    const tokens: string[] = newTicker
-      .split(/[,\s\n\r/]+/)
-      .map((t) => {
-        const trimmed = t.trim().toUpperCase();
-        // If user enters 6 digits like 005930 without suffix, automatically add .KS
-        if (/^[0-9]{6}$/.test(trimmed)) {
-          return `${trimmed}.KS`;
-        }
-        return trimmed;
-      })
-      .filter(Boolean);
-    const unique: string[] = Array.from(new Set<string>(tokens));
+    const trimmed = newTicker.trim();
 
-    const existingSet = new Set((evaluations || []).map((e) => e.ticker.toUpperCase()));
-    const valid: string[] = [];
-    const invalid: string[] = [];
-    const alreadyExists: string[] = [];
-
-    for (const token of unique) {
-      if (!TICKER_REGEX.test(token)) {
-        invalid.push(token);
-      } else if (existingSet.has(token)) {
-        alreadyExists.push(token);
+    let tokens: string[] = [];
+    if (trimmed.includes(',')) {
+      tokens = trimmed.split(',').map((t) => t.trim()).filter(Boolean);
+    } else {
+      const singleRes = resolveSingleQuery(trimmed);
+      if (singleRes.resolved) {
+        tokens = [trimmed];
       } else {
-        valid.push(token);
+        tokens = trimmed.split(/[\s\n\r/]+/).map((t) => t.trim()).filter(Boolean);
+      }
+    }
+
+    const valid: Array<{ ticker: string; name: string }> = [];
+    const invalid: string[] = [];
+    const alreadyExists: Array<{ ticker: string; name: string }> = [];
+    const seenTickers = new Set<string>();
+
+    for (const rawToken of tokens) {
+      const resolved = resolveSingleQuery(rawToken);
+      let targetTicker = resolved.resolved ? resolved.ticker : rawToken.toUpperCase().trim();
+      if (/^[0-9]{6}$/.test(targetTicker)) {
+        targetTicker = `${targetTicker}.KS`;
+      }
+      const displayName = resolved.name || getStockDisplayInfo(targetTicker).primaryName || targetTicker;
+
+      if (!resolved.resolved && !TICKER_REGEX.test(targetTicker)) {
+        invalid.push(rawToken);
+      } else if (seenTickers.has(targetTicker)) {
+        continue;
+      } else {
+        seenTickers.add(targetTicker);
+        if (existingTickerSet.has(targetTicker)) {
+          alreadyExists.push({ ticker: targetTicker, name: displayName });
+        } else {
+          valid.push({ ticker: targetTicker, name: displayName });
+        }
       }
     }
 
     return { valid, invalid, alreadyExists };
-  }, [newTicker, evaluations]);
+  }, [newTicker, evaluations, existingTickerSet]);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,7 +358,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       if (parsedTickers.alreadyExists.length > 0) {
         alert('입력하신 종목이 이미 워치리스트에 모두 등록되어 있습니다.');
       } else if (parsedTickers.invalid.length > 0) {
-        alert(`유효하지 않은 티커 형식입니다: ${parsedTickers.invalid.join(', ')}\n(예: 미국 종목은 AAPL, NVDA, 국내 종목은 005930.KS, 069500.KS 또는 6자리 종목코드 005930을 콤마로 구분하여 입력해주세요)`);
+        alert(`유효하지 않은 종목 형식입니다: ${parsedTickers.invalid.join(', ')}\n(종목명 예: LG에너지솔루션, 현대차, 에코프로 또는 티커 심볼 005930.KS, AAPL 등을 입력해주세요)`);
       }
       return;
     }
@@ -287,7 +369,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     }
 
     // Call onAddTicker with the comma-separated list of valid tickers
-    onAddTicker(parsedTickers.valid.join(','), newName.trim(), newMemo.trim());
+    const tickersToAdd = parsedTickers.valid.map((v) => v.ticker).join(',');
+    const primaryName = newName.trim() || (parsedTickers.valid.length === 1 ? parsedTickers.valid[0].name : '');
+    onAddTicker(tickersToAdd, primaryName, newMemo.trim());
     setNewTicker('');
     setNewName('');
     setNewMemo('');
@@ -616,8 +700,45 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           {/* Mobile Card View (Optimized for small screens) */}
           <div className="block md:hidden divide-y divide-slate-800/60 font-sans">
             {sorted.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 text-xs">
-                {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 상단에서 종목을 추가해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+              <div className="p-6 text-center text-slate-500 text-xs space-y-3">
+                <p>
+                  {evaluations.length === 0 ? '워치리스트가 비어 있습니다. 상단에서 종목을 추가해주세요.' : '검색/필터 조건에 일치하는 종목이 없습니다.'}
+                </p>
+                {emptySearchMasterMatches.length > 0 && (
+                  <div className="space-y-2 text-left pt-2">
+                    <p className="text-[11px] text-cyan-400 font-semibold text-center">
+                      💡 마스터 종목에서 일치 종목을 찾았습니다:
+                    </p>
+                    <div className="space-y-1.5">
+                      {emptySearchMasterMatches.map((m) => (
+                        <div
+                          key={m.ticker}
+                          className="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800 text-xs"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="font-bold text-slate-100 truncate">{m.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              <span className="text-cyan-400">{m.ticker}</span> · {m.exchange || m.market}
+                            </div>
+                          </div>
+                          {m.isAlreadyAdded ? (
+                            <span className="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[10px] font-semibold">
+                              등록됨
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleAddDirectStock(m.ticker, m.name)}
+                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[11px] shrink-0"
+                            >
+                              + 추가
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               sorted.map((item, idx) => {
@@ -860,9 +981,51 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                       </div>
                       <p className="text-xs text-slate-500">
                         {evaluations.length === 0
-                          ? '상단의 [+ 종목 추가] 버튼을 누르고 국내 추천 종목(삼성전자, SK하이닉스 등)을 바로 추가해보세요.'
+                          ? '상단의 [+ 종목 추가] 버튼을 누르고 국내 추천 종목(LG에너지솔루션, 삼성전자, SK하이닉스 등)을 바로 추가해보세요.'
                           : '필터 조건을 변경하거나 검색어를 지워보세요.'}
                       </p>
+
+                      {/* Instant quick-add suggestions if search term matches master stock DB */}
+                      {emptySearchMasterMatches.length > 0 && (
+                        <div className="pt-3 text-left space-y-2 max-w-lg mx-auto">
+                          <p className="text-[11px] text-cyan-400 font-semibold text-center flex items-center justify-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>마스터 종목 데이터베이스에서 &apos;{searchTerm}&apos; 일치 종목을 찾았습니다:</span>
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {emptySearchMasterMatches.map((m) => (
+                              <div
+                                key={m.ticker}
+                                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-500/40 transition-all text-xs"
+                              >
+                                <div className="min-w-0 pr-2">
+                                  <div className="font-bold text-slate-100 truncate">{m.name}</div>
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+                                    <span className="text-cyan-400 font-semibold">{m.ticker}</span>
+                                    <span>· {m.exchange || m.market}</span>
+                                    {m.sector && <span className="truncate">· {m.sector}</span>}
+                                  </div>
+                                </div>
+                                {m.isAlreadyAdded ? (
+                                  <span className="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[10px] font-semibold shrink-0">
+                                    등록됨
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddDirectStock(m.ticker, m.name)}
+                                    className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[11px] shadow-sm shadow-cyan-600/30 transition-all active:scale-95 shrink-0 flex items-center gap-1"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>+ 추가</span>
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {evaluations.length === 0 && (
                         <button
                           onClick={() => setShowAddModal(true)}
@@ -1142,249 +1305,405 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </div>
             )}
 
-            <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-slate-300 font-semibold">
-                    티커 심볼 (Ticker) *
-                  </label>
-                  <span className="text-[11px] text-cyan-400 font-medium">
-                    콤마(,)로 여러 개 동시 입력 가능
-                  </span>
-                </div>
-                <textarea
-                  id="watchlist-new-ticker-input"
-                  placeholder={
-                    activeMarket === 'KR'
-                      ? '예: 005930, 000660, 035420, 069500.KS, 247540.KQ (6자리 코드 또는 .KS/.KQ)'
-                      : '예: AAPL, NVDA, TSLA, MSFT, SPY, QQQ (콤마나 공백으로 구분)'
-                  }
-                  value={newTicker}
-                  onChange={(e) => setNewTicker(e.target.value)}
-                  disabled={isCapacityReached}
-                  rows={2}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 font-mono uppercase focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
-                  required
-                />
+            {/* Mode Tabs */}
+            <div className="flex items-center space-x-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setAddModeTab('search')}
+                className={`flex-1 py-2 px-3 rounded-lg font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                  addModeTab === 'search'
+                    ? 'bg-cyan-600 text-white shadow-sm shadow-cyan-600/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>종목명 검색으로 즉시 추가 (추천)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddModeTab('batch')}
+                className={`flex-1 py-2 px-3 rounded-lg font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                  addModeTab === 'batch'
+                    ? 'bg-cyan-600 text-white shadow-sm shadow-cyan-600/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span>✏️ 직접 입력 / 일괄 등록</span>
+              </button>
+            </div>
 
-                {/* Recommended Ticker Examples Chips */}
-                <div className="mt-2.5 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-slate-300">
-                      {activeMarket === 'KR' ? '🇰🇷 국내 추천 예시 종목 (클릭 시 자동 추가):' : '🇺🇸 미국 추천 예시 종목 (클릭 시 자동 추가):'}
+            {/* TAB 1: Real-time Stock Name Search & Instant Add */}
+            {addModeTab === 'search' && (
+              <div className="space-y-3.5 text-xs">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-slate-300 font-semibold">
+                      종목명 검색 (티커 몰라도 검색 가능)
+                    </label>
+                    <span className="text-[11px] text-cyan-400 font-medium">
+                      초성/약칭/별칭 완벽 지원
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (activeMarket === 'KR') {
-                          setNewTicker('005930.KS, 000660.KS, 005380.KS, 069500.KS, 035420.KS');
-                        } else {
-                          setNewTicker('NVDA, AAPL, MSFT, TSLA, SPY');
-                        }
-                      }}
-                      className="text-cyan-400 hover:text-cyan-300 text-[10px] font-semibold underline decoration-dotted"
-                    >
-                      {activeMarket === 'KR' ? '+ 국내 대표 5선 일괄 담기' : '+ 미국 대표 5선 일괄 담기'}
-                    </button>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeMarket === 'KR' ? (
-                      [
-                        { ticker: '005930.KS', name: '삼성전자' },
-                        { ticker: '000660.KS', name: 'SK하이닉스' },
-                        { ticker: '005380.KS', name: '현대차' },
-                        { ticker: '069500.KS', name: 'KODEX 200' },
-                        { ticker: '035420.KS', name: 'NAVER' },
-                        { ticker: '373220.KS', name: 'LG에너지솔루션' },
-                        { ticker: '000270.KS', name: '기아' },
-                        { ticker: '247540.KQ', name: '에코프로비엠' },
-                      ].map((item) => (
-                        <button
-                          key={item.ticker}
-                          type="button"
-                          onClick={() => {
-                            setNewTicker((prev) => {
-                              const trimmed = prev.trim();
-                              if (!trimmed) {
-                                setNewName(item.name);
-                                return item.ticker;
-                              }
-                              const list = trimmed.split(/[,\s]+/).map((s) => s.trim().toUpperCase());
-                              if (list.includes(item.ticker)) return prev;
-                              return `${trimmed}, ${item.ticker}`;
-                            });
-                          }}
-                          className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center space-x-1"
-                        >
-                          <span className="font-medium">{item.name}</span>
-                          <span className="font-mono text-[10px] text-slate-400">({item.ticker})</span>
-                        </button>
-                      ))
-                    ) : (
-                      [
-                        { ticker: 'NVDA', name: 'NVIDIA' },
-                        { ticker: 'AAPL', name: 'Apple' },
-                        { ticker: 'MSFT', name: 'Microsoft' },
-                        { ticker: 'TSLA', name: 'Tesla' },
-                        { ticker: 'SPY', name: 'S&P 500 ETF' },
-                        { ticker: 'QQQ', name: 'Nasdaq 100 ETF' },
-                      ].map((item) => (
-                        <button
-                          key={item.ticker}
-                          type="button"
-                          onClick={() => {
-                            setNewTicker((prev) => {
-                              const trimmed = prev.trim();
-                              if (!trimmed) {
-                                setNewName(item.name);
-                                return item.ticker;
-                              }
-                              const list = trimmed.split(/[,\s]+/).map((s) => s.trim().toUpperCase());
-                              if (list.includes(item.ticker)) return prev;
-                              return `${trimmed}, ${item.ticker}`;
-                            });
-                          }}
-                          className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center space-x-1"
-                        >
-                          <span className="font-mono font-bold">{item.ticker}</span>
-                          <span className="text-[10px] text-slate-400">({item.name})</span>
-                        </button>
-                      ))
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="예: LG에너지솔루션, 엔솔, 삼성전자, 삼전, 에코프로, 카카오, 현대차, 테슬라, NVDA..."
+                      value={searchModalQuery}
+                      onChange={(e) => setSearchModalQuery(e.target.value)}
+                      disabled={isCapacityReached}
+                      autoFocus
+                      className="w-full pl-9 pr-8 py-2.5 bg-slate-950 border border-slate-700 hover:border-slate-600 focus:border-cyan-500 rounded-xl text-slate-100 placeholder-slate-500 text-xs focus:outline-none transition-all shadow-inner disabled:opacity-50"
+                    />
+                    {searchModalQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchModalQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
 
-                {/* Real-time Ticker Parsing Preview */}
-                {newTicker.trim() && (
-                  <div className="mt-2 p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
-                    {/* Valid parsed tickers */}
-                    {parsedTickers.valid.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            <span>추가 예정 유효 종목 ({parsedTickers.valid.length}개):</span>
-                          </span>
-                          {parsedTickers.valid.length > remainingSlots && (
-                            <span className="text-rose-400 font-semibold">
-                              슬롯 초과! 상위 {remainingSlots}개만 추가됨
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {parsedTickers.valid.map((t, i) => (
+                <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium px-1">
+                  <span>
+                    {searchModalQuery.trim()
+                      ? `검색 결과 (${modalSearchResults.length}건)`
+                      : `${activeMarket === 'KR' ? '🇰🇷 국내 대표 인기 종목' : '🇺🇸 미국 대표 인기 종목'} (원클릭 추가)`}
+                  </span>
+                  <span className="text-[10px] text-cyan-400">+ 담기 클릭 시 즉시 평가 및 추가</span>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-800/40">
+                  {modalSearchResults.length === 0 ? (
+                    <div className="py-8 text-center text-slate-500 text-xs">
+                      검색어 &apos;{searchModalQuery}&apos;에 일치하는 마스터 종목이 없습니다.
+                      <p className="text-[10px] text-slate-600 mt-1">
+                        우측 &apos;직접 입력&apos; 탭에서 6자리 종목코드나 표준 티커를 직접 입력하실 수 있습니다.
+                      </p>
+                    </div>
+                  ) : (
+                    modalSearchResults.map((stock) => {
+                      const isAlreadyAdded = existingTickerSet.has(stock.ticker.toUpperCase());
+                      return (
+                        <div
+                          key={stock.ticker}
+                          className="flex items-center justify-between pt-2 pb-1.5 px-2 rounded-xl hover:bg-slate-800/50 transition-colors"
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0 pr-2">
                             <span
-                              key={t}
-                              className={`px-2 py-0.5 rounded font-mono font-bold text-xs border ${
-                                i < remainingSlots
-                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                  : 'bg-rose-500/15 text-rose-300 border-rose-500/30 line-through opacity-75'
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                stock.market === 'KR'
+                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                               }`}
                             >
-                              {t}
+                              {stock.exchange || stock.market}
                             </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                            <div className="min-w-0 truncate">
+                              <div className="font-bold text-slate-100 text-xs truncate">
+                                {stock.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+                                <span className="text-cyan-400 font-semibold">{stock.ticker}</span>
+                                {stock.sector && <span className="truncate">· {stock.sector}</span>}
+                              </div>
+                            </div>
+                          </div>
 
-                    {/* Invalid / excluded tickers */}
-                    {parsedTickers.invalid.length > 0 && (
-                      <div className="space-y-1 pt-1 border-t border-slate-800/80">
-                        <div className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>형식 오류로 제외되는 항목 ({parsedTickers.invalid.length}개):</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {parsedTickers.invalid.map((t) => (
-                            <span
-                              key={t}
-                              className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 font-mono text-xs line-through"
-                              title="1~6자의 올바른 영문 티커 심볼이 아닙니다."
+                          {isAlreadyAdded ? (
+                            <span className="px-2.5 py-1 text-[11px] font-semibold text-slate-400 bg-slate-800/80 rounded-lg flex items-center gap-1 shrink-0">
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span>등록됨</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleAddDirectStock(stock.ticker, stock.name)}
+                              disabled={isCapacityReached}
+                              className="px-3 py-1.5 text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white rounded-lg shadow-sm shadow-cyan-600/30 transition-all flex items-center gap-1 shrink-0 disabled:opacity-50"
                             >
-                              {t} (제외)
-                            </span>
-                          ))}
+                              <Plus className="w-3 h-3" />
+                              <span>+ 담기</span>
+                            </button>
+                          )}
                         </div>
-                        <p className="text-[10px] text-slate-400">
-                          * 특수문자나 한글, 긴 단어는 배제되며 올바른 티커만 등록됩니다.
-                        </p>
-                      </div>
-                    )}
+                      );
+                    })
+                  )}
+                </div>
 
-                    {/* Already in watchlist */}
-                    {parsedTickers.alreadyExists.length > 0 && (
-                      <div className="space-y-1 pt-1 border-t border-slate-800/80">
-                        <div className="text-[11px] text-slate-400 font-medium">
-                          이미 등록되어 있는 종목 ({parsedTickers.alreadyExists.length}개):
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {parsedTickers.alreadyExists.map((t) => (
-                            <span
-                              key={t}
-                              className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-xs"
-                            >
-                              {t} (기등록)
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {parsedTickers.valid.length <= 1 && (
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">종목명 (단일 등록 시 선택)</label>
-                  <input
-                    id="watchlist-new-name-input"
-                    type="text"
-                    placeholder="예: Meta Platforms, Inc. (비워두면 자동 조회)"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
+                  <label className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
+                  <textarea
+                    placeholder="관찰 목적 및 전략 메모..."
+                    value={newMemo}
+                    onChange={(e) => setNewMemo(e.target.value)}
                     disabled={isCapacityReached}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-14 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50 text-xs"
                   />
                 </div>
-              )}
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
-                <textarea
-                  id="watchlist-new-memo-input"
-                  placeholder="관찰 목적 및 전략 메모..."
-                  value={newMemo}
-                  onChange={(e) => setNewMemo(e.target.value)}
-                  disabled={isCapacityReached}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-16 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
+                <div className="pt-2 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium transition-colors"
+                  >
+                    닫기
+                  </button>
+                </div>
               </div>
+            )}
 
-              <div className="pt-2 flex items-center justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  id="watchlist-submit-ticker-btn"
-                  type="submit"
-                  disabled={isCapacityReached || (newTicker.trim().length > 0 && parsedTickers.valid.length === 0)}
-                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center space-x-1.5"
-                >
-                  {isCapacityReached ? (
-                    '한도 초과 (추가 불가)'
-                  ) : parsedTickers.valid.length > 1 ? (
-                    <span>유효 종목 {parsedTickers.valid.length}개 일괄 등록 및 평가</span>
-                  ) : (
-                    <span>워치리스트 추가 및 즉시 평가</span>
+            {/* TAB 2: Direct Input / Multi-Ticker Batch Form */}
+            {addModeTab === 'batch' && (
+              <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-300 font-semibold">
+                      종목명 또는 티커 심볼 *
+                    </label>
+                    <span className="text-[11px] text-cyan-400 font-medium">
+                      한글 종목명 또는 티커 (콤마로 다수 동시 입력 가능)
+                    </span>
+                  </div>
+                  <textarea
+                    id="watchlist-new-ticker-input"
+                    placeholder={
+                      activeMarket === 'KR'
+                        ? '예: LG에너지솔루션, 현대차, 에코프로 또는 005930, 000660 (콤마로 구분하여 입력)'
+                        : '예: NVDA, AAPL, Tesla, Microsoft, SPY, QQQ (콤마로 구분하여 입력)'
+                    }
+                    value={newTicker}
+                    onChange={(e) => setNewTicker(e.target.value)}
+                    disabled={isCapacityReached}
+                    rows={2}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                    required
+                  />
+
+                  {/* Recommended Ticker Examples Chips */}
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-slate-300">
+                        {activeMarket === 'KR' ? '🇰🇷 국내 추천 예시 종목 (클릭 시 자동 추가):' : '🇺🇸 미국 추천 예시 종목 (클릭 시 자동 추가):'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeMarket === 'KR') {
+                            setNewTicker('LG에너지솔루션, 005930.KS, 000660.KS, 현대차, NAVER');
+                          } else {
+                            setNewTicker('NVDA, AAPL, MSFT, TSLA, SPY');
+                          }
+                        }}
+                        className="text-cyan-400 hover:text-cyan-300 text-[10px] font-semibold underline decoration-dotted"
+                      >
+                        {activeMarket === 'KR' ? '+ 국내 대표 5선 일괄 담기' : '+ 미국 대표 5선 일괄 담기'}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeMarket === 'KR' ? (
+                        [
+                          { ticker: '373220.KS', name: 'LG에너지솔루션' },
+                          { ticker: '005930.KS', name: '삼성전자' },
+                          { ticker: '000660.KS', name: 'SK하이닉스' },
+                          { ticker: '005380.KS', name: '현대차' },
+                          { ticker: '069500.KS', name: 'KODEX 200' },
+                          { ticker: '035420.KS', name: 'NAVER' },
+                          { ticker: '000270.KS', name: '기아' },
+                          { ticker: '247540.KQ', name: '에코프로비엠' },
+                        ].map((item) => (
+                          <button
+                            key={item.ticker}
+                            type="button"
+                            onClick={() => {
+                              setNewTicker((prev) => {
+                                const trimmed = prev.trim();
+                                if (!trimmed) {
+                                  setNewName(item.name);
+                                  return item.name;
+                                }
+                                const list = trimmed.split(/[,\s]+/).map((s) => s.trim());
+                                if (list.includes(item.name) || list.includes(item.ticker)) return prev;
+                                return `${trimmed}, ${item.name}`;
+                              });
+                            }}
+                            className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center space-x-1"
+                          >
+                            <span className="font-medium">{item.name}</span>
+                            <span className="font-mono text-[10px] text-slate-400">({item.ticker})</span>
+                          </button>
+                        ))
+                      ) : (
+                        [
+                          { ticker: 'NVDA', name: 'NVIDIA' },
+                          { ticker: 'AAPL', name: 'Apple' },
+                          { ticker: 'MSFT', name: 'Microsoft' },
+                          { ticker: 'TSLA', name: 'Tesla' },
+                          { ticker: 'SPY', name: 'S&P 500 ETF' },
+                          { ticker: 'QQQ', name: 'Nasdaq 100 ETF' },
+                        ].map((item) => (
+                          <button
+                            key={item.ticker}
+                            type="button"
+                            onClick={() => {
+                              setNewTicker((prev) => {
+                                const trimmed = prev.trim();
+                                if (!trimmed) {
+                                  setNewName(item.name);
+                                  return item.ticker;
+                                }
+                                const list = trimmed.split(/[,\s]+/).map((s) => s.trim().toUpperCase());
+                                if (list.includes(item.ticker)) return prev;
+                                return `${trimmed}, ${item.ticker}`;
+                              });
+                            }}
+                            className="px-2 py-1 rounded-lg text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center space-x-1"
+                          >
+                            <span className="font-mono font-bold">{item.ticker}</span>
+                            <span className="text-[10px] text-slate-400">({item.name})</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Real-time Ticker Parsing Preview */}
+                  {newTicker.trim() && (
+                    <div className="mt-2 p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                      {/* Valid parsed tickers */}
+                      {parsedTickers.valid.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                              <Check className="w-3 h-3" />
+                              <span>추가 예정 유효 종목 ({parsedTickers.valid.length}개):</span>
+                            </span>
+                            {parsedTickers.valid.length > remainingSlots && (
+                              <span className="text-rose-400 font-semibold">
+                                슬롯 초과! 상위 {remainingSlots}개만 추가됨
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {parsedTickers.valid.map((item, i) => (
+                              <span
+                                key={item.ticker}
+                                className={`px-2 py-0.5 rounded font-mono font-bold text-xs border ${
+                                  i < remainingSlots
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30 line-through opacity-75'
+                                }`}
+                              >
+                                {item.name} ({item.ticker})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Invalid / excluded tickers */}
+                      {parsedTickers.invalid.length > 0 && (
+                        <div className="space-y-1 pt-1 border-t border-slate-800/80">
+                          <div className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>인식되지 않은 항목 ({parsedTickers.invalid.length}개):</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {parsedTickers.invalid.map((t) => (
+                              <span
+                                key={t}
+                                className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 font-mono text-xs line-through"
+                                title="종목명을 찾을 수 없거나 올바른 티커 형식이 아닙니다."
+                              >
+                                {t} (제외)
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-slate-400">
+                            * 종목명(예: LG에너지솔루션) 또는 6자리 종목코드(예: 373220, 005930), 표준 티커(예: AAPL)를 입력해주세요.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Already in watchlist */}
+                      {parsedTickers.alreadyExists.length > 0 && (
+                        <div className="space-y-1 pt-1 border-t border-slate-800/80">
+                          <div className="text-[11px] text-slate-400 font-medium">
+                            이미 등록되어 있는 종목 ({parsedTickers.alreadyExists.length}개):
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {parsedTickers.alreadyExists.map((item) => (
+                              <span
+                                key={item.ticker}
+                                className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-xs"
+                              >
+                                {item.name} ({item.ticker}) (기등록)
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
-                </button>
-              </div>
-            </form>
+                </div>
+
+                {parsedTickers.valid.length <= 1 && (
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">종목명 (단일 등록 시 직접 지정/선택)</label>
+                    <input
+                      id="watchlist-new-name-input"
+                      type="text"
+                      placeholder="예: LG에너지솔루션 (비워두면 자동 조회)"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      disabled={isCapacityReached}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
+                  <textarea
+                    id="watchlist-new-memo-input"
+                    placeholder="관찰 목적 및 전략 메모..."
+                    value={newMemo}
+                    onChange={(e) => setNewMemo(e.target.value)}
+                    disabled={isCapacityReached}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 h-16 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    id="watchlist-submit-ticker-btn"
+                    type="submit"
+                    disabled={isCapacityReached || (newTicker.trim().length > 0 && parsedTickers.valid.length === 0)}
+                    className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center space-x-1.5"
+                  >
+                    {isCapacityReached ? (
+                      '한도 초과 (추가 불가)'
+                    ) : parsedTickers.valid.length > 1 ? (
+                      <span>유효 종목 {parsedTickers.valid.length}개 일괄 등록 및 평가</span>
+                    ) : (
+                      <span>워치리스트 추가 및 즉시 평가</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

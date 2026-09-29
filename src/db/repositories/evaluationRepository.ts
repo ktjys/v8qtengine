@@ -1,6 +1,7 @@
 import { dbClient } from '../supabaseClient';
 import { FullTickerEvaluation } from '../../types/v8';
 import { assetRepository } from './assetRepository';
+import { getStockDisplayInfo } from '../../utils/marketUtils';
 
 export class EvaluationRepository {
   async saveAll(evaluations: FullTickerEvaluation[]): Promise<void> {
@@ -119,9 +120,12 @@ export class EvaluationRepository {
             const decision = row.decision || 'HOLD';
             const strategyType = row.strategy_type || 'CORE_MOMENTUM';
 
+            const displayInfo = getStockDisplayInfo(ticker, r.name || assetName);
+            const resolvedName = displayInfo.primaryName || r.name || assetName || ticker;
+
             const ev: FullTickerEvaluation = {
               ticker,
-              name: r.name || assetName || ticker,
+              name: resolvedName,
               price: Number(r.price || 0),
               change1d: Number(r.change1d || 0),
               evaluated_at: evaluationDate,

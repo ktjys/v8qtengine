@@ -3,7 +3,7 @@ import { MarketDataService, ProcessedAssetData, marketDataService as defaultMark
 import { classifyAsset } from '../engine/classificationEngine';
 import { evaluateV8, MarketSnapshot } from '../engine/evaluateV8';
 import { evaluateDipBuyStrategy } from '../engine/dipBuyEngine';
-import { detectMarketRegion } from '../utils/marketUtils';
+import { detectMarketRegion, getStockDisplayInfo } from '../utils/marketUtils';
 
 export class EvaluationService {
   private marketDataService: MarketDataService;
@@ -84,9 +84,12 @@ export class EvaluationService {
       processed.riskInputs
     );
 
+    const displayInfo = getStockDisplayInfo(processed.ticker, processed.name);
+    const resolvedName = displayInfo.primaryName || processed.name;
+
     return {
       ticker: processed.ticker,
-      name: processed.name,
+      name: resolvedName,
       price: processed.price,
       change1d: processed.change1d,
       evaluated_at: new Date().toISOString(),

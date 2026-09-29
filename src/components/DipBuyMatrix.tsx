@@ -27,6 +27,8 @@ import { DipBuyEvaluation, FullTickerEvaluation } from '../types/v8';
 import { ensureDipEvaluation } from '../engine/dipBuyEngine';
 import { buildDipBuyTelegramMessage } from '../notification/templates';
 import { formatStockPrice, formatChangePercent } from '../utils/formatters';
+import { getStockDisplayInfo } from '../utils/marketUtils';
+import { STOCK_MASTER_DATABASE } from '../utils/stockSearchService';
 import { StockDisplayBadge } from './StockDisplayBadge';
 import { SortableHeader } from './SortableHeader';
 
@@ -116,10 +118,32 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
       const d = item.dip;
 
       // Search
-      const matchSearch =
-        (item.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-      if (!matchSearch) return false;
+      if (searchTerm.trim()) {
+        const searchClean = searchTerm.toLowerCase().replace(/[\s\-_.]/g, '');
+        const tickerClean = (item.ticker || '').toLowerCase().replace(/[\s\-_.]/g, '');
+        const rawNameClean = (item.name || '').toLowerCase().replace(/[\s\-_.]/g, '');
+        const displayInfo = getStockDisplayInfo(item.ticker, item.name);
+        const primaryClean = (displayInfo.primaryName || '').toLowerCase().replace(/[\s\-_.]/g, '');
+        const subCodeClean = (displayInfo.subCode || '').toLowerCase().replace(/[\s\-_.]/g, '');
+
+        const masterStock = STOCK_MASTER_DATABASE.find(
+          (s) =>
+            s.ticker.toUpperCase() === item.ticker.toUpperCase() ||
+            s.ticker.replace(/\.(KS|KQ)$/i, '').toUpperCase() === item.ticker.toUpperCase()
+        );
+        const aliasMatches = masterStock?.aliases?.some((a) =>
+          a.toLowerCase().replace(/[\s\-_.]/g, '').includes(searchClean)
+        );
+
+        const matchSearch =
+          tickerClean.includes(searchClean) ||
+          rawNameClean.includes(searchClean) ||
+          primaryClean.includes(searchClean) ||
+          subCodeClean.includes(searchClean) ||
+          Boolean(aliasMatches);
+
+        if (!matchSearch) return false;
+      }
 
       // Tier filter
       if (filterTier === 'S' && d.suitability.tier !== 'S') return false;

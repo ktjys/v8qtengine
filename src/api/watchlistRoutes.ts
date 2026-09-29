@@ -3,8 +3,67 @@ import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { evaluationService } from '../pipeline/evaluationService';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../constants/limits';
+import { resolveSingleQuery, searchStockMaster, StockInfo } from '../utils/stockSearchService';
 
 export const watchlistRouter = Router();
+
+// GET /api/v8/watchlist/search?q=... (실시간 종목명 및 티커 통합 검색)
+watchlistRouter.get('/search', async (req, res) => {
+  try {
+    const q = ((req.query.q as string) || '').trim();
+    if (!q) {
+      return res.json({ success: true, results: [] });
+    }
+
+    // 1. Authoritative local stock master database search
+    const localMatches = searchStockMaster(q, 10);
+
+    // 2. Fallback to Yahoo Finance search if fewer than 5 results and query has alphanumeric chars
+    let yahooMatches: StockInfo[] = [];
+    if (localMatches.length < 5 && /^[a-zA-Z0-9\s.-]+$/.test(q)) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const yRes = await fetch(
+          `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=6&newsCount=0`,
+          {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          }
+        );
+        clearTimeout(timeoutId);
+        if (yRes.ok) {
+          const yData = (await yRes.json()) as any;
+          const quotes = yData.quotes || [];
+          yahooMatches = quotes
+            .filter((quote: any) => quote.symbol && !quote.symbol.includes('='))
+            .map((quote: any) => ({
+              ticker: quote.symbol.toUpperCase(),
+              name: quote.shortname || quote.longname || quote.symbol,
+              englishName: quote.longname || quote.shortname,
+              market: quote.symbol.endsWith('.KS') || quote.symbol.endsWith('.KQ') ? 'KR' : 'US',
+              exchange: quote.exchange,
+            }));
+        }
+      } catch {}
+    }
+
+    // Deduplicate
+    const seen = new Set<string>();
+    const combined: StockInfo[] = [];
+    for (const item of [...localMatches, ...yahooMatches]) {
+      const key = item.ticker.toUpperCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(item);
+      }
+    }
+
+    res.json({ success: true, query: q, results: combined.slice(0, 10) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message, results: [] });
+  }
+});
 
 // GET /api/v8/watchlist
 watchlistRouter.get('/', async (req, res) => {
@@ -18,33 +77,77 @@ watchlistRouter.get('/', async (req, res) => {
 
 // Ticker format validation:
 // 1) US Stocks & ETFs: 1 to 6 uppercase letters, optional dot or hyphen (e.g. AAPL, BRK.B, BF-B)
-// 2) Korean Stocks & ETFs: 6 digits (e.g. 005930), or 6 digits with .KS / .KQ (e.g. 005930.KS, 247540.KQ)
+// 2) Korean Stocks & ETFs: 6 digits (e.g. 005930), or 6 digits with .KS / .KQ (e.g. 005930.KS, 373220.KS, 247540.KQ)
 export const TICKER_REGEX = /^([A-Z]{1,6}([.-][A-Z]{1,3})?|\d{6}(\.(KS|KQ))?)$/;
 
-export function parseRawTickers(rawInput: string | string[]): string[] {
-  let tokens: string[] = [];
-  if (Array.isArray(rawInput)) {
-    tokens = rawInput.map((t) => String(t).trim().toUpperCase()).filter(Boolean);
-  } else if (typeof rawInput === 'string') {
-    // Split by commas, spaces, slashes, tabs, or newlines
-    tokens = rawInput.split(/[,\s\n\r/]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
-  }
-
-  // 6자리 순수 숫자만 입력된 경우 한국 주식 기본 코스피(.KS) 형태로 자동 보정
-  const normalized = tokens.map((t) => {
-    if (/^\d{6}$/.test(t)) {
-      return `${t}.KS`;
-    }
-    return t;
-  });
-
-  return Array.from(new Set(normalized));
+export interface ParsedTickerResult {
+  ticker: string;
+  name?: string;
+  originalInput: string;
+  resolved: boolean;
 }
 
-async function validateSingleTickerWithYahoo(ticker: string): Promise<{ valid: boolean; symbol: string; name?: string; reason?: string }> {
-  if (!TICKER_REGEX.test(ticker)) {
-    return { valid: false, symbol: ticker, reason: '티커 기호 형식 오류 (1~6자 영문)' };
+export function parseRawTickers(rawInput: string | string[]): ParsedTickerResult[] {
+  let tokens: string[] = [];
+  if (Array.isArray(rawInput)) {
+    tokens = rawInput.map((t) => String(t).trim()).filter(Boolean);
+  } else if (typeof rawInput === 'string') {
+    const trimmed = rawInput.trim();
+    if (trimmed.includes(',')) {
+      tokens = trimmed.split(',').map((t) => t.trim()).filter(Boolean);
+    } else {
+      // First check if the entire query resolves to a single stock (e.g. "LG 에너지솔루션", "현대 자동차", "에코프로 비엠")
+      const directResolved = resolveSingleQuery(trimmed);
+      if (directResolved.resolved) {
+        tokens = [trimmed];
+      } else {
+        tokens = trimmed.split(/[\s\n\r/]+/).map((t) => t.trim()).filter(Boolean);
+      }
+    }
   }
+
+  const seen = new Set<string>();
+  const results: ParsedTickerResult[] = [];
+
+  for (const rawToken of tokens) {
+    const resolved = resolveSingleQuery(rawToken);
+    let targetTicker = resolved.resolved ? resolved.ticker : rawToken.toUpperCase().trim();
+    // Auto-normalize 6 digits to .KS if pure numbers
+    if (/^[0-9]{6}$/.test(targetTicker)) {
+      targetTicker = `${targetTicker}.KS`;
+    }
+    if (!seen.has(targetTicker)) {
+      seen.add(targetTicker);
+      results.push({
+        ticker: targetTicker,
+        name: resolved.resolved ? resolved.name : undefined,
+        originalInput: rawToken,
+        resolved: resolved.resolved,
+      });
+    }
+  }
+
+  return results;
+}
+
+async function validateSingleTickerWithYahoo(
+  ticker: string,
+  preferredName?: string
+): Promise<{ valid: boolean; symbol: string; name?: string; reason?: string }> {
+  // If already known in master database or preferred name provided, accept immediately
+  const resolved = resolveSingleQuery(ticker);
+  if (resolved.resolved) {
+    return {
+      valid: true,
+      symbol: resolved.ticker,
+      name: preferredName || resolved.name,
+    };
+  }
+
+  if (!TICKER_REGEX.test(ticker)) {
+    return { valid: false, symbol: ticker, reason: '티커 기호 또는 종목명을 인식할 수 없습니다' };
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
@@ -66,12 +169,12 @@ async function validateSingleTickerWithYahoo(ticker: string): Promise<{ valid: b
       }
       const exactMatch = quotes.find((q: any) => (q.symbol || '').toUpperCase() === ticker);
       if (exactMatch) {
-        return { valid: true, symbol: ticker, name: exactMatch.shortname || exactMatch.longname || ticker };
+        return { valid: true, symbol: ticker, name: preferredName || exactMatch.shortname || exactMatch.longname || ticker };
       }
       const first = quotes[0];
       const firstSym = (first.symbol || '').toUpperCase();
       if (firstSym === ticker) {
-        return { valid: true, symbol: ticker, name: first.shortname || first.longname || ticker };
+        return { valid: true, symbol: ticker, name: preferredName || first.shortname || first.longname || ticker };
       }
       return {
         valid: false,
@@ -82,10 +185,10 @@ async function validateSingleTickerWithYahoo(ticker: string): Promise<{ valid: b
   } catch (e: any) {
     console.warn(`[WatchlistRouter] Yahoo validation network fallback for ${ticker}:`, e.message);
   }
-  return { valid: true, symbol: ticker };
+  return { valid: true, symbol: ticker, name: preferredName || ticker };
 }
 
-// POST /api/v8/watchlist (Supports single ticker or comma-separated/batch tickers)
+// POST /api/v8/watchlist (Supports single ticker or comma-separated/batch tickers or Korean names)
 watchlistRouter.post('/', async (req, res) => {
   try {
     const rawInput = req.body.tickers || req.body.ticker;
@@ -93,12 +196,12 @@ watchlistRouter.post('/', async (req, res) => {
     const customName = req.body.name || '';
 
     if (!rawInput) {
-      return res.status(400).json({ success: false, error: '추가할 티커가 입력되지 않았습니다.' });
+      return res.status(400).json({ success: false, error: '추가할 종목명 또는 티커가 입력되지 않았습니다.' });
     }
 
-    const candidateTickers = parseRawTickers(rawInput);
-    if (candidateTickers.length === 0) {
-      return res.status(400).json({ success: false, error: '유효한 티커가 감지되지 않았습니다.' });
+    const candidateItems = parseRawTickers(rawInput);
+    if (candidateItems.length === 0) {
+      return res.status(400).json({ success: false, error: '유효한 종목명 또는 티커가 감지되지 않았습니다.' });
     }
 
     const existingList = await watchlistRepository.getAll();
@@ -108,19 +211,26 @@ watchlistRouter.post('/', async (req, res) => {
     const rejected: Array<{ ticker: string; reason: string }> = [];
     const validCandidates: Array<{ ticker: string; name: string }> = [];
 
-    for (const ticker of candidateTickers) {
-      if (existingTickerSet.has(ticker)) {
-        alreadyExists.push(ticker);
+    for (const item of candidateItems) {
+      if (existingTickerSet.has(item.ticker.toUpperCase())) {
+        alreadyExists.push(item.ticker);
         continue;
       }
 
-      const validation = await validateSingleTickerWithYahoo(ticker);
+      const validation = await validateSingleTickerWithYahoo(
+        item.ticker,
+        candidateItems.length === 1 && customName ? customName : item.name
+      );
+
       if (!validation.valid) {
-        rejected.push({ ticker, reason: validation.reason || '유효하지 않은 티커' });
+        rejected.push({
+          ticker: item.originalInput,
+          reason: validation.reason || '유효하지 않은 종목',
+        });
       } else {
         validCandidates.push({
-          ticker,
-          name: candidateTickers.length === 1 && customName ? customName : (validation.name || ticker),
+          ticker: validation.symbol,
+          name: validation.name || item.name || validation.symbol,
         });
       }
     }

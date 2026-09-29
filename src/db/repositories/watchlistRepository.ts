@@ -2,6 +2,7 @@ import { dbClient } from '../supabaseClient';
 import { WatchlistItem } from '../../types/v8';
 import { assetRepository } from './assetRepository';
 import { MAX_WATCHLIST_CAPACITY, WATCHLIST_CAPACITY_ERROR_MESSAGE } from '../../constants/limits';
+import { getStockDisplayInfo } from '../../utils/marketUtils';
 
 export class WatchlistRepository {
   async getAll(): Promise<WatchlistItem[]> {
@@ -21,9 +22,11 @@ export class WatchlistRepository {
           }
           const list: WatchlistItem[] = data.map((row: any) => {
             const assetName = dbClient.assets.get(row.ticker)?.name;
+            const displayInfo = getStockDisplayInfo(row.ticker, assetName || row.name);
+            const resolvedName = displayInfo.primaryName || assetName || row.name || row.ticker;
             return {
               ticker: row.ticker,
-              name: assetName || row.name || row.ticker,
+              name: resolvedName,
               is_active: row.is_active ?? true,
               memo: row.memo || '감시 종목',
               created_at: row.created_at || new Date().toISOString(),
@@ -95,10 +98,13 @@ export class WatchlistRepository {
     const now = new Date().toISOString();
     const isActive = item.is_active !== undefined ? item.is_active : true;
 
+    const displayInfo = getStockDisplayInfo(clean, item.name);
+    const resolvedName = item.name && item.name !== clean ? item.name : (displayInfo.primaryName || clean);
+
     // Ensure asset entry exists
     await assetRepository.upsert({
       ticker: clean,
-      name: item.name || clean,
+      name: resolvedName,
       asset_type: 'equity',
       exchange: 'US',
       currency: 'USD',
