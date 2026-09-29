@@ -395,7 +395,8 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
     try {
       const macro = await MacroEarningsEngine.getMacroMarketRegime();
       const portRegion = targetMarket === 'KR' ? 'KR' : 'US';
-      const portState = PortfolioEngine.calculatePortfolioState(100000, macro, portRegion);
+      const portCapital = portRegion === 'KR' ? 100_000_000 : 100_000;
+      const portState = PortfolioEngine.calculatePortfolioState(portCapital, macro, portRegion);
       const rebalanceTrims = portState.positions.filter((p) => p.rebalanceAction === 'TRIM');
       const rebalanceAdds = portState.positions.filter((p) => p.rebalanceAction === 'INCREASE');
 

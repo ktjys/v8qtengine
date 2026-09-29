@@ -66,6 +66,14 @@ export class TelegramNotifier {
       };
     }
 
+    // Safety guard: Never send live Telegram notifications during unit/integration tests
+    if ((process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)) && !process.env.ALLOW_TEST_TELEGRAM) {
+      return {
+        success: true,
+        previewOnly: true,
+      };
+    }
+
     try {
       const url = `https://api.telegram.org/bot${token}/sendMessage`;
       let res = await fetch(url, {

@@ -333,11 +333,11 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Quant Decision Engine Server running on http://localhost:${PORT}`);
-    // Start automated internal cron scheduler only if explicitly enabled (prevents duplicate triggers when Cloudflare Cron or external crons are active)
-    if (process.env.ENABLE_INTERNAL_SCHEDULER === 'true') {
+    // Start automated internal cron scheduler by default (can be toggled in UI or disabled with ENABLE_INTERNAL_SCHEDULER=false)
+    if (process.env.ENABLE_INTERNAL_SCHEDULER !== 'false') {
       internalScheduler.start();
     } else {
-      console.log('[InternalScheduler] Inactive by default (Cloudflare Cron Trigger or external cron takes precedence). Set ENABLE_INTERNAL_SCHEDULER=true or use UI to enable.');
+      console.log('[InternalScheduler] Explicitly disabled by ENABLE_INTERNAL_SCHEDULER=false.');
     }
     // Bootstrap initial evaluation state asynchronously after server is up
     getInitialOrLatestEvaluations().catch((err) => {

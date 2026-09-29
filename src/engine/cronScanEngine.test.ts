@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { executeCronScan } from './cronScanEngine';
 import { scanService } from '../pipeline/scanService';
+import { telegramNotifier } from '../notification/telegramNotifier';
 
 describe('cronScanEngine — 주말/휴장일 가드 및 시장 격리', () => {
   it('일요일 또는 토요일에 자동 스케줄러가 KR 시장 스캔을 호출하면 휴장일 가드로 안전하게 스킵된다', async () => {
@@ -36,6 +37,10 @@ describe('cronScanEngine — 주말/휴장일 가드 및 시장 격리', () => {
       newSignals: [],
       allSignals: [],
       runLog: {} as any,
+    });
+    vi.spyOn(telegramNotifier, 'sendMessage').mockResolvedValue({
+      success: true,
+      previewOnly: true,
     });
 
     const resultPromise = executeCronScan({

@@ -96,12 +96,30 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     } catch {}
   };
 
+  const [isTogglingScheduler, setIsTogglingScheduler] = useState(false);
+
   const fetchSchedulerStatus = async () => {
     try {
       const res = await fetch('/api/v8/schedule/status');
       const data = await res.json();
       setSchedulerStatus(data);
     } catch {}
+  };
+
+  const handleToggleScheduler = async () => {
+    setIsTogglingScheduler(true);
+    try {
+      const res = await fetch('/api/v8/schedule/toggle', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setSchedulerStatus(data);
+        onShowToast(data.active ? '서버 내장 스케줄러가 활성화되었습니다.' : '서버 내장 스케줄러가 일시 중지되었습니다.');
+      }
+    } catch (err: any) {
+      onShowToast(`스케줄러 설정 오류: ${err.message}`);
+    } finally {
+      setIsTogglingScheduler(false);
+    }
   };
 
   useEffect(() => {
@@ -577,31 +595,77 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           {activeTab === 'schedule' && (
             <div className="space-y-3 sm:space-y-4">
               {/* Internal In-Process Scheduler Status Card */}
-              <div className="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs sm:text-sm font-bold text-slate-100">서버 자체 내장 스케줄러 가동 중</span>
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        ACTIVE
-                      </span>
+              <div className={`p-3.5 rounded-2xl border transition-all ${
+                schedulerStatus?.active
+                  ? 'bg-emerald-950/20 border-emerald-500/30'
+                  : 'bg-amber-950/20 border-amber-500/30'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                      schedulerStatus?.active
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                    }`}>
+                      {schedulerStatus?.active ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : (
+                        <Clock className="w-5 h-5" />
+                      )}
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      외부 크론 서비스 없이도 서버 내부에서 매일 국내장 2회(09:30, 15:40) 및 미국장 2회(23:00, 06:30) 총 4회 정해진 시각에 스스로 자동 실행합니다.
-                    </p>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs sm:text-sm font-bold text-slate-100">
+                          {schedulerStatus?.active ? '서버 내장 스케줄러 가동 중' : '서버 내장 스케줄러 일시 정지됨'}
+                        </span>
+                        <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-full border ${
+                          schedulerStatus?.active
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {schedulerStatus?.active ? 'ACTIVE' : 'PAUSED'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        매일 국내장 2회(09:30, 15:40) 및 미국장 2회(23:00, 06:30) 총 4회 정해진 시각에 자동 실행합니다.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 shrink-0">
+                    {schedulerStatus?.next_scheduled_slot && (
+                      <div className="hidden sm:block text-right">
+                        <div className="text-[10px] text-slate-400 font-mono">다음 예정 브리핑</div>
+                        <div className="text-xs font-bold font-mono text-cyan-400">
+                          {schedulerStatus.next_scheduled_slot.target_time}
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleToggleScheduler}
+                      disabled={isTogglingScheduler}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shrink-0 ${
+                        schedulerStatus?.active
+                          ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                      }`}
+                    >
+                      {isTogglingScheduler ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : schedulerStatus?.active ? (
+                        '일시 정지'
+                      ) : (
+                        '스케줄러 가동'
+                      )}
+                    </button>
                   </div>
                 </div>
-                {schedulerStatus?.next_scheduled_slot && (
-                  <div className="hidden sm:block text-right">
-                    <div className="text-[10px] text-slate-400 font-mono">다음 예정 브리핑</div>
-                    <div className="text-xs font-bold font-mono text-cyan-400">
-                      {schedulerStatus.next_scheduled_slot.target_time}
-                    </div>
-                  </div>
-                )}
+
+                <div className="mt-2.5 pt-2.5 border-t border-slate-800/60 text-[10px] sm:text-[11px] text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span>💡 <b>현재 서버 시간:</b> <code className="text-cyan-400 font-mono">{schedulerStatus?.current_kst_time || 'KST 연동 중'}</code> (최근 실행: {schedulerStatus?.last_executed_slot || '대기 중'})</span>
+                  <span className="text-amber-300/80">※ 브라우저/서버 종료 후 24시간 무중단 수신은 [⚙️ 크론 연동 가이드]의 웹훅 등록 권장</span>
+                </div>
               </div>
 
               {/* Market Filter Tabs */}
