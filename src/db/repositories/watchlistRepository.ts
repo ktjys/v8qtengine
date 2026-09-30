@@ -123,21 +123,15 @@ export class WatchlistRepository {
       if (item.name) existing.name = item.name;
 
       if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
-        try {
-          const { error } = await dbClient.supabase
-            .from('watchlist')
-            .update({
-              is_active: true,
-              memo: existing.memo || null,
-            })
-            .eq('ticker', clean);
+        const { error } = await dbClient.supabase
+          .from('watchlist')
+          .update({
+            is_active: true,
+            memo: existing.memo || null,
+          })
+          .eq('ticker', clean);
 
-          if (error) {
-            dbClient.handleDbError('watchlist', 'update in add', error);
-          }
-        } catch (err) {
-          dbClient.handleDbError('watchlist', 'update in add', err);
-        }
+        dbClient.assertWriteOk('watchlist', 'update in add', error, { ticker: clean });
       }
 
       dbClient.watchlist.set(clean, existing);
@@ -154,22 +148,16 @@ export class WatchlistRepository {
     };
 
     if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
-      try {
-        const { error } = await dbClient.supabase
-          .from('watchlist')
-          .upsert({
-            ticker: clean,
-            is_active: true,
-            memo: newItem.memo,
-            market_region: marketRegion,
-          }, { onConflict: 'ticker' });
+      const { error } = await dbClient.supabase
+        .from('watchlist')
+        .upsert({
+          ticker: clean,
+          is_active: true,
+          memo: newItem.memo,
+          market_region: marketRegion,
+        }, { onConflict: 'ticker' });
 
-        if (error) {
-          dbClient.handleDbError('watchlist', 'insert', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError('watchlist', 'insert', err);
-      }
+      dbClient.assertWriteOk('watchlist', 'insert', error, { ticker: clean, market_region: marketRegion });
     }
 
     dbClient.watchlist.set(clean, newItem);
@@ -192,22 +180,16 @@ export class WatchlistRepository {
     };
 
     if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
-      try {
-        const { error } = await dbClient.supabase
-          .from('watchlist')
-          .update({
-            is_active: updated.is_active,
-            memo: updated.memo || null,
-            market_region: updated.market_region || null,
-          })
-          .eq('ticker', clean);
+      const { error } = await dbClient.supabase
+        .from('watchlist')
+        .update({
+          is_active: updated.is_active,
+          memo: updated.memo || null,
+          market_region: updated.market_region || null,
+        })
+        .eq('ticker', clean);
 
-        if (error) {
-          dbClient.handleDbError('watchlist', 'update', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError('watchlist', 'update', err);
-      }
+      dbClient.assertWriteOk('watchlist', 'update', error, { ticker: clean });
     }
 
     dbClient.watchlist.set(clean, updated);
@@ -218,25 +200,22 @@ export class WatchlistRepository {
     const clean = ticker.toUpperCase().trim();
 
     if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
-      try {
-        const { error } = await dbClient.supabase
-          .from('watchlist')
-          .delete()
-          .eq('ticker', clean);
+      const { error } = await dbClient.supabase
+        .from('watchlist')
+        .delete()
+        .eq('ticker', clean);
 
-        if (error) {
-          dbClient.handleDbError('watchlist', 'delete', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError('watchlist', 'delete', err);
-      }
+      dbClient.assertWriteOk('watchlist', 'delete', error, { ticker: clean });
     }
 
     if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
-      try {
-        await dbClient.supabase.from('evaluations').delete().eq('ticker', clean);
-      } catch (err) {
-        // Silently ignore evaluation deletion error
+      const { error: evalError } = await dbClient.supabase
+        .from('evaluations')
+        .delete()
+        .eq('ticker', clean);
+
+      if (evalError) {
+        dbClient.handleDbError('evaluations', 'delete on watchlist remove', evalError);
       }
     }
 
@@ -250,24 +229,22 @@ export class WatchlistRepository {
     if (cleanTickers.length === 0) return 0;
 
     if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
-      try {
-        const { error } = await dbClient.supabase
-          .from('watchlist')
-          .delete()
-          .in('ticker', cleanTickers);
-        if (error) {
-          dbClient.handleDbError('watchlist', 'removeMany', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError('watchlist', 'removeMany', err);
-      }
+      const { error } = await dbClient.supabase
+        .from('watchlist')
+        .delete()
+        .in('ticker', cleanTickers);
+
+      dbClient.assertWriteOk('watchlist', 'removeMany', error, { tickers: cleanTickers });
     }
 
     if (dbClient.isTableAvailable('evaluations') && dbClient.supabase) {
-      try {
-        await dbClient.supabase.from('evaluations').delete().in('ticker', cleanTickers);
-      } catch (err) {
-        // Silently ignore
+      const { error: evalError } = await dbClient.supabase
+        .from('evaluations')
+        .delete()
+        .in('ticker', cleanTickers);
+
+      if (evalError) {
+        dbClient.handleDbError('evaluations', 'delete on watchlist removeMany', evalError);
       }
     }
 
@@ -284,23 +261,23 @@ export class WatchlistRepository {
   async removeAll(): Promise<boolean> {
     const allTickers = Array.from(dbClient.watchlist.keys());
     if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
-      try {
-        const { error } = await dbClient.supabase
-          .from('watchlist')
-          .delete()
-          .neq('ticker', '___NEVER_MATCH___');
-        if (error) {
-          dbClient.handleDbError('watchlist', 'removeAll', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError('watchlist', 'removeAll', err);
-      }
+      const { error } = await dbClient.supabase
+        .from('watchlist')
+        .delete()
+        .neq('ticker', '___NEVER_MATCH___');
+
+      dbClient.assertWriteOk('watchlist', 'removeAll', error);
     }
 
     if (dbClient.isTableAvailable('evaluations') && dbClient.supabase && allTickers.length > 0) {
-      try {
-        await dbClient.supabase.from('evaluations').delete().in('ticker', allTickers);
-      } catch (err) {}
+      const { error: evalError } = await dbClient.supabase
+        .from('evaluations')
+        .delete()
+        .in('ticker', allTickers);
+
+      if (evalError) {
+        dbClient.handleDbError('evaluations', 'delete on watchlist removeAll', evalError);
+      }
     }
 
     for (const t of allTickers) {

@@ -106,10 +106,25 @@ class UniversalDatabaseClient {
     }
   }
 
+  // PGRST204 means the table exists but a required column was never migrated in.
+  // Marking it here would permanently disable the table via isTableAvailable(),
+  // silently dropping every write while reads keep working off seed data.
   public handleDbError(tableName: string, operation: string, error: any) {
     if (!error) return;
     const msg = error.message || String(error);
+    const code = error.code ? String(error.code) : '';
+
+    if (code === 'PGRST204' || /Could not find the '.*' column/i.test(msg)) {
+      console.error(
+        `[SupabaseClient] SCHEMA DRIFT: '${tableName}.${operation}' needs an unmigrated column. ` +
+          `Apply the matching file in supabase/migrations/. ${msg}`
+      );
+      return;
+    }
+
     if (
+      code === '42P01' ||
+      code === 'PGRST205' ||
       msg.includes('schema cache') ||
       msg.includes('does not exist') ||
       msg.includes('42P01') ||
@@ -120,6 +135,13 @@ class UniversalDatabaseClient {
     } else {
       console.warn(`[SupabaseClient] Table: ${tableName}, Op: ${operation} - ${msg}`);
     }
+  }
+
+  public assertWriteOk(tableName: string, operation: string, error: any, context?: unknown) {
+    if (!error) return;
+    this.handleDbError(tableName, operation, error);
+    const suffix = context === undefined ? '' : ` (${JSON.stringify(context)})`;
+    throw new Error(`[db] ${tableName}.${operation} failed${suffix}: ${error.message || String(error)}`);
   }
 
   public ensureConnected(): boolean {
