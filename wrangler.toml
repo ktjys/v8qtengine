@@ -11,13 +11,10 @@ not_found_handling = "single-page-application"
 [vars]
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
-# ⚠️ CRITICAL: NEVER commit real secrets to git!
-# Set these via Cloudflare Workers dashboard: Settings > Variables > Environment Variables
-# Or use `wrangler secret put <NAME>` for encrypted secrets
-TELEGRAM_BOT_TOKEN = ""
-TELEGRAM_CHAT_ID = ""
-SUPABASE_URL = ""
-SUPABASE_KEY = ""
+# ⚠️ Set TELEGRAM and SUPABASE in Cloudflare dashboard or wrangler secret:
+# Dashboard: Settings > Variables and Secrets > Environment Variables
+# Or CLI: npx wrangler secret put SUPABASE_URL / npx wrangler secret put SUPABASE_KEY
+# (Do NOT define empty SUPABASE_URL/KEY in [vars] as empty strings overwrite Cloudflare dashboard secrets!)
 
 [triggers]
 crons = [

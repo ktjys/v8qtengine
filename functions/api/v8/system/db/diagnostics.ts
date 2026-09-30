@@ -1,8 +1,23 @@
 import { runDatabaseDiagnostics } from '../../../../../src/db/diagnostics';
+import { dbClient } from '../../../../../src/db/supabaseClient';
 
 // GET /api/v8/system/db/diagnostics
 export async function onRequest(context: any) {
   try {
+    if (!dbClient.isSupabaseConnected && context?.env) {
+      const env = context.env;
+      const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim();
+      const key = (
+        env.SUPABASE_KEY ||
+        env.SUPABASE_ANON_KEY ||
+        env.SUPABASE_SERVICE_ROLE_KEY ||
+        env.VITE_SUPABASE_ANON_KEY ||
+        ''
+      ).trim();
+      if (url && key) {
+        await dbClient.connectFromTrustedEnv(url, key);
+      }
+    }
     const diagnostics = await runDatabaseDiagnostics();
     return new Response(
       JSON.stringify({

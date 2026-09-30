@@ -11,17 +11,37 @@ import { dbClient } from '../src/db/supabaseClient';
 // env binding into dbClient exactly once per isolate. It is server-only:
 // `context.env` is never reachable from the browser, so this does not
 // reintroduce any client-side credential exposure.
-let dbInitStarted = false;
-
 export async function onRequest(context: any) {
-  if (!dbInitStarted && !dbClient.isSupabaseConnected) {
-    dbInitStarted = true;
+  if (!dbClient.isSupabaseConnected) {
     const env = (context.env || {}) as Record<string, string | undefined>;
-    const url = env.SUPABASE_URL || '';
-    const key = env.SUPABASE_KEY || '';
+    const url = (
+      env.SUPABASE_URL ||
+      env.VITE_SUPABASE_URL ||
+      (typeof process !== 'undefined' ? (process.env?.SUPABASE_URL || process.env?.VITE_SUPABASE_URL) : '') ||
+      ''
+    ).trim().replace(/^["']|["']$/g, '');
+
+    const key = (
+      env.SUPABASE_KEY ||
+      env.SUPABASE_ANON_KEY ||
+      env.SUPABASE_SERVICE_ROLE_KEY ||
+      env.VITE_SUPABASE_ANON_KEY ||
+      (typeof process !== 'undefined'
+        ? (process.env?.SUPABASE_KEY ||
+           process.env?.SUPABASE_ANON_KEY ||
+           process.env?.SUPABASE_SERVICE_ROLE_KEY ||
+           process.env?.VITE_SUPABASE_ANON_KEY)
+        : '') ||
+      ''
+    ).trim().replace(/^["']|["']$/g, '');
+
     if (url && key) {
       try {
         await dbClient.connectFromTrustedEnv(url, key);
+        if (typeof process !== 'undefined' && process.env) {
+          process.env.SUPABASE_URL = url;
+          process.env.SUPABASE_KEY = key;
+        }
       } catch (err) {
         console.error('[functions/_middleware] Supabase connect failed:', err);
       }
@@ -30,3 +50,4 @@ export async function onRequest(context: any) {
 
   return context.next();
 }
+

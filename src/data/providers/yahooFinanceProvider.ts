@@ -141,12 +141,58 @@ export class YahooFinanceProvider implements MarketDataProvider {
       }
     } catch {}
 
+    // Korean market fallback for quote via Naver Finance
+    if (clean.endsWith('.KS') || clean.endsWith('.KQ') || /^\d{6}/.test(clean)) {
+      try {
+        const sixDigit = clean.replace(/\.(KS|KQ)$/i, '');
+        const nRes = await fetch(`https://fchart.stock.naver.com/sise.nhn?symbol=${sixDigit}&timeframe=day&count=5&requestType=0`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(2500),
+        });
+        if (nRes.ok) {
+          const text = await nRes.text();
+          const regex = /<item data="([^"]+)"\s*\/>/g;
+          let match;
+          const items: { close: number; date: string }[] = [];
+          while ((match = regex.exec(text)) !== null) {
+            const p = match[1].split('|');
+            if (p.length >= 6) {
+              const close = parseFloat(p[4]);
+              if (!isNaN(close) && close > 0) items.push({ close, date: p[0] });
+            }
+          }
+          if (items.length > 0) {
+            const last = items[items.length - 1];
+            const prev = items.length > 1 ? items[items.length - 2] : last;
+            const change = Math.round((last.close - prev.close) * 100) / 100;
+            const changePercent = prev.close > 0 ? Math.round((change / prev.close) * 10000) / 100 : 0;
+            const derived: QuoteData = {
+              ticker: clean,
+              price: last.close,
+              change,
+              changePercent,
+              currency: 'KRW',
+              exchange: clean.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI',
+              timestamp: new Date().toISOString(),
+            };
+            this.setCache(cacheKey, derived);
+            return derived;
+          }
+        }
+      } catch {}
+    }
+
     this.lastUsedFallback = true;
     return this.fallbackProvider.getQuote(clean);
   }
 
   async getHistorical(ticker: string, range = '1y', interval = '1d'): Promise<OHLCVBar[]> {
-    const clean = ticker.toUpperCase().trim();
+    let clean = ticker.toUpperCase().trim();
+    // Known ticker corrections & typos
+    if (clean === '373130.KS' || clean === '373130') {
+      clean = '034020.KS'; // 두산에너빌리티
+    }
+
     const cacheKey = `history_${clean}_${range}_${interval}`;
     const cached = this.getCached<OHLCVBar[]>(cacheKey);
     if (cached) return cached;
@@ -216,7 +262,76 @@ export class YahooFinanceProvider implements MarketDataProvider {
       } catch {}
     }
 
-    // Try Stooq historical daily CSV fallback
+    // Secondary fallback: For Korean stocks (.KS / .KQ), fetch real historical daily data from Naver Finance chart
+    if (clean.endsWith('.KS') || clean.endsWith('.KQ') || /^\d{6}/.test(clean)) {
+      try {
+        const sixDigit = clean.replace(/\.(KS|KQ)$/i, '');
+        let targetCount = 252;
+        if (range === '1m') targetCount = 22;
+        else if (range === '3m') targetCount = 63;
+        else if (range === '6m') targetCount = 126;
+        else if (range === '2y') targetCount = 504;
+        else if (range === '5y' || range === 'all') targetCount = 1260;
+
+        const naverUrl = `https://fchart.stock.naver.com/sise.nhn?symbol=${sixDigit}&timeframe=day&count=${targetCount}&requestType=0`;
+        const nRes = await fetch(naverUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(3500),
+        });
+
+        if (nRes.ok) {
+          const text = await nRes.text();
+          const regex = /<item data="([^"]+)"\s*\/>/g;
+          let match;
+          const bars: OHLCVBar[] = [];
+          while ((match = regex.exec(text)) !== null) {
+            const parts = match[1].split('|');
+            if (parts.length >= 6) {
+              const rawDate = parts[0];
+              const date = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+              const open = parseFloat(parts[1]);
+              const high = parseFloat(parts[2]);
+              const low = parseFloat(parts[3]);
+              const close = parseFloat(parts[4]);
+              const volume = parseFloat(parts[5]);
+              if (!isNaN(close) && close > 0) {
+                bars.push({
+                  date,
+                  open: isNaN(open) ? close : Math.round(open * 100) / 100,
+                  high: isNaN(high) ? close : Math.round(high * 100) / 100,
+                  low: isNaN(low) ? close : Math.round(low * 100) / 100,
+                  close: Math.round(close * 100) / 100,
+                  adjClose: Math.round(close * 100) / 100,
+                  volume: volume || 0,
+                });
+              }
+            }
+          }
+
+          if (bars.length > 0) {
+            this.setCache(cacheKey, bars);
+            const latestBar = bars[bars.length - 1];
+            const prevBar = bars.length > 1 ? bars[bars.length - 2] : latestBar;
+            const change = Math.round((latestBar.close - prevBar.close) * 100) / 100;
+            const changePercent = prevBar.close > 0 ? Math.round((change / prevBar.close) * 10000) / 100 : 0;
+            this.setCache(`quote_${clean}`, {
+              ticker: clean,
+              price: latestBar.close,
+              change,
+              changePercent,
+              currency: 'KRW',
+              exchange: clean.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI',
+              timestamp: new Date().toISOString(),
+            });
+            return bars;
+          }
+        }
+      } catch (nErr) {
+        // continue to next fallback
+      }
+    }
+
+    // Try Stooq historical daily CSV fallback for US stocks
     try {
       const stooqUrl = `https://stooq.com/q/d/l/?s=${encodeURIComponent(clean.toLowerCase())}.us&i=d`;
       const sRes = await fetch(stooqUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });

@@ -380,6 +380,34 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                 </div>
               </div>
 
+              {/* Not Connected Guidance Card for Production Servers */}
+              {!isConnected && (
+                <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 text-slate-200 space-y-3 animate-fadeIn">
+                  <div className="flex items-center space-x-2 font-bold text-cyan-300">
+                    <Server className="w-4 h-4 shrink-0 text-cyan-400" />
+                    <span>운영 서버 환경변수 설정 가이드 (Supabase DB 연결)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    <b>💡 프리뷰 vs 운영서버 차이점:</b> 프리뷰 환경(AI Studio)은 개발 컨테이너 환경변수에 Supabase 정보가 자동 주입되어 바로 연결되지만, <b>운영 배포 서버(Cloudflare Pages / Workers / Vercel 등)</b>는 보안상 <code className="text-cyan-300">.env</code> 파일이 Git에 포함되지 않으므로 호스팅 플랫폼 대시보드에서 환경변수를 직접 등록해주셔야 연결됩니다.
+                  </p>
+                  <div className="p-3 bg-slate-950/80 rounded-lg border border-slate-800 text-[11px] space-y-2 font-mono">
+                    <div className="text-slate-400 font-sans font-semibold text-[10px]">호스팅 대시보드(Settings &gt; Environment Variables)에 등록할 변수:</div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span>SUPABASE_URL</span>
+                      <span className="text-slate-500 text-[10px]">https://[프로젝트ID].supabase.co</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span>SUPABASE_KEY</span>
+                      <span className="text-slate-500 text-[10px]">anon public key 또는 service_role key (SUPABASE_ANON_KEY도 지원)</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
+                    <span className="text-emerald-400">✓ Cloudflare Pages:</span> Settings &gt; Environment variables &gt; 추가 후 재배포
+                    <span className="text-cyan-400">✓ Cloudflare Workers:</span> Settings &gt; Variables &gt; 추가 또는 <code className="text-slate-300">wrangler secret put SUPABASE_URL</code>
+                  </div>
+                </div>
+              )}
+
               {/* RLS Blocked tables warning */}
               {rlsBlockedTables.length > 0 && (
                 <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/40 text-rose-200 space-y-3 animate-fadeIn">

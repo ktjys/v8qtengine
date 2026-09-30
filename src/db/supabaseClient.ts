@@ -141,8 +141,14 @@ class UniversalDatabaseClient {
     let envKey = '';
     try {
       if (typeof window === 'undefined' && typeof process !== 'undefined' && process.env) {
-        envUrl = (process.env.SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '');
-        envKey = (process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim().replace(/^["']|["']$/g, '');
+        envUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+        envKey = (
+          process.env.SUPABASE_KEY ||
+          process.env.SUPABASE_SERVICE_ROLE_KEY ||
+          process.env.SUPABASE_ANON_KEY ||
+          process.env.VITE_SUPABASE_ANON_KEY ||
+          ''
+        ).trim().replace(/^["']|["']$/g, '');
       }
     } catch {}
 

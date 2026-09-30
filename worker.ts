@@ -36,8 +36,27 @@ function jsonResponse(data: any, status = 200) {
 async function ensureDbConnected(env: any): Promise<boolean> {
   if (dbClient.isSupabaseConnected) return true;
 
-  const envUrl = env?.SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : '') || '';
-  const envKey = env?.SUPABASE_KEY || (typeof process !== 'undefined' ? process.env?.SUPABASE_KEY : '') || '';
+  const envUrl = (
+    env?.SUPABASE_URL ||
+    env?.VITE_SUPABASE_URL ||
+    (typeof process !== 'undefined' ? (process.env?.SUPABASE_URL || process.env?.VITE_SUPABASE_URL) : '') ||
+    ''
+  ).trim().replace(/^["']|["']$/g, '');
+
+  const envKey = (
+    env?.SUPABASE_KEY ||
+    env?.SUPABASE_ANON_KEY ||
+    env?.SUPABASE_SERVICE_ROLE_KEY ||
+    env?.VITE_SUPABASE_ANON_KEY ||
+    (typeof process !== 'undefined'
+      ? (process.env?.SUPABASE_KEY ||
+         process.env?.SUPABASE_ANON_KEY ||
+         process.env?.SUPABASE_SERVICE_ROLE_KEY ||
+         process.env?.VITE_SUPABASE_ANON_KEY)
+      : '') ||
+    ''
+  ).trim().replace(/^["']|["']$/g, '');
+
   if (envUrl && envKey) {
     const result = await dbClient.connectFromTrustedEnv(envUrl, envKey);
     return result.success;

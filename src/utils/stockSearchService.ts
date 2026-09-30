@@ -1143,7 +1143,7 @@ export const STOCK_MASTER_DATABASE: StockInfo[] = [
     englishName: 'Doosan Enerbility',
     market: 'KR',
     exchange: 'KOSPI',
-    aliases: ['두산에너빌리티', '두산중공업', '에너빌리티', '034020', '034020.ks'],
+    aliases: ['두산에너빌리티', '두산중공업', '에너빌리티', '034020', '034020.ks', '373130', '373130.ks'],
     sector: '원전 / 에너지',
   },
   {
