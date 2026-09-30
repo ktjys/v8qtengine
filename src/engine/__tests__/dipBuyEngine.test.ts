@@ -1,5 +1,8 @@
 import { calculateBlueChipSuitability, calculateDipTiming, evaluateDipBuyStrategy } from '../dipBuyEngine';
-import { AssetClassification, RawMarketIndicators, RawRiskInputs, RawYahooMetadata } from '../../types/v8';
+import { AssetClassification } from '../../types/v8';
+import { RawMarketIndicators } from '../opportunityEngine';
+import { RawRiskInputs } from '../riskEngine';
+import { RawYahooMetadata } from '../classificationEngine';
 
 describe('dipBuyEngine', () => {
   const createClassification = (strategy: AssetClassification['strategy_type'], asset_type: 'etf' | 'equity' = 'equity'): AssetClassification => ({

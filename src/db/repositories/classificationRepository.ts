@@ -38,16 +38,22 @@ export class ClassificationRepository {
     dbClient.classifications.set(clean, override);
     dbClient.classificationSnapshots.set(`${clean}_${effectiveDate}`, snapshot);
 
-    if (dbClient.isTableAvailable('classification_snapshot') && dbClient.supabase) {
+    const targetTable = dbClient.isTableAvailable('classification_snapshots')
+      ? 'classification_snapshots'
+      : dbClient.isTableAvailable('classification_snapshot')
+      ? 'classification_snapshot'
+      : null;
+
+    if (targetTable && dbClient.supabase) {
       try {
         const { error } = await dbClient.supabase
-          .from('classification_snapshot')
+          .from(targetTable)
           .upsert({ ...snapshot, updated_at: new Date().toISOString() }, { onConflict: 'ticker,effective_date' });
         if (error) {
-          dbClient.handleDbError('classification_snapshot', 'save', error);
+          dbClient.handleDbError(targetTable, 'save', error);
         }
       } catch (err) {
-        dbClient.handleDbError('classification_snapshot', 'save', err);
+        dbClient.handleDbError(targetTable, 'save', err);
       }
     }
   }
@@ -66,10 +72,16 @@ export class ClassificationRepository {
     const clean = ticker.toUpperCase().trim();
     const asOfDate = evaluationDate.split('T')[0];
 
-    if (dbClient.isTableAvailable('classification_snapshot') && dbClient.supabase) {
+    const targetTable = dbClient.isTableAvailable('classification_snapshots')
+      ? 'classification_snapshots'
+      : dbClient.isTableAvailable('classification_snapshot')
+      ? 'classification_snapshot'
+      : null;
+
+    if (targetTable && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
-          .from('classification_snapshot')
+          .from(targetTable)
           .select('*')
           .eq('ticker', clean)
           .lte('effective_date', asOfDate)
@@ -80,7 +92,7 @@ export class ClassificationRepository {
           return this.toClassification(data);
         }
       } catch (err) {
-        dbClient.handleDbError('classification_snapshot', 'getAsOf', err);
+        dbClient.handleDbError(targetTable, 'getAsOf', err);
       }
     }
 
@@ -103,21 +115,27 @@ export class ClassificationRepository {
     const clean = ticker.toUpperCase().trim();
     const asOfDate = evaluationDate ? evaluationDate.split('T')[0] : undefined;
 
-    if (dbClient.isTableAvailable('classification_snapshot') && dbClient.supabase) {
+    const targetTable = dbClient.isTableAvailable('classification_snapshots')
+      ? 'classification_snapshots'
+      : dbClient.isTableAvailable('classification_snapshot')
+      ? 'classification_snapshot'
+      : null;
+
+    if (targetTable && dbClient.supabase) {
       try {
         let q = dbClient.supabase
-          .from('classification_snapshot')
+          .from(targetTable)
           .select('*')
           .eq('ticker', clean);
         if (asOfDate) q = q.lte('effective_date', asOfDate);
         const { data, error } = await q.order('effective_date', { ascending: true });
         if (error) {
-          dbClient.handleDbError('classification_snapshot', 'getHistoryAsOf', error);
+          dbClient.handleDbError(targetTable, 'getHistoryAsOf', error);
         } else if (data) {
           return data.map((d: any) => this.toClassification(d));
         }
       } catch (err) {
-        dbClient.handleDbError('classification_snapshot', 'getHistoryAsOf', err);
+        dbClient.handleDbError(targetTable, 'getHistoryAsOf', err);
       }
     }
 

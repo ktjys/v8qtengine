@@ -198,7 +198,22 @@ CREATE TABLE IF NOT EXISTS alert_notifications (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 12. Schema Compatibility Migrations (Automatically adds any missing columns to existing tables)
+-- 12. Classification Snapshots Table (Point-in-Time asset classification overrides)
+CREATE TABLE IF NOT EXISTS classification_snapshots (
+  ticker VARCHAR(20) NOT NULL REFERENCES assets(ticker) ON DELETE CASCADE,
+  effective_date DATE NOT NULL,
+  asset_type VARCHAR(50) NOT NULL DEFAULT 'equity',
+  strategy_type VARCHAR(50) NOT NULL DEFAULT 'CORE_VALUE',
+  confidence NUMERIC(4, 2) DEFAULT 0.8,
+  reason TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (ticker, effective_date)
+);
+
+-- Compatibility view for classification_snapshot (singular alias)
+CREATE OR REPLACE VIEW classification_snapshot AS SELECT * FROM classification_snapshots;
+
+-- 13. Schema Compatibility Migrations (Automatically adds any missing columns to existing tables)
 ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT '';
 ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS asset_type VARCHAR(50) DEFAULT 'equity';
 ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS exchange VARCHAR(50) DEFAULT 'US';
@@ -240,7 +255,7 @@ ALTER TABLE IF EXISTS signal_outcomes ADD COLUMN IF NOT EXISTS closed_at TIMESTA
 ALTER TABLE IF EXISTS scan_runs ADD COLUMN IF NOT EXISTS error_summary TEXT;
 ALTER TABLE IF EXISTS scan_runs ADD COLUMN IF NOT EXISTS failure_count INT DEFAULT 0;
 
--- 12. Performance Indexes
+-- 14. Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_watchlist_active ON watchlist (is_active);
 CREATE INDEX IF NOT EXISTS idx_market_data_ticker_date ON market_data_daily (ticker, trade_date DESC);
 CREATE INDEX IF NOT EXISTS idx_evaluations_ticker_date ON evaluations (ticker, evaluation_date DESC);
@@ -248,8 +263,9 @@ CREATE INDEX IF NOT EXISTS idx_signals_date ON signals (signal_date DESC);
 CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals (ticker);
 CREATE INDEX IF NOT EXISTS idx_scan_runs_started ON scan_runs (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alert_notifications_time ON alert_notifications (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_classification_snapshots_date ON classification_snapshots (effective_date DESC);
 
--- 14. Disable RLS or Allow Public Access (For API Server Service/Anon Key access)
+-- 15. Universal Permissive RLS Policies & Grants for Anon & Authenticated Access
 ALTER TABLE IF EXISTS assets DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS watchlist DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS market_data_daily DISABLE ROW LEVEL SECURITY;
@@ -261,7 +277,81 @@ ALTER TABLE IF EXISTS signal_outcomes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scan_runs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS scan_run_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS alert_notifications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS classification_snapshots DISABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all assets" ON assets;
+CREATE POLICY "Allow all assets" ON assets FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all watchlist" ON watchlist;
+CREATE POLICY "Allow all watchlist" ON watchlist FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all market_data_daily" ON market_data_daily;
+CREATE POLICY "Allow all market_data_daily" ON market_data_daily FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all fundamentals" ON fundamentals;
+CREATE POLICY "Allow all fundamentals" ON fundamentals FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all indicator_snapshots" ON indicator_snapshots;
+CREATE POLICY "Allow all indicator_snapshots" ON indicator_snapshots FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all evaluations" ON evaluations;
+CREATE POLICY "Allow all evaluations" ON evaluations FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all signals" ON signals;
+CREATE POLICY "Allow all signals" ON signals FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all signal_outcomes" ON signal_outcomes;
+CREATE POLICY "Allow all signal_outcomes" ON signal_outcomes FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all scan_runs" ON scan_runs;
+CREATE POLICY "Allow all scan_runs" ON scan_runs FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all scan_run_items" ON scan_run_items;
+CREATE POLICY "Allow all scan_run_items" ON scan_run_items FOR ALL USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow all alert_notifications" ON alert_notifications;
 CREATE POLICY "Allow all alert_notifications" ON alert_notifications FOR ALL USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE alert_notifications TO anon, authenticated, service_role;
+DROP POLICY IF EXISTS "Allow all classification_snapshots" ON classification_snapshots;
+CREATE POLICY "Allow all classification_snapshots" ON classification_snapshots FOR ALL USING (true) WITH CHECK (true);
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+`;
+
+export const ALL_TABLES_RLS_FIX_SQL = `-- ==============================================================================
+-- ⚡ Supabase 전체 테이블 RLS 해제 및 anon/authenticated 쓰기 권한 일괄 부여
+-- Supabase Dashboard > SQL Editor에 복사하여 [Run] 버튼을 클릭하세요.
+-- ==============================================================================
+ALTER TABLE IF EXISTS assets DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS watchlist DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS market_data_daily DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS fundamentals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS indicator_snapshots DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS evaluations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS signals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS signal_outcomes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS scan_runs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS scan_run_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS alert_notifications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS classification_snapshots DISABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all assets" ON assets;
+CREATE POLICY "Allow all assets" ON assets FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all watchlist" ON watchlist;
+CREATE POLICY "Allow all watchlist" ON watchlist FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all market_data_daily" ON market_data_daily;
+CREATE POLICY "Allow all market_data_daily" ON market_data_daily FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all fundamentals" ON fundamentals;
+CREATE POLICY "Allow all fundamentals" ON fundamentals FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all indicator_snapshots" ON indicator_snapshots;
+CREATE POLICY "Allow all indicator_snapshots" ON indicator_snapshots FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all evaluations" ON evaluations;
+CREATE POLICY "Allow all evaluations" ON evaluations FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all signals" ON signals;
+CREATE POLICY "Allow all signals" ON signals FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all signal_outcomes" ON signal_outcomes;
+CREATE POLICY "Allow all signal_outcomes" ON signal_outcomes FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all scan_runs" ON scan_runs;
+CREATE POLICY "Allow all scan_runs" ON scan_runs FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all scan_run_items" ON scan_run_items;
+CREATE POLICY "Allow all scan_run_items" ON scan_run_items FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all alert_notifications" ON alert_notifications;
+CREATE POLICY "Allow all alert_notifications" ON alert_notifications FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all classification_snapshots" ON classification_snapshots;
+CREATE POLICY "Allow all classification_snapshots" ON classification_snapshots FOR ALL USING (true) WITH CHECK (true);
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 `;

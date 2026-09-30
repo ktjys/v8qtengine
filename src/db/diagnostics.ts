@@ -39,6 +39,8 @@ export interface DiagnosticReport {
  * are correctly initialized and returns record counts and health status to verify data persistence.
  */
 export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
+  dbClient.ensureConnected();
+
   const targetTables = [
     'assets',
     'watchlist',
@@ -51,6 +53,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
     'scan_runs',
     'scan_run_items',
     'alert_notifications',
+    'classification_snapshots',
   ];
 
   const startTime = Date.now();
@@ -64,6 +67,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
   let totalRecords = 0;
   let initializedCount = 0;
   let missingCount = 0;
+  let hasRlsBlock = false;
 
   if (isConnected && client) {
     // 1. Measure general connection ping
@@ -87,10 +91,10 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
         const latency = Date.now() - tStart;
 
         if (error) {
+          // If error is table not found / 42P01 / PGRST205
           dbClient.markTableMissing(tableName);
           missingCount++;
           
-          // In-memory fallback count for reference
           const inMemCount = getInMemoryRecordCount(tableName);
           tableResults[tableName] = {
             tableName,
@@ -120,8 +124,30 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
           let tableStatus: 'HEALTHY' | 'EMPTY' | 'RLS_BLOCKED' = recCount > 0 ? 'HEALTHY' : 'EMPTY';
           let writeError: string | undefined;
 
-          // Active write test for alert_notifications to detect Row Level Security (RLS) blockage early
-          if (tableName === 'alert_notifications') {
+          // Probe write permissions to detect Row Level Security (RLS 42501) early
+          if (tableName === 'assets') {
+            try {
+              const probeRes = await client.from('assets').insert({
+                ticker: '__RLS_TEST__',
+                name: 'Probe',
+                asset_type: 'equity',
+                is_active: false,
+              });
+              if (probeRes.error) {
+                if (
+                  probeRes.error.code === '42501' ||
+                  probeRes.error.message?.includes('row-level security') ||
+                  probeRes.error.message?.includes('policy')
+                ) {
+                  tableStatus = 'RLS_BLOCKED';
+                  writeError = 'RLS(행 수준 보안)으로 인해 쓰기 차단됨 (42501). [전체 테이블 RLS 해제 SQL]을 실행해주세요.';
+                  hasRlsBlock = true;
+                }
+              } else {
+                await client.from('assets').delete().eq('ticker', '__RLS_TEST__');
+              }
+            } catch {}
+          } else if (tableName === 'alert_notifications') {
             try {
               const probeId = `__probe_${Date.now()}`;
               const probeRes = await client.from('alert_notifications').insert({
@@ -140,15 +166,13 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
                   probeRes.error.message?.includes('policy')
                 ) {
                   tableStatus = 'RLS_BLOCKED';
-                  writeError = 'RLS(행 수준 보안) 정책으로 인해 쓰기가 차단됨 (42501). DB 설정 팝업에서 "RLS 해제 SQL"을 실행해주세요.';
+                  writeError = 'RLS(행 수준 보안)으로 인해 쓰기 차단됨 (42501). [전체 테이블 RLS 해제 SQL]을 실행해주세요.';
+                  hasRlsBlock = true;
                 }
               } else {
-                // Succeeded: clean up probe row
                 await client.from('alert_notifications').delete().eq('id', probeId);
               }
-            } catch (pErr) {
-              // Ignore probe probe exception
-            }
+            } catch {}
           }
 
           tableResults[tableName] = {
@@ -191,6 +215,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
           idOrKey: 'db-not-connected',
           updatedAt: new Date().toISOString(),
         },
+        error: 'DB 연결 대기 중 (인메모리 모드)',
       };
     }
   }
@@ -201,10 +226,10 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
 
   if (!isConnected) {
     persistenceHealth = 'DB_NOT_CONNECTED';
-    recommendation = 'Supabase DB가 연결되지 않았습니다. Cloudflare 환경변수 SUPABASE_URL과 SUPABASE_KEY를 설정하거나, DB Settings에서 연결하세요.';
-  } else if (tableResults['alert_notifications']?.status === 'RLS_BLOCKED') {
+    recommendation = 'Supabase DB가 연결되지 않았습니다. 서버 환경변수 SUPABASE_URL과 SUPABASE_KEY 설정을 확인하세요.';
+  } else if (hasRlsBlock) {
     persistenceHealth = 'PARTIALLY_INITIALIZED';
-    recommendation = '⚠️ alert_notifications 테이블이 생성되었으나 RLS(행 수준 보안) 정책으로 인해 새 알람 쓰기가 차단 중입니다. DB 설정 팝업의 [RLS 해제 SQL]을 Supabase SQL Editor에서 실행해주세요.';
+    recommendation = '⚠️ 테이블은 생성되었으나 Supabase RLS(행 수준 보안) 정책으로 쓰기가 차단 중입니다 (42501). DB 헬스 모달의 [⚡ 전체 테이블 RLS 해제 SQL]을 Supabase SQL Editor에서 실행해주세요.';
   } else if (missingCount === 0) {
     persistenceHealth = 'FULLY_INITIALIZED';
     recommendation = `모든 ${targetTables.length}개 테이블이 Supabase에 올바르게 초기화되어 총 ${totalRecords}개 레코드가 클라우드에 영구 저장되고 있습니다.`;
@@ -227,7 +252,7 @@ export async function runDatabaseDiagnostics(): Promise<DiagnosticReport> {
     summary: {
       totalTablesChecked: targetTables.length,
       initializedTablesCount: initializedCount,
-      missingTablesCount: missingCount,
+      missingTablesCount: isConnected ? missingCount : 0,
       totalRecordsAcrossTables: totalRecords,
       persistenceHealth,
       recommendation,

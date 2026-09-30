@@ -15,7 +15,10 @@ import {
   FileCode,
   Zap,
   ExternalLink,
+  Sprout,
+  HelpCircle,
 } from 'lucide-react';
+import { ALL_TABLES_RLS_FIX_SQL } from '../db/schemaSql';
 
 interface DatabaseHealthModalProps {
   isOpen: boolean;
@@ -57,11 +60,7 @@ CREATE POLICY "Allow all alert_notifications" ON alert_notifications FOR ALL USI
 GRANT ALL ON TABLE alert_notifications TO anon, authenticated, service_role;
 CREATE INDEX IF NOT EXISTS idx_alert_notifications_time ON alert_notifications(timestamp DESC);`;
 
-export const ALERT_NOTIFICATIONS_RLS_FIX_SQL = `-- alert_notifications RLS 권한 즉시 해제 (기존 테이블 유지, 쓰기 권한 활성화)
-ALTER TABLE IF EXISTS alert_notifications DISABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow all alert_notifications" ON alert_notifications;
-CREATE POLICY "Allow all alert_notifications" ON alert_notifications FOR ALL USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE alert_notifications TO anon, authenticated, service_role;`;
+export const ALERT_NOTIFICATIONS_RLS_FIX_SQL = ALL_TABLES_RLS_FIX_SQL;
 
 export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
   isOpen,
@@ -71,6 +70,7 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
   const [diagnostics, setDiagnostics] = useState<any | null>(null);
   const [schemaSql, setSchemaSql] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSeeding, setIsSeeding] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'status' | 'sql'>('status');
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [copiedAlertSql, setCopiedAlertSql] = useState<boolean>(false);
@@ -127,6 +127,28 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
     }
   }, [isOpen]);
 
+  const handleSeedData = async () => {
+    setIsSeeding(true);
+    try {
+      const res = await fetch('/api/v8/system/db/seed', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || '기본 종목 주입에 실패했습니다.');
+      }
+      if (onShowToast) {
+        onShowToast(data.message || '기본 유니버스 데이터가 성공적으로 주입되었습니다.');
+      }
+      await fetchDiagnostics();
+    } catch (err: any) {
+      console.error('Failed to seed DB:', err);
+      if (onShowToast) {
+        onShowToast(`주입 실패: ${err.message}`);
+      }
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   // Safely parse tables whether backend returns an Array or a Dictionary Object
@@ -161,14 +183,16 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
     return [];
   };
 
-  const tables = parseTableList();
-  const missingTables = tables.filter((t) => !t.exists);
-  const existingTables = tables.filter((t) => t.exists);
-  const rlsBlockedTables = tables.filter((t) => t.status === 'RLS_BLOCKED');
-
   const isConnected = Boolean(
     diagnostics?.connection?.connected ?? (diagnostics?.status === 'HEALTHY' || diagnostics?.success)
   );
+
+  const tables = parseTableList();
+  // Only consider missing if connected to DB and table is uninitialized in schema
+  const missingTables = isConnected ? tables.filter((t) => !t.exists) : [];
+  const existingTables = tables.filter((t) => t.exists);
+  const rlsBlockedTables = tables.filter((t) => t.status === 'RLS_BLOCKED');
+
   const pingLatencyMs = diagnostics?.connection?.pingLatencyMs ?? diagnostics?.pingLatencyMs;
   const maskedHost = diagnostics?.connection?.url ?? diagnostics?.maskedHost ?? 'Supabase Cloud';
   const totalRecordsAcrossTables =
@@ -195,10 +219,10 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
   };
 
   const handleCopyRlsFixSql = () => {
-    navigator.clipboard.writeText(ALERT_NOTIFICATIONS_RLS_FIX_SQL);
+    navigator.clipboard.writeText(ALL_TABLES_RLS_FIX_SQL);
     setCopiedRlsSql(true);
     if (onShowToast) {
-      onShowToast('alert_notifications RLS 해제 SQL이 복사되었습니다. Supabase SQL Editor에 실행해주세요.');
+      onShowToast('전체 테이블 RLS 해제 SQL이 복사되었습니다. Supabase SQL Editor에 실행해주세요.');
     }
     setTimeout(() => setCopiedRlsSql(false), 2500);
   };
@@ -227,7 +251,7 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-                운영 DB 연결 상태, 11개 핵심 테이블 모니터링 및 DDL 마이그레이션 스크립트
+                운영 DB 연결 상태, {tables.length || 12}개 핵심 테이블 모니터링 및 DDL 마이그레이션 스크립트
               </p>
             </div>
           </div>
@@ -262,7 +286,9 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              📊 테이블 헬스체크 {tables.length > 0 && `(${existingTables.length}/${tables.length})`}
+              📊 테이블 헬스체크{' '}
+              {tables.length > 0 &&
+                (isConnected ? `(${existingTables.length}/${tables.length} 정상)` : '(연결 대기)')}
             </button>
             <button
               onClick={() => setActiveTab('sql')}
@@ -276,10 +302,25 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
             </button>
           </div>
 
-          {missingTables.length > 0 && (
+          {!isConnected ? (
+            <span className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-950/40 text-amber-300 border border-amber-500/30">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span>DB 연결 대기 중</span>
+            </span>
+          ) : rlsBlockedTables.length > 0 ? (
+            <span className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-950/40 text-rose-300 border border-rose-500/40">
+              <ShieldAlert className="w-3 h-3 shrink-0" />
+              <span>RLS 쓰기 차단 감지</span>
+            </span>
+          ) : missingTables.length > 0 ? (
             <span className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-950/40 text-amber-300 border border-amber-500/30">
               <AlertTriangle className="w-3 h-3 shrink-0" />
               <span>{missingTables.length}개 테이블 미생성</span>
+            </span>
+          ) : (
+            <span className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-950/40 text-emerald-300 border border-emerald-500/30">
+              <CheckCircle2 className="w-3 h-3 shrink-0" />
+              <span>전체 정상 연결됨</span>
             </span>
           )}
         </div>
@@ -345,24 +386,27 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center space-x-2 font-bold text-rose-300">
                       <ShieldAlert className="w-4 h-4 shrink-0 text-rose-400" />
-                      <span>RLS 행 보안 쓰기 차단 감지 ({rlsBlockedTables.map((t) => t.name).join(', ')})</span>
+                      <span>
+                        RLS 행 보안 쓰기 차단 감지 ({rlsBlockedTables.map((t) => t.name).join(', ')})
+                      </span>
                     </div>
                     <button
                       onClick={handleCopyRlsFixSql}
                       className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-lg shadow-rose-950 transition-all self-start sm:self-auto cursor-pointer"
                     >
                       {copiedRlsSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedRlsSql ? '복사 완료!' : '⚡ RLS 해제 SQL 복사 (즉시 해결)'}</span>
+                      <span>{copiedRlsSql ? '복사 완료!' : '⚡ 전체 테이블 RLS 해제 SQL 복사 (즉시 해결)'}</span>
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
-                    테이블은 생성되어 있으나 Supabase 기본 Row Level Security(RLS) 정책으로 인해 앱에서 알림을 INSERT(쓰기)할 수 없습니다 (에러코드 42501).
-                    위 <b className="text-rose-300">[⚡ RLS 해제 SQL 복사]</b> 버튼을 누른 후, Supabase 콘솔 &gt; <b>SQL Editor</b>에 붙여넣고 [Run]하시면 즉시 알람이 원격 DB에 영구 저장됩니다.
+                    테이블은 생성되어 있으나 Supabase 기본 Row Level Security(RLS) 정책으로 인해 앱에서 새 데이터(종목/알림/시그널)를 INSERT/UPDATE(쓰기)할 수 없습니다 (에러코드 42501).
+                    <br />
+                    위 <b className="text-rose-300">[⚡ 전체 테이블 RLS 해제 SQL 복사]</b> 버튼을 누른 후, Supabase 콘솔 &gt; <b>SQL Editor</b>에 붙여넣고 [Run]하시면 즉시 원격 DB에 영구 저장이 활성화됩니다.
                   </p>
                 </div>
               )}
 
-              {/* Missing tables warning if any */}
+              {/* Truly missing tables warning if any */}
               {missingTables.length > 0 && (
                 <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-200 space-y-3">
                   <div className="flex items-center justify-between">
@@ -370,19 +414,17 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                       <AlertTriangle className="w-4 h-4 shrink-0" />
                       <span>미생성 테이블 {missingTables.length}개 발견 (해당 테이블 인메모리 폴백)</span>
                     </div>
-                    {missingTables.some((m) => m.name === 'alert_notifications') && (
-                      <button
-                        onClick={handleCopyAlertSqlOnly}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[11px] font-semibold flex items-center space-x-1 transition-all"
-                      >
-                        {copiedAlertSql ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 text-amber-300" />
-                        )}
-                        <span>{copiedAlertSql ? '복사됨!' : 'alert_notifications SQL 복사'}</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={handleCopyFullSql}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[11px] font-semibold flex items-center space-x-1 transition-all cursor-pointer"
+                    >
+                      {copiedSql ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-amber-300" />
+                      )}
+                      <span>{copiedSql ? '복사됨!' : '전체 DDL SQL 복사'}</span>
+                    </button>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
                     다음 테이블이 Supabase 원격 DB에 아직 생성되지 않았습니다:{' '}
@@ -392,6 +434,29 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                     <br />
                     상단의 <b>[📜 테이블 생성 DDL]</b> 탭에서 SQL을 복사하여 Supabase Dashboard &gt; SQL Editor에 실행하시면 원격 영구 저장이 즉시 활성화됩니다.
                   </p>
+                </div>
+              )}
+
+              {/* Quick Action: Seed Initial Data */}
+              {isConnected && (
+                <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                      <Sprout className="w-4 h-4 text-emerald-400" />
+                      <span>기본 대표 종목 & 시그널 데이터 DB 주입 (Seed)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      미국 & 국내 대표 27개 종목 및 초기 유니버스를 원격 DB에 즉시 등록합니다.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSeedData}
+                    disabled={isSeeding}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center space-x-1.5 shrink-0 shadow-md shadow-emerald-950 transition-all disabled:opacity-50 cursor-pointer self-start sm:self-auto"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
+                    <span>{isSeeding ? '주입 중...' : '🌱 기본 데이터 주입'}</span>
+                  </button>
                 </div>
               )}
 
@@ -422,8 +487,10 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                             <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
                           ) : t.exists ? (
                             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          ) : (
+                          ) : isConnected ? (
                             <XCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                          ) : (
+                            <HelpCircle className="w-4 h-4 text-slate-500 shrink-0" />
                           )}
                           <span className="font-mono text-xs text-slate-200 font-semibold">
                             {t.name}
@@ -441,17 +508,23 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                             </span>
                           )}
                           {t.status === 'RLS_BLOCKED' ? (
-                            <span className="text-[10px] text-rose-300 bg-rose-950/60 px-2 py-0.5 rounded border border-rose-500/40">
+                            <span className="text-[10px] text-rose-300 bg-rose-950/60 px-2 py-0.5 rounded border border-rose-500/40 font-medium">
                               RLS 쓰기 차단 (42501)
                             </span>
                           ) : t.exists ? (
                             <span className="text-[11px] text-slate-300 font-mono">
-                              <b className="text-emerald-300 font-bold">{t.count.toLocaleString()}</b>
+                              <b className={t.count > 0 ? "text-emerald-300 font-bold" : "text-slate-400"}>
+                                {t.count.toLocaleString()}
+                              </b>
                               <span className="text-slate-500">개 행</span>
                             </span>
-                          ) : (
+                          ) : isConnected ? (
                             <span className="text-[10px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30">
                               미생성
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
+                              연결 대기
                             </span>
                           )}
                         </div>
@@ -465,38 +538,29 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
 
           {activeTab === 'sql' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h4 className="font-bold text-slate-200 text-xs">
-                    Supabase PostgreSQL 전체 스키마 DDL (11개 테이블)
+                    Supabase PostgreSQL 전체 스키마 DDL ({tables.length || 12}개 테이블)
                   </h4>
                   <p className="text-[11px] text-slate-400 mt-0.5">
                     Supabase Dashboard &gt; SQL Editor에 복사하여 붙여넣고 [Run]을 누르시면 모든 테이블, 인덱스, RLS 해제가 일괄 적용됩니다.
                   </p>
                 </div>
-                <div className="flex items-center space-x-2 shrink-0">
+                <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
                   <button
                     onClick={handleCopyRlsFixSql}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
                   >
                     {copiedRlsSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>RLS 해제 SQL만 복사</span>
+                    <span>⚡ 전체 RLS 해제 SQL만 복사</span>
                   </button>
-                  {missingTables.some((m) => m.name === 'alert_notifications') && (
-                    <button
-                      onClick={handleCopyAlertSqlOnly}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center space-x-1.5 transition-all"
-                    >
-                      {copiedAlertSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>alert_notifications만 복사</span>
-                    </button>
-                  )}
                   <button
                     onClick={handleCopyFullSql}
-                    className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md shadow-cyan-600/30 flex items-center space-x-1.5 transition-all"
+                    className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md shadow-cyan-600/30 flex items-center space-x-1.5 transition-all cursor-pointer"
                   >
                     {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedSql ? '복사 완료!' : '전체 SQL 복사'}</span>
+                    <span>{copiedSql ? '복사 완료!' : '전체 DDL 복사'}</span>
                   </button>
                 </div>
               </div>
@@ -515,7 +579,7 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all"
+            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
           >
             닫기
           </button>

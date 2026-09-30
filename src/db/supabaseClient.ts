@@ -122,7 +122,15 @@ class UniversalDatabaseClient {
     }
   }
 
-  private initSupabase() {
+  public ensureConnected(): boolean {
+    if (this.supabase && this.isSupabaseConnected) {
+      return true;
+    }
+    this.initSupabase();
+    return this.isSupabaseConnected;
+  }
+
+  public initSupabase() {
     // Server-side only. Credentials come exclusively from process.env at process
     // startup (set via .env / platform runtime vars). There is intentionally no
     // `import.meta.env` / VITE_-prefixed fallback here: Vite inlines VITE_* values
@@ -133,8 +141,8 @@ class UniversalDatabaseClient {
     let envKey = '';
     try {
       if (typeof window === 'undefined' && typeof process !== 'undefined' && process.env) {
-        envUrl = process.env.SUPABASE_URL || '';
-        envKey = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+        envUrl = (process.env.SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+        envKey = (process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim().replace(/^["']|["']$/g, '');
       }
     } catch {}
 
@@ -156,6 +164,7 @@ class UniversalDatabaseClient {
         },
       });
       this.isSupabaseConnected = true;
+      this.missingTables.clear();
       if (typeof process !== 'undefined' && process.env) {
         process.env.SUPABASE_URL = this.currentUrl;
         process.env.SUPABASE_KEY = this.currentKey;
@@ -204,6 +213,7 @@ class UniversalDatabaseClient {
   }
 
   public async checkTableStatus(): Promise<Record<string, TableStatusInfo>> {
+    this.ensureConnected();
     const tableNames = [
       'assets',
       'watchlist',
@@ -216,7 +226,7 @@ class UniversalDatabaseClient {
       'scan_runs',
       'scan_run_items',
       'alert_notifications',
-      'classification_snapshot',
+      'classification_snapshots',
     ];
 
     const result: Record<string, TableStatusInfo> = {};
@@ -292,7 +302,17 @@ class UniversalDatabaseClient {
         };
       });
 
-      await this.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
+      const { error: assetErr } = await this.supabase.from('assets').upsert(assetRows, { onConflict: 'ticker' });
+      if (assetErr) {
+        if (assetErr.code === '42501' || assetErr.message?.includes('row-level security') || assetErr.message?.includes('policy')) {
+          return {
+            success: false,
+            seededCount: 0,
+            error: 'Supabase RLS(행 수준 보안)으로 인해 쓰기 차단됨 (42501). DB 헬스 모달의 [⚡ 전체 테이블 RLS 해제 SQL]을 Supabase SQL Editor에서 실행해주세요.',
+          };
+        }
+        return { success: false, seededCount: 0, error: `assets 저장 실패: ${assetErr.message}` };
+      }
 
       // 2. Seed Watchlist
       const watchlistRows = allSeedItems.map((item) => ({
@@ -304,7 +324,16 @@ class UniversalDatabaseClient {
         updated_at: new Date().toISOString(),
       }));
 
-      await this.supabase.from('watchlist').upsert(watchlistRows, { onConflict: 'ticker' });
+      const { error: wlErr } = await this.supabase.from('watchlist').upsert(watchlistRows, { onConflict: 'ticker' });
+      if (wlErr) {
+        if (wlErr.code === '42501' || wlErr.message?.includes('row-level security')) {
+          return {
+            success: false,
+            seededCount: 0,
+            error: 'Supabase RLS(행 수준 보안)으로 인해 쓰기 차단됨 (42501). DB 헬스 모달의 [⚡ 전체 테이블 RLS 해제 SQL]을 실행해주세요.',
+          };
+        }
+      }
 
       // 3. Seed Signals
       const signalRows = INITIAL_HISTORICAL_SIGNALS.map((sig) => ({
