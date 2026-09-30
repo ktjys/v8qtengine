@@ -171,10 +171,12 @@ export class SignalRepository {
 
         if (existingRowId) {
           // Update existing row
-          await dbClient.supabase
+          const { error: updateError } = await dbClient.supabase
             .from('signals')
             .update(payload)
             .eq('id', existingRowId);
+
+          dbClient.assertWriteOk('signals', 'save (update)', updateError, { id: existingRowId, ticker: signal.ticker });
         } else {
           // Insert new row
           const insertPayload = {
@@ -210,16 +212,21 @@ export class SignalRepository {
                 .maybeSingle();
               if (minData?.id) {
                 signal.id = minData.id;
+              } else {
+                dbClient.assertWriteOk('signals', 'save (reduced insert)', error, { ticker: signal.ticker });
               }
             } else {
-              dbClient.handleDbError('signals', 'save', error);
+              dbClient.assertWriteOk('signals', 'save (insert)', error, { ticker: signal.ticker });
             }
           } else if (inserted?.id) {
             signal.id = inserted.id;
           }
         }
       } catch (err) {
-        dbClient.handleDbError('signals', 'save', err);
+        if (!dbClient.isLoggedWriteError(err)) {
+          dbClient.handleDbError('signals', 'save', err);
+        }
+        throw err;
       }
     }
 
@@ -288,9 +295,11 @@ export class SignalRepository {
         const CHUNK_SIZE = 50;
         for (let i = 0; i < signalRows.length; i += CHUNK_SIZE) {
           const chunk = signalRows.slice(i, i + CHUNK_SIZE);
-          await dbClient.supabase
+          const { error: chunkError } = await dbClient.supabase
             .from('signals')
             .upsert(chunk, { onConflict: 'ticker,signal_date' });
+
+          dbClient.assertWriteOk('signals', 'saveSignalsBatch', chunkError, { chunk: i / CHUNK_SIZE, size: chunk.length });
         }
 
         // 4. Batch upsert signal outcomes if applicable
@@ -313,13 +322,21 @@ export class SignalRepository {
 
           for (let i = 0; i < outcomeRows.length; i += CHUNK_SIZE) {
             const chunk = outcomeRows.slice(i, i + CHUNK_SIZE);
-            await dbClient.supabase
+            const { error: outcomeChunkError } = await dbClient.supabase
               .from('signal_outcomes')
               .upsert(chunk, { onConflict: 'signal_id' });
+
+            dbClient.assertWriteOk('signal_outcomes', 'saveSignalsBatch', outcomeChunkError, {
+              chunk: i / CHUNK_SIZE,
+              size: chunk.length,
+            });
           }
         }
       } catch (err) {
-        dbClient.handleDbError('signals', 'saveSignalsBatch', err);
+        if (!dbClient.isLoggedWriteError(err)) {
+          dbClient.handleDbError('signals', 'saveSignalsBatch', err);
+        }
+        throw err;
       }
     }
 
@@ -360,9 +377,7 @@ export class SignalRepository {
             .update({ status: updates.status, updated_at: new Date().toISOString() })
             .eq('id', id);
 
-          if (sigErr) {
-            dbClient.handleDbError('signals', 'update status', sigErr);
-          }
+          dbClient.assertWriteOk('signals', 'update status', sigErr, { id });
         }
 
         if (dbClient.isTableAvailable('signal_outcomes')) {
@@ -385,11 +400,14 @@ export class SignalRepository {
             .upsert(outcomePayload, { onConflict: 'signal_id' });
 
           if (outErr) {
-            dbClient.handleDbError('signal_outcomes', 'upsert outcome', outErr);
+            dbClient.assertWriteOk('signal_outcomes', 'updateOutcome', outErr, { id });
           }
         }
       } catch (err) {
-        dbClient.handleDbError('signal_outcomes', 'updateOutcome', err);
+        if (!dbClient.isLoggedWriteError(err)) {
+          dbClient.handleDbError('signal_outcomes', 'updateOutcome', err);
+        }
+        throw err;
       }
     }
 

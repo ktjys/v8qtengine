@@ -141,7 +141,17 @@ class UniversalDatabaseClient {
     if (!error) return;
     this.handleDbError(tableName, operation, error);
     const suffix = context === undefined ? '' : ` (${JSON.stringify(context)})`;
-    throw new Error(`[db] ${tableName}.${operation} failed${suffix}: ${error.message || String(error)}`);
+    const failure = new Error(`[db] ${tableName}.${operation} failed${suffix}: ${error.message || String(error)}`);
+    (failure as Error & { loggedByAssertWriteOk?: boolean }).loggedByAssertWriteOk = true;
+    throw failure;
+  }
+
+  /**
+   * True when the error was already reported by assertWriteOk, so a surrounding
+   * catch can rethrow without logging the same failure a second time.
+   */
+  public isLoggedWriteError(err: unknown): boolean {
+    return (err as { loggedByAssertWriteOk?: boolean } | null)?.loggedByAssertWriteOk === true;
   }
 
   public ensureConnected(): boolean {

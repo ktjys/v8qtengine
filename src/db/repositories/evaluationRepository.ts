@@ -39,10 +39,14 @@ export class EvaluationRepository {
 
       const tickers = evaluations.map((ev) => ev.ticker.toUpperCase().trim());
 
-      await dbClient.supabase
+      const { error: deleteError } = await dbClient.supabase
         .from('evaluations')
         .delete()
         .in('ticker', tickers);
+
+      // Skipping the insert on a failed delete would leave stale rows behind, and
+      // inserting anyway would duplicate them, so the whole save must fail loudly.
+      dbClient.assertWriteOk('evaluations', 'delete before saveAll', deleteError, { count: tickers.length });
 
       const evalPayloads = evaluations.map((ev) => {
         const clean = ev.ticker.toUpperCase().trim();
@@ -77,11 +81,12 @@ export class EvaluationRepository {
       const { error } = await dbClient.supabase
         .from('evaluations')
         .insert(evalPayloads);
-      if (error) {
-        dbClient.handleDbError('evaluations', 'saveAll', error);
-      }
+      dbClient.assertWriteOk('evaluations', 'saveAll', error, { count: evalPayloads.length });
     } catch (err) {
-      dbClient.handleDbError('evaluations', 'saveAll', err);
+      if (!dbClient.isLoggedWriteError(err)) {
+        dbClient.handleDbError('evaluations', 'saveAll', err);
+      }
+      throw err;
     }
   }
 

@@ -79,7 +79,9 @@ export class MarketDataRepository {
             .upsert(chunk, { onConflict: 'ticker,trade_date' });
 
           if (error) {
-            dbClient.handleDbError('market_data_daily', 'upsert', error);
+            // Deliberately non-fatal: callers sync hundreds of tickers in a loop and
+            // a single rejected chunk must not abort the rest of the batch.
+            dbClient.handleDbError('market_data_daily', `upsert batch ${i / batchSize}`, error);
           }
         }
       } catch (err) {

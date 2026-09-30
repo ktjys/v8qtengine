@@ -34,10 +34,6 @@ export class ClassificationRepository {
       reason: override.reason,
     };
 
-    // 인메모리: ticker_date 키로 기록 (동일 기준일 재저장 시 덮어씀)
-    dbClient.classifications.set(clean, override);
-    dbClient.classificationSnapshots.set(`${clean}_${effectiveDate}`, snapshot);
-
     const targetTable = dbClient.isTableAvailable('classification_snapshots')
       ? 'classification_snapshots'
       : dbClient.isTableAvailable('classification_snapshot')
@@ -45,17 +41,16 @@ export class ClassificationRepository {
       : null;
 
     if (targetTable && dbClient.supabase) {
-      try {
-        const { error } = await dbClient.supabase
-          .from(targetTable)
-          .upsert({ ...snapshot, updated_at: new Date().toISOString() }, { onConflict: 'ticker,effective_date' });
-        if (error) {
-          dbClient.handleDbError(targetTable, 'save', error);
-        }
-      } catch (err) {
-        dbClient.handleDbError(targetTable, 'save', err);
-      }
+      const { error } = await dbClient.supabase
+        .from(targetTable)
+        .upsert({ ...snapshot, updated_at: new Date().toISOString() }, { onConflict: 'ticker,effective_date' });
+
+      dbClient.assertWriteOk(targetTable, 'save', error, { ticker: clean, effective_date: effectiveDate });
     }
+
+    // 인메모리 갱신은 DB 성공 이후에만 수행한다 (ticker_date 키, 동일 기준일 재저장 시 덮어씀)
+    dbClient.classifications.set(clean, override);
+    dbClient.classificationSnapshots.set(`${clean}_${effectiveDate}`, snapshot);
   }
 
   /** 현재 유효한 수동 오버라이드 (PIT 미사용, 최신 스냅샷). */

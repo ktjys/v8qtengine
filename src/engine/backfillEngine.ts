@@ -240,7 +240,13 @@ export async function backfillSingleTicker(
 
   // Save signals into repository for this ticker
   if (tickerSignals.length > 0) {
-    await signalRepository.saveSignals(tickerSignals);
+    try {
+      await signalRepository.saveSignals(tickerSignals);
+    } catch (err) {
+      // One ticker's signal write failing must not abort the whole backfill; the
+      // failure is already logged by the repository, so record it and move on.
+      console.error(`[BackfillEngine] ${clean} 시그널 저장 실패:`, err);
+    }
   }
 
   const completedTickerSignals = tickerSignals.filter((s) => s.return_20d !== null);
