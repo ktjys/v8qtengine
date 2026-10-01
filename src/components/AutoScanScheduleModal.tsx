@@ -535,7 +535,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
               <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-slate-100">자동 스캔 & 알림 시스템</h3>
                 <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                   하루 2회 자동화

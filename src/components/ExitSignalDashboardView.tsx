@@ -193,7 +193,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
         </div>
 
         {/* Real-time Status Metric Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800/80">
           <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
               <span>내 등록 보유종목</span>
@@ -358,7 +358,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   {/* Left Column: Ticker & Status */}
                   <div className="space-y-2 min-w-0 lg:w-1/3">
-                    <div className="flex items-center space-x-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <button
                         onClick={() => onSelectTicker(item.ticker)}
                         className="text-lg font-bold text-white hover:text-cyan-400 transition-colors tracking-tight flex items-center space-x-1"

@@ -134,19 +134,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
+      <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-2">
           {/* Logo & Brand */}
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
               <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5">
-                <span className="font-bold text-sm sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent truncate">
+                <span className="font-bold text-xs sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent truncate">
                   QUANT ENGINE
                 </span>
-                <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+                <span className="hidden sm:inline-flex px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
                   LIVE
                 </span>
               </div>
@@ -245,35 +245,37 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Action Trigger Controls & Market Selector */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+          <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
             {/* Market Region Segmented Toggle */}
             {onSelectMarket && (
-              <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner">
+              <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner shrink-0">
                 <button
                   id="market-select-us-btn"
                   onClick={() => onSelectMarket('US')}
-                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md transition-all ${
+                  className={`flex items-center space-x-1 px-1.5 sm:px-2.5 py-1 rounded-md transition-all ${
                     activeMarket === 'US'
                       ? 'bg-blue-600 text-white shadow-md font-bold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                   title="미국 주식 & ETF (USD $ / S&P500 기준)"
                 >
-                  <span className="text-sm leading-none">🇺🇸</span>
-                  <span className="text-xs">미국장</span>
+                  <span className="text-xs sm:text-sm leading-none">🇺🇸</span>
+                  <span className="text-[11px] sm:text-xs">US</span>
+                  <span className="hidden md:inline text-xs">장</span>
                 </button>
                 <button
                   id="market-select-kr-btn"
                   onClick={() => onSelectMarket('KR')}
-                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md transition-all ${
+                  className={`flex items-center space-x-1 px-1.5 sm:px-2.5 py-1 rounded-md transition-all ${
                     activeMarket === 'KR'
                       ? 'bg-emerald-600 text-white shadow-md font-bold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                   title="국내 주식 & ETF (KRW ₩ / KOSPI200 기준)"
                 >
-                  <span className="text-sm leading-none">🇰🇷</span>
-                  <span className="text-xs">국내장</span>
+                  <span className="text-xs sm:text-sm leading-none">🇰🇷</span>
+                  <span className="text-[11px] sm:text-xs">KR</span>
+                  <span className="hidden md:inline text-xs">장</span>
                 </button>
               </div>
             )}
@@ -282,7 +284,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="header-db-health-btn"
                 onClick={onOpenDbHealthModal}
-                className="flex items-center space-x-1 p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/80 transition-all active:scale-95"
+                className="hidden md:flex items-center space-x-1 p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/80 transition-all active:scale-95"
                 title="데이터베이스 헬스체크 & DDL"
               >
                 <Database className="w-3.5 h-3.5 text-cyan-400" />
@@ -293,7 +295,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="header-schedule-btn"
               onClick={onOpenScheduleModal}
-              className="flex items-center space-x-1 p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all active:scale-95"
+              className="hidden md:flex items-center space-x-1 p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all active:scale-95"
               title="하루 2회 자동 스캔 & 텔레그램 알림 설정"
             >
               <Bell className="w-3.5 h-3.5 text-amber-400" />
@@ -303,17 +305,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="header-run-scan-btn"
               onClick={onOpenScanModal}
-              className="flex items-center space-x-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95"
+              className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 shrink-0"
+              title="스캔 실행"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>스캔 실행</span>
+              <span className="hidden sm:inline">스캔 실행</span>
             </button>
 
             {/* Mobile / Tablet Drawer Toggle Button */}
             <button
               id="header-mobile-menu-btn"
               onClick={() => setIsMobileDrawerOpen((prev) => !prev)}
-              className="lg:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95"
+              className="lg:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 shrink-0"
               aria-label="전체 메뉴 열기"
             >
               {isMobileDrawerOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -322,7 +325,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Medium Screen (md) & Mobile Horizontal Scrolling Bar */}
-        <div className="flex lg:hidden overflow-x-auto items-center space-x-1.5 py-2 border-t border-slate-800/80 no-scrollbar">
+        <div className="flex lg:hidden overflow-x-auto items-center space-x-1.5 py-2 border-t border-slate-800/80 no-scrollbar w-full max-w-full -mx-2.5 px-2.5 sm:mx-0 sm:px-0">
           {mainTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -408,6 +411,37 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Quick Actions (DB Health & Auto Notifications) */}
+            <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800 mb-2">
+              <div className="text-[10px] text-slate-400 font-semibold mb-1.5 uppercase tracking-wider">
+                시스템 & 알림 관리
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {onOpenDbHealthModal && (
+                  <button
+                    onClick={() => {
+                      onOpenDbHealthModal();
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-750 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
+                  >
+                    <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>DB 헬스체크</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    onOpenScheduleModal();
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-750 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
+                >
+                  <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>자동 알림 설정</span>
+                </button>
+              </div>
+            </div>
 
             <div className="text-[11px] font-semibold text-slate-400 px-2 uppercase tracking-wider">
               핵심 퀀트 메뉴

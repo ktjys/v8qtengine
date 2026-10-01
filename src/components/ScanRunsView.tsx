@@ -110,37 +110,37 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
     <div className="space-y-6 animate-fadeIn text-xs">
       {/* Top Level Sub-Navigation Switcher */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/90 border border-slate-800 rounded-2xl p-2 shadow-sm">
-        <div className="flex items-center space-x-2">
+        <div className="grid grid-cols-2 gap-1.5 w-full sm:flex sm:w-auto">
           <button
             onClick={() => setActiveSubTab('alerts')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex items-center justify-center space-x-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
               activeSubTab === 'alerts'
                 ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <Bell className="w-4 h-4" />
-            <span>알림 발송 내역 ({activeMarket === 'KR' ? '국내장' : '미국장'})</span>
+            <Bell className="w-4 h-4 shrink-0" />
+            <span className="truncate">알림 내역 ({activeMarket === 'KR' ? '국내' : '미국'})</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('runs')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex items-center justify-center space-x-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
               activeSubTab === 'runs'
                 ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>스캔 실행 로그 ({filtered.length})</span>
+            <Layers className="w-4 h-4 shrink-0" />
+            <span className="truncate">스캔 로그 ({filtered.length})</span>
           </button>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
           {onOpenDbHealthModal && (
             <button
               onClick={onOpenDbHealthModal}
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-slate-100 border border-slate-700 font-semibold shadow-sm transition-all active:scale-95 text-xs whitespace-nowrap"
+              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-slate-100 border border-slate-700 font-semibold shadow-sm transition-all active:scale-95 text-xs whitespace-nowrap"
               title="데이터베이스 헬스체크 및 DDL 스키마 확인"
             >
               <Database className="w-3.5 h-3.5 text-cyan-400" />
@@ -150,7 +150,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
 
           <button
             onClick={onTriggerScan}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold shadow-md transition-all active:scale-95 text-xs whitespace-nowrap"
+            className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold shadow-md transition-all active:scale-95 text-xs whitespace-nowrap"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>신규 스캔 실행</span>
@@ -187,7 +187,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
 
             {/* Search & Filter Toolbar */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
-              <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <div className="relative flex-1 min-w-[140px] sm:min-w-[200px] max-w-xs">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -213,8 +213,8 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
 
       {/* Runs Table */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
+        <div className="overflow-x-auto w-full no-scrollbar">
+          <table className="w-full text-left min-w-[720px]">
             <thead>
               <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-semibold">
                 <SortableHeader<ScanRunsSortField>

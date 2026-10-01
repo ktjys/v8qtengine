@@ -128,7 +128,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               <RefreshCw className={`w-4 h-4 ${isRunning ? 'animate-spin' : ''}`} />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h3 className="text-sm sm:text-base font-bold text-slate-100">
                   {activeMarket === 'KR' ? '🇰🇷 국내(KR) 퀀트 스캐너 실행' : '🇺🇸 미국(US) 퀀트 스캐너 실행'}
                 </h3>

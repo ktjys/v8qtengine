@@ -327,16 +327,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   • VIX <b>{macroRegime.vix.level.toFixed(1)}</b> | 10Y 금리 <b>{macroRegime.us10y.level.toFixed(2)}%</b> | DXY <b>{macroRegime.dxy.level.toFixed(1)}</b>
                 </span>
               </div>
-              <div className="flex items-center space-x-2 mt-1 text-xs text-slate-400 truncate">
+              <div className="flex items-center space-x-2 mt-1 text-xs text-slate-400 min-w-0">
                 {imminentEarnings.length > 0 ? (
-                  <span className="text-rose-400 font-medium flex items-center space-x-1">
+                  <span className="text-rose-400 font-medium flex items-center space-x-1 min-w-0">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    <span>
+                    <span className="truncate">
                       어닝 임박 경고: <b>{imminentEarnings.map(e => `${e.ticker}(D-${e.daysUntil})`).join(', ')}</b> (신규 진입 비중 50% 제한 가드 가동)
                     </span>
                   </span>
                 ) : (
-                  <span>가이드: {macroRegime.actionableSummary}</span>
+                  <span className="truncate">가이드: {macroRegime.actionableSummary}</span>
                 )}
               </div>
             </div>
@@ -461,7 +461,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Visual Pipeline Steps */}
-        <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 mt-4 sm:mt-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 mt-4 sm:mt-5">
           <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2 sm:p-3 text-center">
             <div className="text-[9px] sm:text-[10px] text-cyan-400 font-mono font-bold">STEP 01</div>
             <div className="text-[11px] sm:text-xs font-semibold text-slate-200 mt-0.5 sm:mt-1 truncate">Watchlist</div>
@@ -840,21 +840,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 4. Recent Signals & Snapshot Timeline */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <Zap className="w-5 h-5 text-amber-400" />
-            <h3 className="text-base font-bold text-slate-100">
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between mb-4 gap-2">
+          <div className="flex items-center space-x-2 min-w-0">
+            <Zap className="w-5 h-5 text-amber-400 shrink-0" />
+            <h3 className="text-sm sm:text-base font-bold text-slate-100 truncate">
               최근 발생 시그널 스냅샷 원장 (불변 기록)
             </h3>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-slate-400 font-mono shrink-0">
             총 {uniqueRecentSignals.length}건 기록
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto w-full no-scrollbar">
+          <table className="w-full text-left text-xs min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 font-medium">
                 <SortableHeader<DashboardSignalSortField>

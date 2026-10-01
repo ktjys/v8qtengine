@@ -166,8 +166,8 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
     const ro = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       const entry = entries[0];
-      const newWidth = Math.max(320, Math.floor(entry.contentRect.width));
-      const targetHeight = isExpanded ? 640 : Math.max(380, Math.min(520, Math.floor(newWidth * 0.48)));
+      const newWidth = Math.max(260, Math.floor(entry.contentRect.width));
+      const targetHeight = isExpanded ? 640 : Math.max(340, Math.min(520, Math.floor(newWidth * 0.52)));
       setDimensions({ width: newWidth, height: targetHeight });
     });
 
@@ -276,7 +276,7 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
   }, [sectorGroups]);
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
+    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-xl space-y-4 sm:space-y-5 w-full max-w-full overflow-hidden">
       {/* 1. Header & Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="space-y-1">
@@ -468,7 +468,7 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
       </div>
 
       {/* 2. Sector Filter Chips */}
-      <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+      <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar w-full max-w-full">
         <button
           onClick={() => setSelectedSectorFilter('ALL')}
           className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all flex items-center space-x-1.5 ${
@@ -539,7 +539,8 @@ export const SectorPerformanceTreemap: React.FC<SectorPerformanceTreemapProps> =
           <svg
             width={dimensions.width}
             height={dimensions.height}
-            className="w-full h-full block"
+            viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
+            className="w-full h-full block max-w-full"
           >
           <defs>
             <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="110%">

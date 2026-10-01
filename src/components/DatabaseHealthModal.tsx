@@ -232,9 +232,9 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-fadeIn overflow-y-auto"
     >
-      <div className="relative w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="relative w-full max-w-full sm:max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
           <div className="flex items-center space-x-3">
@@ -575,7 +575,7 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
                     Supabase Dashboard &gt; SQL Editor에 복사하여 붙여넣고 [Run]을 누르시면 모든 테이블, 인덱스, RLS 해제가 일괄 적용됩니다.
                   </p>
                 </div>
-                <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
                   <button
                     onClick={handleCopyRlsFixSql}
                     className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"

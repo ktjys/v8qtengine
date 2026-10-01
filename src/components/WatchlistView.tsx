@@ -541,7 +541,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     <span className="text-emerald-400 font-medium">+{remainingSlots}개 가능</span>
                   )}
                 </span>
-                <span className="border-l border-slate-700 pl-1.5 ml-0.5 text-[11px] font-sans text-slate-500">
+                <span className="border-l border-slate-700 pl-1.5 ml-0.5 text-[11px] font-sans text-slate-500 hidden sm:inline">
                   (전체: {totalCount}개 · US: {marketCounts.US || 0}개 · KR: {marketCounts.KR || 0}개)
                 </span>
               </div>
@@ -851,7 +851,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                         {idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-1.5">
+                        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
                           <StockDisplayBadge
                             ticker={item.ticker}
                             name={item.name}

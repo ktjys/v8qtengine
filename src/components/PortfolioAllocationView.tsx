@@ -175,26 +175,28 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                 <span>•</span>
                 <span>운용 총자본 설정</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="relative">
-                  <span className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 font-bold font-mono">
-                    {currencySymbol}
-                  </span>
-                  <input
-                    type="text"
-                    value={capitalInput}
-                    onChange={(e) => setCapitalInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleApplyCapital()}
-                    className="bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xl font-bold font-mono text-white focus:outline-none focus:border-purple-500 w-48"
-                  />
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center space-x-2">
+                  <div className="relative">
+                    <span className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 font-bold font-mono">
+                      {currencySymbol}
+                    </span>
+                    <input
+                      type="text"
+                      value={capitalInput}
+                      onChange={(e) => setCapitalInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyCapital()}
+                      className="bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-lg sm:text-xl font-bold font-mono text-white focus:outline-none focus:border-purple-500 w-36 sm:w-48"
+                    />
+                  </div>
+                  <button
+                    onClick={handleApplyCapital}
+                    className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all active:scale-95 shrink-0"
+                  >
+                    적용
+                  </button>
                 </div>
-                <button
-                  onClick={handleApplyCapital}
-                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all active:scale-95"
-                >
-                  적용
-                </button>
-                <div className="flex items-center space-x-1.5 pl-2">
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 sm:pt-0">
                   {(activeMarket === 'KR'
                     ? [
                         { label: '5천만', val: 50000000 },
@@ -226,7 +228,7 @@ export const PortfolioAllocationView: React.FC<PortfolioAllocationViewProps> = (
                   ))}
                 </div>
               </div>
-              <div className="flex items-center space-x-4 text-xs text-slate-400 font-mono pt-1">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-slate-400 font-mono pt-1">
                 <span>투자 자산: <b className="text-white">{currencySymbol}{rebalanceState.totalInvested.toLocaleString()}</b></span>
                 <span>•</span>
                 <span>현금 잔고: <b className="text-emerald-400">{currencySymbol}{rebalanceState.cashBalance.toLocaleString()}</b> ({rebalanceState.cashWeightPct}%)</span>

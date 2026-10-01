@@ -363,7 +363,7 @@ export const DipBuyMatrix: React.FC<DipBuyMatrixProps> = ({
                       {idx + 1}
                     </span>
                     <div className="min-w-0">
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
                         <StockDisplayBadge
                           ticker={item.ticker}
                           name={item.name}

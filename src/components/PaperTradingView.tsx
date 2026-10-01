@@ -220,7 +220,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                 {isKr ? '🇰🇷 국내 모의투자 & 시그널 적중률 추적기' : '🇺🇸 미국 모의투자 & 시그널 적중률 추적기'}
               </h1>
@@ -362,7 +362,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
       )}
 
       {/* 3. Sub-Navigation Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-800 pb-3 overflow-x-auto">
+      <div className="flex items-center space-x-2 border-b border-slate-800 pb-3 overflow-x-auto no-scrollbar w-full max-w-full">
         <button
           onClick={() => setActiveSubTab('positions')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${

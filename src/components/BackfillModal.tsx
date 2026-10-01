@@ -319,9 +319,9 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
             <>
               {/* Info Callout */}
               <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 text-xs text-cyan-200/90 space-y-2">
-                <div className="flex items-center justify-between font-bold text-cyan-300">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold text-cyan-300">
                   <span className="flex items-center space-x-1.5">
-                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
                     <span>클라우드플레어 펑션 타임아웃 방지 &amp; 스트리밍 분할 실행</span>
                   </span>
                   <span className="text-[10px] font-mono text-cyan-400/80 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">

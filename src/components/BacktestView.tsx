@@ -764,11 +764,11 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
       </div>
 
       {/* 4. Complete Immutable Snapshot Audit Ledger */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 overflow-hidden">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-100 flex items-center space-x-2">
-              <Zap className="w-5 h-5 text-amber-400" />
+              <Zap className="w-5 h-5 text-amber-400 shrink-0" />
               <span>시그널 불변 스냅샷 원장 (Snapshot Audit Ledger)</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -777,8 +777,8 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
           </div>
 
           {/* Filters & Search */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="relative min-w-[150px]">
+          <div className="flex flex-wrap items-center gap-2 text-xs w-full sm:w-auto">
+            <div className="relative w-full sm:w-auto sm:min-w-[150px]">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -837,7 +837,7 @@ export const BacktestView: React.FC<BacktestViewProps> = ({
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <div className="overflow-x-auto rounded-xl border border-slate-800 w-full no-scrollbar">
             <table className="w-full text-left text-xs min-w-[700px]">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/80">

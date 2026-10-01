@@ -72,39 +72,38 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-fadeIn">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-full sm:max-w-5xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]">
         {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-              <Sparkles className="w-6 h-6" />
+        <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
+          <div className="flex items-center space-x-2.5 sm:space-x-3">
+            <div className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-lg sm:text-xl font-bold text-white">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-base sm:text-xl font-bold text-white">
                   모니터링 종목 기반 전략 진단 & 최적화
                 </h2>
-                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold font-mono">
+                <span className="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold font-mono">
                   현재: {currentConfig.name}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 hidden sm:block">
                 등록된 {evaluations.length}개 모니터링 종목의 특성을 분석하여 성과를 극대화할 수 있는 전략 수정안을 제안합니다.
               </p>
             </div>
           </div>
-
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-slate-800 bg-slate-900/40 px-6 pt-2">
+        <div className="flex border-b border-slate-800 bg-slate-900/40 px-3 sm:px-6 pt-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('recommendations')}
             className={`flex items-center space-x-2 px-4 py-3 border-b-2 text-xs sm:text-sm font-semibold transition-all ${

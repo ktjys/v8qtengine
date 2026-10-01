@@ -349,7 +349,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Top Header Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1.5">
             <span className="flex items-center space-x-1">
@@ -469,7 +469,7 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
       <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* Strategy Pills */}
-          <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs w-full sm:w-auto">
             <button
               onClick={() => setSelectedStrategy('ALL')}
               className={`px-2.5 py-1 rounded font-medium transition-all ${
