@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Sliders,
@@ -38,6 +38,23 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
   currentConfig,
   onApplyConfig,
 }) => {
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const [activeTab, setActiveTab] = useState<'recommendations' | 'custom'>('recommendations');
@@ -72,7 +89,15 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-fadeIn">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="strat-opt-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-fadeIn"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-full sm:max-w-5xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]">
         {/* Modal Header */}
         <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
@@ -82,7 +107,7 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h2 className="text-base sm:text-xl font-bold text-white">
+                <h2 id="strat-opt-title" className="text-base sm:text-xl font-bold text-white">
                   모니터링 종목 기반 전략 진단 & 최적화
                 </h2>
                 <span className="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold font-mono">

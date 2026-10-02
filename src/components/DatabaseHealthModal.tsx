@@ -229,6 +229,9 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="db-health-modal-title"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -243,7 +246,7 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="text-base sm:text-lg font-bold text-slate-100">
+                <h3 id="db-health-modal-title" className="text-base sm:text-lg font-bold text-slate-100">
                   데이터베이스 헬스체크 & DDL
                 </h3>
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">

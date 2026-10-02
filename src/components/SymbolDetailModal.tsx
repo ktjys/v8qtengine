@@ -83,10 +83,28 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   const [editReason, setEditReason] = useState<string>(evaluation.classification.reason);
 
   const [paperBuySuccess, setPaperBuySuccess] = useState(false);
+  const [paperBuyError, setPaperBuyError] = useState<string | null>(null);
   const [isPaperBuying, setIsPaperBuying] = useState(false);
+
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [onClose]);
 
   const handleQuickPaperBuy = () => {
     setIsPaperBuying(true);
+    setPaperBuyError(null);
     const strat = evaluation.classification.strategy_type === 'MOMENTUM_BREAKOUT' ? 'STRATEGY_A' : 'STRATEGY_B';
     const res = PaperTradingEngine.executeOrder({
       ticker: evaluation.ticker,
@@ -102,7 +120,8 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
       setPaperBuySuccess(true);
       setTimeout(() => setPaperBuySuccess(false), 2500);
     } else {
-      alert(res.error || '가상 매수 실패');
+      setPaperBuyError(res.error || '가상 매수 체결에 실패했습니다.');
+      setTimeout(() => setPaperBuyError(null), 3000);
     }
   };
 
@@ -181,12 +200,20 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-2.5 sm:p-4 overflow-y-auto animate-fadeIn">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="symbol-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-2.5 sm:p-4 overflow-y-auto animate-fadeIn"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden my-auto">
         {/* Modal Header */}
         <div className="p-3.5 sm:p-5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
-            <div className="min-w-0">
+            <div className="min-w-0" id="symbol-modal-title">
               <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
                 <StockDisplayBadge
                   ticker={evaluation.ticker}

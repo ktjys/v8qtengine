@@ -90,6 +90,23 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
     }
   }, [logs]);
 
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isRunning) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isOpen, isRunning, onClose]);
+
   if (!isOpen) return null;
 
   const appendLog = (message: string, type: LogEntry['type'] = 'info') => {
@@ -287,7 +304,15 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2.5 sm:p-4 animate-fadeIn">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="backfill-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isRunning) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2.5 sm:p-4 animate-fadeIn"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
@@ -296,7 +321,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
               <Database className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center space-x-2">
+              <h2 id="backfill-modal-title" className="text-sm sm:text-base font-bold text-slate-100 flex items-center space-x-2">
                 <span>과거 데이터 백필 엔진 (Backfill Engine)</span>
               </h2>
               <p className="text-[10px] sm:text-xs text-slate-400 hidden sm:block">
@@ -532,7 +557,7 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                         <th className="p-2.5 text-right">20D 평균수익</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-850 text-slate-200">
+                    <tbody className="divide-y divide-slate-800 text-slate-200">
                       {Object.entries(result.detailsByTicker).map(([sym, itemInfo]) => {
                         const item = itemInfo as {
                           barsCount: number;

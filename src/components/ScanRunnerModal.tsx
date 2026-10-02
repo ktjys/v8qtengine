@@ -38,6 +38,22 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   const [telegramStatus, setTelegramStatus] = useState<{ sent: boolean; message: string } | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
 
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isRunning) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isRunning, onClose]);
+
   const steps = [
     { title: '1. Watchlist 동기화', desc: '워치리스트 종목 시세 및 지표 로드' },
     { title: '2. Asset Classification', desc: 'ETF/개별주 자산 정체성 및 전략 분류' },
@@ -119,7 +135,15 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="scan-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isRunning) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fadeIn"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/60">
@@ -129,7 +153,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h3 className="text-sm sm:text-base font-bold text-slate-100">
+                <h3 id="scan-modal-title" className="text-sm sm:text-base font-bold text-slate-100">
                   {activeMarket === 'KR' ? '🇰🇷 국내(KR) 퀀트 스캐너 실행' : '🇺🇸 미국(US) 퀀트 스캐너 실행'}
                 </h3>
                 {totalWatchlistCount !== undefined && totalWatchlistCount > 0 && (

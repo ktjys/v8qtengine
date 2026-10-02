@@ -94,6 +94,9 @@ export default {
     if (path === '/api/health') {
       return jsonResponse({
         status: 'ok',
+        version: '8.2.4',
+        commit_hash: '14c4db1',
+        build_time: '2026-10-03 08:45 KST',
         provider: evaluationService.getProviderName(),
         db_connected: dbClient.isSupabaseConnected,
         db_config_source: dbClient.configSource,

@@ -26,6 +26,7 @@ import { ScanRunnerModal } from './components/ScanRunnerModal';
 import { BackfillModal } from './components/BackfillModal';
 import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 import { DatabaseHealthModal } from './components/DatabaseHealthModal';
+import { VersionInfoModal } from './components/VersionInfoModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { calculateBacktestMetrics } from './engine/backtestEngine';
 import {
@@ -33,9 +34,77 @@ import {
   recalculateEvaluationsWithConfig,
   StrategyOptimizationConfig,
 } from './engine/strategyOptimizerEngine';
+import { APP_VERSION_INFO } from './version';
+import { GitCommit } from 'lucide-react';
+
+export type TabType =
+  | 'dashboard'
+  | 'watchlist'
+  | 'backtest'
+  | 'exit'
+  | 'classification'
+  | 'runs'
+  | 'macro'
+  | 'portfolio'
+  | 'paper'
+  | 'guide';
+
+const VALID_TABS: TabType[] = [
+  'dashboard',
+  'watchlist',
+  'backtest',
+  'exit',
+  'classification',
+  'runs',
+  'macro',
+  'portfolio',
+  'paper',
+  'guide',
+];
+
+const getInitialTab = (): TabType => {
+  if (typeof window !== 'undefined') {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get('tab') as TabType;
+      if (tabParam && VALID_TABS.includes(tabParam)) return tabParam;
+
+      const hashParam = window.location.hash.replace(/^#/, '') as TabType;
+      if (hashParam && VALID_TABS.includes(hashParam)) return hashParam;
+    } catch {}
+  }
+  return 'dashboard';
+};
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchlist' | 'backtest' | 'exit' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide'>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState({ tab }, '', url.toString());
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const tabParam = searchParams.get('tab') as TabType;
+        if (tabParam && VALID_TABS.includes(tabParam)) {
+          setActiveTab(tabParam);
+        }
+      } catch {}
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [activeMarket, setActiveMarket] = useState<MarketRegion>(() => {
     try {
       const saved = localStorage.getItem('quant_active_market_v8');
@@ -519,12 +588,16 @@ export default function App() {
       {/* Navbar */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         activeMarket={activeMarket}
         onSelectMarket={handleSelectMarket}
         onOpenScanModal={() => setIsScanModalOpen(true)}
         onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
+        onOpenVersionModal={() => setIsVersionModalOpen(true)}
+        evaluations={filteredEvaluations}
+        onRefreshData={loadAllData}
+        isRefreshingData={isInitialLoading}
         totalCount={filteredEvaluations.length}
         signalsCount={filteredSignals.length}
         isInitialLoading={isInitialLoading}
@@ -793,9 +866,58 @@ export default function App() {
         </ErrorBoundary>
       )}
 
-      {/* Toast Notification */}
+      {/* Footer with Version & Commit Hash (Req 3) */}
+      <footer className="mt-12 border-t border-slate-800/80 bg-slate-950/80 py-4 px-4 text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+            <span className="font-semibold text-slate-300">⚡ 퀀트 의사결정 엔진</span>
+            <span className="text-slate-600">•</span>
+            <button
+              onClick={() => setIsVersionModalOpen(true)}
+              className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 font-mono text-[11px] transition-colors"
+              title="배포 커밋 및 상세 릴리즈 확인"
+            >
+              <GitCommit className="w-3 h-3" />
+              <span>#{APP_VERSION_INFO.commitHash}</span>
+              <span className="text-slate-500">(v{APP_VERSION_INFO.version})</span>
+            </button>
+            <span className="text-slate-600 hidden sm:inline">•</span>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
+              빌드: {APP_VERSION_INFO.buildTime}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3 text-[11px]">
+            <span className="text-slate-500">
+              현재 시장: <strong className="text-slate-300">{activeMarket === 'KR' ? '🇰🇷 국내장' : '🇺🇸 미국장'}</strong>
+            </span>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-slate-400 hover:text-cyan-300 underline underline-offset-2 transition-colors"
+              title="브라우저 캐시 강제 갱신"
+            >
+              새로고침
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      {/* Version & Release Changelog Modal */}
+      {isVersionModalOpen && (
+        <VersionInfoModal
+          isOpen={isVersionModalOpen}
+          onClose={() => setIsVersionModalOpen(false)}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* Toast Notification (P1-8: accessible live region) */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-cyan-500/40 text-cyan-200 px-4 py-3 rounded-2xl shadow-2xl text-xs font-semibold flex items-center space-x-2 animate-fadeIn">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-cyan-500/40 text-cyan-200 px-4 py-3 rounded-2xl shadow-2xl text-xs font-semibold flex items-center space-x-2 animate-fadeIn"
+        >
           <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
           <span>{toastMessage}</span>
         </div>

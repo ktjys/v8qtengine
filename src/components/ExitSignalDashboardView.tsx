@@ -117,10 +117,17 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
     setIsAddModalOpen(false);
   };
 
+  const [deleteTargetTicker, setDeleteTargetTicker] = useState<string | null>(null);
+
   const handleDeletePosition = (ticker: string) => {
-    if (confirm(`'${ticker}' 보유 종목 등록을 해제하시겠습니까?`)) {
-      const updated = positions.filter((p) => p.ticker !== ticker);
+    setDeleteTargetTicker(ticker);
+  };
+
+  const confirmDeletePosition = () => {
+    if (deleteTargetTicker) {
+      const updated = positions.filter((p) => p.ticker !== deleteTargetTicker);
       handleSavePositions(updated);
+      setDeleteTargetTicker(null);
     }
   };
 
@@ -775,6 +782,55 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* P1-3: Accessible Custom Confirmation Modal for Deleting Position */}
+      {deleteTargetTicker && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-pos-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+        >
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 id="delete-pos-title" className="text-base font-bold text-slate-100">
+                  보유 종목 해제
+                </h3>
+                <p className="text-xs text-slate-400 font-mono text-cyan-400">{deleteTargetTicker}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+              <strong className="text-white">'{deleteTargetTicker}'</strong> 종목의 보유 감시를 해제하시겠습니까?
+              <br />
+              <span className="text-slate-400 mt-1 block">
+                매도 감시 및 익절/손절 알림 추적이 중단됩니다.
+              </span>
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTargetTicker(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePosition}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition-all active:scale-95"
+              >
+                감시 해제
+              </button>
+            </div>
           </div>
         </div>
       )}

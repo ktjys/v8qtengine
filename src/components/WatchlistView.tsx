@@ -118,6 +118,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
   // Add Ticker Modal State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [newTicker, setNewTicker] = useState('');
   const [newName, setNewName] = useState('');
   const [newMemo, setNewMemo] = useState('');
@@ -570,7 +571,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               {onOpenDbHealthModal && (
                 <button
                   onClick={onOpenDbHealthModal}
-                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
                   title="Supabase DB 테이블 상태 및 DDL 마이그레이션 스크립트를 확인합니다."
                 >
                   <Database className="w-3.5 h-3.5 text-cyan-400" />
@@ -581,12 +582,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
               {onRestoreDefaultSeed && (
                 <button
-                  onClick={() => {
-                    if (confirm('기본 대표 종목(AAPL, NVDA, TSLA, MSFT, VOO 등 18개)을 워치리스트에 복원하시겠습니까?\n(현재 등록된 종목은 그대로 유지되며 기본 종목들이 함께 채워집니다)')) {
-                      onRestoreDefaultSeed();
-                    }
-                  }}
-                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                  onClick={() => setShowRestoreConfirm(true)}
+                  className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
                   title="초기 기본 18개 대표 우량주 및 지수 ETF 유니버스를 복원합니다."
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
@@ -613,7 +610,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 onClick={() => setShowAddModal(true)}
                 className={`flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-md transition-all active:scale-95 whitespace-nowrap ${
                   isCapacityReached
-                    ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-750'
+                    ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
                     : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/30'
                 }`}
                 title={
@@ -1853,6 +1850,58 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* P1-3: Accessible Custom Confirmation Modal for Restoring Seed */}
+      {showRestoreConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="restore-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+        >
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 id="restore-modal-title" className="text-base font-bold text-slate-100">
+                  기본 종목 복원 확인
+                </h3>
+                <p className="text-xs text-slate-400">초기 대표 우량주 및 지수 ETF 유니버스</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+              기본 대표 종목(AAPL, NVDA, TSLA, MSFT, VOO 등 18개)을 워치리스트에 복원하시겠습니까?
+              <br />
+              <span className="text-cyan-400 mt-1 block">
+                * 현재 이미 등록된 종목은 그대로 유지되며 기본 종목들이 함께 채워집니다.
+              </span>
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRestoreConfirm(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRestoreConfirm(false);
+                  onRestoreDefaultSeed?.();
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition-all active:scale-95"
+              >
+                복원 실행
+              </button>
+            </div>
           </div>
         </div>
       )}

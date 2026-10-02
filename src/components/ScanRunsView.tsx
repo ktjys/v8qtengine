@@ -140,7 +140,7 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
           {onOpenDbHealthModal && (
             <button
               onClick={onOpenDbHealthModal}
-              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-slate-100 border border-slate-700 font-semibold shadow-sm transition-all active:scale-95 text-xs whitespace-nowrap"
+              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 border border-slate-700 font-semibold shadow-sm transition-all active:scale-95 text-xs whitespace-nowrap"
               title="데이터베이스 헬스체크 및 DDL 스키마 확인"
             >
               <Database className="w-3.5 h-3.5 text-cyan-400" />

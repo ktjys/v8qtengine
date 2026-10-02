@@ -15,8 +15,11 @@ import {
   X,
   LineChart,
   ShieldAlert,
+  GitCommit,
 } from 'lucide-react';
-import { MarketRegion } from '../types/v8';
+import { MarketRegion, FullTickerEvaluation } from '../types/v8';
+import { APP_VERSION_INFO } from '../version';
+import { DataFreshnessBadge } from './DataFreshnessBadge';
 
 interface NavbarProps {
   activeTab: 'dashboard' | 'watchlist' | 'backtest' | 'exit' | 'classification' | 'runs' | 'macro' | 'portfolio' | 'paper' | 'guide';
@@ -26,6 +29,10 @@ interface NavbarProps {
   onOpenScanModal: () => void;
   onOpenScheduleModal: () => void;
   onOpenDbHealthModal?: () => void;
+  onOpenVersionModal?: () => void;
+  evaluations?: FullTickerEvaluation[];
+  onRefreshData?: () => void;
+  isRefreshingData?: boolean;
   totalCount: number;
   signalsCount: number;
   isInitialLoading?: boolean;
@@ -39,6 +46,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenScanModal,
   onOpenScheduleModal,
   onOpenDbHealthModal,
+  onOpenVersionModal,
+  evaluations = [],
+  onRefreshData,
+  isRefreshingData = false,
   totalCount,
   signalsCount,
   isInitialLoading = false,
@@ -280,6 +291,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
 
+            {/* P1-1: Data Freshness Badge */}
+            <DataFreshnessBadge
+              evaluations={evaluations}
+              onRefresh={onRefreshData}
+              isRefreshing={isRefreshingData}
+              className="hidden lg:inline-flex"
+            />
+
+            {/* Commit & Version Indicator (Req 3) */}
+            {onOpenVersionModal && (
+              <button
+                id="header-version-btn"
+                onClick={onOpenVersionModal}
+                className="flex items-center space-x-1 py-1 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-all active:scale-95 shrink-0"
+                title={`시스템 버전 v${APP_VERSION_INFO.version} (커밋 #${APP_VERSION_INFO.commitHash}) - 클릭하여 배포 세부정보 및 캐시 갱신 확인`}
+              >
+                <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="font-bold">#{APP_VERSION_INFO.commitHash}</span>
+              </button>
+            )}
+
             {onOpenDbHealthModal && (
               <button
                 id="header-db-health-btn"
@@ -424,7 +456,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onOpenDbHealthModal();
                       setIsMobileDrawerOpen(false);
                     }}
-                    className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-750 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
+                    className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
                   >
                     <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                     <span>DB 헬스체크</span>
@@ -435,11 +467,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                     onOpenScheduleModal();
                     setIsMobileDrawerOpen(false);
                   }}
-                  className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-750 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
+                  className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
                 >
                   <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span>자동 알림 설정</span>
                 </button>
+                {onOpenVersionModal && (
+                  <button
+                    onClick={() => {
+                      onOpenVersionModal();
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className="col-span-2 flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-semibold hover:bg-slate-800 transition-colors"
+                  >
+                    <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>배포 커밋: #{APP_VERSION_INFO.commitHash} (v{APP_VERSION_INFO.version})</span>
+                  </button>
+                )}
               </div>
             </div>
 

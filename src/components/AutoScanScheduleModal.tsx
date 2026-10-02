@@ -140,6 +140,23 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
     }
   }, [isOpen]);
 
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isRunning && !isTestingTelegram) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isOpen, isRunning, isTestingTelegram, onClose]);
+
   const handleSaveTelegramConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanToken = inputBotToken.trim();
@@ -531,7 +548,15 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="schedule-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isRunning && !isTestingTelegram) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fadeIn"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between shrink-0">
@@ -541,7 +566,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-slate-100">자동 스캔 & 알림 시스템</h3>
+                <h3 id="schedule-modal-title" className="text-base sm:text-lg font-bold text-slate-100">자동 스캔 & 알림 시스템</h3>
                 <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                   하루 2회 자동화
                 </span>
