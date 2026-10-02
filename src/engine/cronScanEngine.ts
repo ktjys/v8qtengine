@@ -115,6 +115,15 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
   } else if (kstHour >= 22 && kstHour <= 23) {
     slotName = '🌃 [미국장 개장] 미국 정규장 개장 & 당일 기회종목 브리핑 (23:00 KST)';
     defaultMarket = 'US';
+  } else {
+    // Unscheduled / Manual trigger hours: default based on active market hours
+    if (kstHour >= 8 && kstHour < 18) {
+      defaultMarket = 'KR';
+      slotName = `☀️ [국내장 수동스캔] KOSPI/KOSDAQ 브리핑 (${kstTimeStr})`;
+    } else {
+      defaultMarket = 'US';
+      slotName = `🌃 [미국장 수동스캔] 미국 증시 브리핑 (${kstTimeStr})`;
+    }
   }
 
   // Cloudflare Cron Trigger pattern matching
@@ -135,7 +144,12 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
     }
   }
 
-  const targetMarket = options.market && options.market !== 'ALL' ? options.market : defaultMarket;
+  let targetMarket = options.market && options.market !== 'ALL' ? options.market : defaultMarket;
+  if (options.market === 'KR' && !slotName.includes('국내')) {
+    slotName = `☀️ [국내장 전용] KOSPI/KOSDAQ 브리핑 (${kstTimeStr})`;
+  } else if (options.market === 'US' && !slotName.includes('미국')) {
+    slotName = `🌃 [미국장 전용] 미국 증시 퀀트 브리핑 (${kstTimeStr})`;
+  }
 
   // Weekend & Closed Market Guard for Automated Scheduled Crons
   const isManualTrigger =
@@ -220,6 +234,9 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       ]);
 
       evaluations = scanResult.evaluations || [];
+      if (targetMarket) {
+        evaluations = evaluations.filter((e) => detectMarketRegion(e.ticker) === targetMarket);
+      }
       watchlistTotalCount = scanResult.watchlist?.length || evaluations.length;
     } catch (scanErr: any) {
       console.error('[CronScan] ScanService failed:', scanErr);
@@ -255,7 +272,9 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
       }
     }
 
-    actionable = evaluations.filter((e) => e.signal_generated);
+    actionable = evaluations
+      .filter((e) => e.signal_generated)
+      .filter((e) => !targetMarket || detectMarketRegion(e.ticker) === targetMarket);
 
     // 4. Telegram Notification (Prepared and sent before database log commit)
     let telegramResult = {
@@ -284,6 +303,7 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
     const dipEvaluations = evaluations.map((e) => ensureDipEvaluation(e));
     const dipOpportunities = dipEvaluations
       .filter((d) => d.suitability.isSuitable && (d.actionSignal === 'STRONG_DIP_BUY' || d.actionSignal === 'MODERATE_DCA'))
+      .filter((d) => !targetMarket || detectMarketRegion(d.ticker) === targetMarket)
       .sort((a, b) => b.dip_score - a.dip_score);
 
     // Phase 1: 매크로 시장 체제 & 실적 캘린더 가드 조회

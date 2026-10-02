@@ -24,7 +24,9 @@ export interface FundamentalsRecord {
 }
 
 export class FundamentalsRepository {
-  async save(data: FundamentalData, source = 'yahoo'): Promise<void> {
+  private isPreloaded = false;
+
+  saveInMemory(data: FundamentalData, source = 'yahoo'): FundamentalsRecord {
     const clean = data.ticker.toUpperCase().trim();
     const asOfDate = data.asOfDate || new Date().toISOString().split('T')[0];
     const key = `${clean}_${asOfDate}`;
@@ -49,49 +51,74 @@ export class FundamentalsRepository {
     };
 
     dbClient.fundamentals.set(key, record);
+    return record;
+  }
 
-    if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
+  async save(data: FundamentalData, source = 'yahoo'): Promise<void> {
+    await this.saveAll([{ data, source }]);
+  }
+
+  /**
+   * Save multiple fundamental records in 1 single Supabase batch query to minimize subrequests
+   */
+  async saveAll(items: Array<{ data: FundamentalData; source?: string }>): Promise<void> {
+    if (!items || items.length === 0) return;
+    const now = new Date().toISOString();
+    const payloads: any[] = [];
+    const assetPayloads: any[] = [];
+
+    for (const item of items) {
+      const clean = item.data.ticker.toUpperCase().trim();
+      const asOfDate = item.data.asOfDate || now.split('T')[0];
+      const source = item.source || 'yahoo';
+
+      this.saveInMemory(item.data, source);
+
+      assetPayloads.push({
+        ticker: clean,
+        name: clean,
+        asset_type: item.data.quoteType === 'ETF' ? 'etf' : 'equity',
+        exchange: 'US',
+        sector: item.data.sector,
+        industry: item.data.industry,
+        currency: 'USD',
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      });
+
+      payloads.push({
+        ticker: clean,
+        as_of_date: asOfDate,
+        published_at: asOfDate,
+        period_end_date: asOfDate,
+        revenue_growth: item.data.revenueGrowthYoy,
+        eps_growth: item.data.earningsGrowthYoy,
+        operating_margin: item.data.operatingMargin,
+        fcf_margin: item.data.freeCashFlowMargin,
+        market_cap: item.data.marketCap || 0,
+        trailing_pe: item.data.trailingPe,
+        forward_pe: item.data.forwardPe,
+        ps_ratio: item.data.psRatio,
+        peg_ratio: item.data.pegRatio,
+        source,
+        fetched_at: now,
+      });
+    }
+
+    if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase && payloads.length > 0) {
       try {
-        await assetRepository.upsert({
-          ticker: clean,
-          name: clean,
-          asset_type: data.quoteType === 'ETF' ? 'etf' : 'equity',
-          exchange: 'US',
-          sector: data.sector,
-          industry: data.industry,
-          currency: 'USD',
-          is_active: true,
-          created_at: now,
-          updated_at: now,
-        });
-
-        const payload = {
-          ticker: clean,
-          as_of_date: asOfDate,
-          published_at: asOfDate,
-          period_end_date: asOfDate,
-          revenue_growth: data.revenueGrowthYoy,
-          eps_growth: data.earningsGrowthYoy,
-          operating_margin: data.operatingMargin,
-          fcf_margin: data.freeCashFlowMargin,
-          market_cap: data.marketCap || 0,
-          trailing_pe: data.trailingPe,
-          forward_pe: data.forwardPe,
-          ps_ratio: data.psRatio,
-          peg_ratio: data.pegRatio,
-          source,
-          fetched_at: now,
-        };
-
+        if (assetPayloads.length > 0) {
+          await dbClient.supabase.from('assets').upsert(assetPayloads, { onConflict: 'ticker' });
+        }
         const { error } = await dbClient.supabase
           .from('fundamentals')
-          .upsert(payload, { onConflict: 'ticker,as_of_date' });
-
+          .upsert(payloads, { onConflict: 'ticker,as_of_date' });
         if (error) {
-          dbClient.handleDbError('fundamentals', 'save', error);
+          dbClient.handleDbError('fundamentals', 'saveAll', error);
         }
       } catch (err) {
-        dbClient.handleDbError('fundamentals', 'save', err);
+        dbClient.handleDbError('fundamentals', 'saveAll', err);
       }
     }
   }
@@ -115,6 +142,7 @@ export class FundamentalsRepository {
               dbClient.fundamentals.set(key, rec);
             }
           }
+          this.isPreloaded = true;
         }
       } catch (err) {
         console.warn('[FundamentalsRepository] preloadAll exception:', err);
@@ -137,8 +165,8 @@ export class FundamentalsRepository {
       return matching[0];
     }
 
-    // 2. Query Supabase if not cached
-    if (dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
+    // 2. Query Supabase if not cached and table has not been fully preloaded
+    if (!this.isPreloaded && dbClient.isTableAvailable('fundamentals') && dbClient.supabase) {
       try {
         const { data, error } = await dbClient.supabase
           .from('fundamentals')

@@ -14,8 +14,14 @@ export async function onRequest(context: any) {
 
     const simulatePartialFailure = body.simulate_partial_failure === true;
     const providerType = body.provider_type as 'yahoo' | 'seed' | undefined;
+    const targetMarketRaw = (body.market || '').toUpperCase().trim();
+    const targetMarket = (targetMarketRaw === 'KR' || targetMarketRaw === 'US' || targetMarketRaw === 'ALL')
+      ? (targetMarketRaw as 'KR' | 'US' | 'ALL')
+      : undefined;
+    const effectiveMarket = targetMarket === 'ALL' ? undefined : targetMarket;
 
     const scanResult = await scanService.executeScan({
+      market: effectiveMarket,
       simulatePartialFailure,
       providerType: providerType || 'yahoo',
       saveToDb: true,

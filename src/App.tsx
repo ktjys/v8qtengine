@@ -778,6 +778,7 @@ export default function App() {
           isOpen={isScheduleModalOpen}
           onClose={() => setIsScheduleModalOpen(false)}
           onShowToast={showToast}
+          activeMarket={activeMarket}
         />
       )}
 

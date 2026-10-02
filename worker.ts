@@ -19,7 +19,7 @@ import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEng
 import { telegramNotifier } from './src/notification/telegramNotifier';
 import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from './src/constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from './src/utils/stockSearchService';
-import { detectMarketRegion } from './src/utils/marketUtils';
+import { detectMarketRegion, formatTelegramStockName, formatStockDisplayName } from './src/utils/marketUtils';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -669,17 +669,29 @@ export default {
           body = await request.json();
         } catch {}
 
+        const targetMarketRaw = (body.market || '').toUpperCase().trim();
+        const targetMarket = (targetMarketRaw === 'KR' || targetMarketRaw === 'US' || targetMarketRaw === 'ALL')
+          ? (targetMarketRaw as 'KR' | 'US' | 'ALL')
+          : undefined;
+        const effectiveMarket = targetMarket === 'ALL' ? undefined : targetMarket;
+
         const result = await scanService.executeScan({
+          market: effectiveMarket,
           simulatePartialFailure: body.simulate_partial_failure === true,
           providerType: body.provider_type || 'yahoo',
           saveToDb: true,
         });
 
         const runLog = result.runLog;
-        const actionableSignals = (result.evaluations || []).filter((e: any) => e.signal_generated);
 
-        // Calculate Strategy B Dip Buy evaluations
-        const dipBuyOpportunities = (result.evaluations || [])
+        // Strictly isolate signals by target market if specified
+        let actionableSignals = (result.evaluations || []).filter((e: any) => e.signal_generated);
+        if (effectiveMarket) {
+          actionableSignals = actionableSignals.filter((e: any) => detectMarketRegion(e.ticker) === effectiveMarket);
+        }
+
+        // Calculate Strategy B Dip Buy evaluations (strictly isolated by market)
+        let dipBuyOpportunities = (result.evaluations || [])
           .map((e: any) => ensureDipEvaluation(e))
           .filter(
             (e: any) =>
@@ -687,6 +699,9 @@ export default {
               e.dip_evaluation.suitability.tier !== 'D' &&
               e.dip_evaluation.isActionableDip
           );
+        if (effectiveMarket) {
+          dipBuyOpportunities = dipBuyOpportunities.filter((e: any) => detectMarketRegion(e.ticker) === effectiveMarket);
+        }
 
         // Telegram Notification Dispatch
         let telegramStatus: { sent: boolean; message: string; target?: string | null } = {
@@ -717,7 +732,13 @@ export default {
         const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
         const kstTimeStr = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')} ${String(nowKST.getUTCHours()).padStart(2, '0')}:${String(nowKST.getUTCMinutes()).padStart(2, '0')}:${String(nowKST.getUTCSeconds()).padStart(2, '0')} KST`;
 
-        let reportText = `<b>🚀 퀀트 스캐너 실행 완료 리포트</b>\n`;
+        const formatPrice = (ticker: string, price: number) => {
+          const isKr = detectMarketRegion(ticker) === 'KR';
+          return isKr ? `₩${Math.round(price).toLocaleString('ko-KR')}` : `$${price.toFixed(2)}`;
+        };
+        const marketBadge = effectiveMarket === 'KR' ? '🇰🇷 국내장' : effectiveMarket === 'US' ? '🇺🇸 미국장' : '🌐 통합';
+
+        let reportText = `<b>🚀 퀀트 스캐너 [${marketBadge}] 듀얼 전략 리포트</b>\n`;
         reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr}\n`;
         reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
         reportText += `• <b>검토 대상:</b> ${(result.evaluations || []).length}개 종목\n`;
@@ -731,8 +752,9 @@ export default {
           actionableSignals.slice(0, 5).forEach((sig: any, idx: number) => {
             const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
             const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-            reportText += `${idx + 1}. <b>${sig.ticker}</b> (${sig.name})\n`;
-            reportText += `   - 현재가: $${(sig.price ?? 0).toFixed(2)} (전일대비: ${arrow} ${changeStr})\n`;
+            const stockTitle = formatTelegramStockName(sig.ticker, sig.name);
+            reportText += `${idx + 1}. ${stockTitle}\n`;
+            reportText += `   - 현재가: ${formatPrice(sig.ticker, sig.price ?? 0)} (전일대비: ${arrow} ${changeStr})\n`;
             reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
             reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 팩터 점수 우수'}\n\n`;
           });
@@ -747,8 +769,9 @@ export default {
             const evalData = dip.dip_evaluation!;
             const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
             const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
-            reportText += `${idx + 1}. <b>${dip.ticker}</b> (${dip.name})\n`;
-            reportText += `   - 현재가: $${(dip.price ?? 0).toFixed(2)} (${arrow} ${changeStr})\n`;
+            const stockTitle = formatTelegramStockName(dip.ticker, dip.name);
+            reportText += `${idx + 1}. ${stockTitle}\n`;
+            reportText += `   - 현재가: ${formatPrice(dip.ticker, dip.price ?? 0)} (${arrow} ${changeStr})\n`;
             reportText += `   - 적합도: <b>💎 ${evalData.suitability.tierLabel}</b> (${evalData.suitability.score}점)\n`;
             reportText += `   - 눌림타이밍: <b>${evalData.timing.score}점</b> (RSI ${evalData.timing.rsi.toFixed(1)}, ${evalData.timing.drawdownLabel})\n`;
             reportText += `   - 실행신호: <code>${evalData.actionSignal}</code> (${evalData.signalLabel})\n`;
@@ -813,7 +836,7 @@ export default {
             timestamp: new Date().toISOString(),
             kst_time: kstTimeStr,
             strategy_type: 'DUAL_SCAN_REPORT',
-            title: `⚡ [수동 스캔] 듀얼 퀀트 브리핑 (모멘텀 ${actionableSignals.length}건 + 눌림목 ${dipBuyOpportunities.length}건)`,
+            title: `⚡ [수동 스캔 - ${marketBadge}] 듀얼 퀀트 브리핑 (모멘텀 ${actionableSignals.length}건 + 눌림목 ${dipBuyOpportunities.length}건)`,
             tickers: allActionTickers,
             signals_count: actionableSignals.length + dipBuyOpportunities.length,
             delivery_status: alertDeliveryStatus,

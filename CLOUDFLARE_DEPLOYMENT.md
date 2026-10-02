@@ -62,10 +62,27 @@ Cloudflare Workers의 `wrangler.toml`에 4개 트리거가 기본 등록되어 �
 
 ### 자동 실행 설정 방법 (2가지):
 - **방법 1 (Cloudflare Workers Cron Triggers - 추천):** `wrangler.toml`의 `[triggers] crons` 설정에 따라 Cloudflare가 정해진 시각에 Worker의 `scheduled()`를 직접 깨워 100% 자동 실행 (추가 설정 불필요).
-- **방법 2 (외부 Webhook):** [cron-job.org](https://cron-job.org) 또는 GitHub Actions에 `https://내서브도메인.pages.dev/api/v8/cron-scan?async=true` URL을 위 UTC 크론 표현식으로 등록.
+- **방법 2 (외부 Webhook):** [cron-job.org](https://cron-job.org) 또는 GitHub Actions에 `https://내서브도메인.pages.dev/api/v8/cron-scan?async=true` URL을 위 UTC 크론 표현식으로 등록 (예: 미국장 전용은 `&market=US`, 국내장 전용은 `&market=KR` 파라미터 추가 가능).
+
+---
+
+## ⚡ Cloudflare Subrequests 한도 관리 ("Too many subrequests" 방지)
+
+1. **무료 플랜 (Free Plan) 서브리퀘스트 한도 (50회):**
+   - Cloudflare 무료 플랜 Worker는 1회 호출당 외부 `fetch` subrequest가 최대 50개로 제한됩니다.
+   - **시장 분리 스캔:** 미국장 스캔 시에는 국내 종목을 완전히 배제하고, 국내장 스캔 시에는 미국 종목을 배제하여 평가 종목 수를 절반으로 압축합니다.
+   - **네이버 다이렉트 수집 & DB 배치 적재:** 국내주는 네이버 금융을 1회 호출로 직접 조회하며, DB 적재는 단 1회의 batch upsert로 처리하여 1회 스캔당 서브리퀘스트를 약 20건 수준으로 안전하게 유지합니다.
+
+2. **유료 플랜 (Paid Plan) 한도 증액 설정 (`wrangler.toml`):**
+   - 유료 플랜에서는 `wrangler.toml` 파일에 아래 설정을 통해 서브리퀘스트 한도를 1,000개 이상으로 증액할 수 있습니다:
+     ```toml
+     [limits]
+     subrequests = 1000
+     ```
 
 ---
 
 ## 📦 Static SPA & Functions Routing
 - `functions/api/`: Cloudflare Pages Functions가 자동으로 엣지 API 엔드포인트를 제공합니다.
 - `public/_redirects`: 클라이언트 사이드 SPA 라우팅 새로고침 404를 방지합니다.
+

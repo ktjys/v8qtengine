@@ -24,3 +24,7 @@ crons = [
   "0 14 * * 1-5"   # 🌃 [미국장 개장] 23:00 KST (월~금 KST / 월~금 UTC 14:00)
 ]
 
+[limits]
+subrequests = 1000
+
+

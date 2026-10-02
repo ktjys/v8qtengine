@@ -39,12 +39,18 @@ export class MarketDataService {
   private benchmarkBarsCache: OHLCVBar[] | null = null;
   private benchmarkLastFetched = 0;
   private pendingIndicators: { ticker: string; indicators: RawMarketIndicators; date: string }[] = [];
+  private pendingFundamentals: { data: FundamentalData; source: string }[] = [];
 
   async flushIndicators(): Promise<void> {
     if (this.pendingIndicators.length > 0) {
       const items = [...this.pendingIndicators];
       this.pendingIndicators = [];
       await indicatorRepository.saveAll(items);
+    }
+    if (this.pendingFundamentals.length > 0) {
+      const fundItems = [...this.pendingFundamentals];
+      this.pendingFundamentals = [];
+      await fundamentalsRepository.saveAll(fundItems);
     }
   }
 
@@ -191,7 +197,8 @@ export class MarketDataService {
       const usedFallback = this.provider.name === 'yahoo';
       fundData = await this.provider.getFundamentals(cleanTicker);
       if (fundData) {
-        await fundamentalsRepository.save(fundData, usedFallback ? 'seed' : this.provider.name);
+        fundamentalsRepository.saveInMemory(fundData, usedFallback ? 'seed' : this.provider.name);
+        this.pendingFundamentals.push({ data: fundData, source: usedFallback ? 'seed' : this.provider.name });
       }
     }
 

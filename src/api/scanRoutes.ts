@@ -27,9 +27,9 @@ scanRouter.post('/run', async (req, res) => {
       manualOverrides
     );
 
-    const actionableSignals = result.evaluations.filter(
-      (ev) => ev.signal_generated
-    );
+    const actionableSignals = result.evaluations
+      .filter((ev) => ev.signal_generated)
+      .filter((ev) => !market || detectMarketRegion(ev.ticker) === market);
 
     // Strategy B: 우량주/지수ETF 눌림목 분할적립 기회 필터링
     const dipBuyOpportunities = result.evaluations
@@ -40,6 +40,7 @@ scanRouter.post('/run', async (req, res) => {
           (ev.dip_evaluation?.actionSignal === 'STRONG_DIP_BUY' ||
             ev.dip_evaluation?.actionSignal === 'MODERATE_DCA')
       )
+      .filter((ev) => !market || detectMarketRegion(ev.ticker) === market)
       .sort((a, b) => (b.dip_evaluation?.dip_score ?? 0) - (a.dip_evaluation?.dip_score ?? 0));
 
     // 텔레그램 알림 발송 (텔레그램 설정이 되어있는 경우)
@@ -76,7 +77,8 @@ scanRouter.post('/run', async (req, res) => {
       hour12: false,
     }).format(startTime);
 
-    let reportText = `<b>🚀 퀀트 스캐너 실행 완료 리포트 (듀얼 전략 통합)</b>\n`;
+    const marketBadge = market === 'KR' ? '🇰🇷 국내장' : market === 'US' ? '🇺🇸 미국장' : '🌐 통합';
+    let reportText = `<b>🚀 퀀트 스캐너 [${marketBadge}] 듀얼 전략 리포트</b>\n`;
     reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr} (KST)\n`;
     reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
     reportText += `• <b>검토 대상:</b> ${result.evaluations.length}개 종목\n`;
@@ -174,7 +176,7 @@ scanRouter.post('/run', async (req, res) => {
         timestamp: startTime.toISOString(),
         kst_time: kstTimeStr,
         strategy_type: 'DUAL_SCAN_REPORT',
-        title: `⚡ [수동 스캔] 듀얼 퀀트 브리핑 (모멘텀 ${actionableSignals.length}건 + 눌림목 ${dipBuyOpportunities.length}건)`,
+        title: `⚡ [수동 스캔 - ${marketBadge}] 듀얼 퀀트 브리핑 (모멘텀 ${actionableSignals.length}건 + 눌림목 ${dipBuyOpportunities.length}건)`,
         tickers: allActionTickers,
         signals_count: actionableSignals.length + dipBuyOpportunities.length,
         delivery_status: alertDeliveryStatus,

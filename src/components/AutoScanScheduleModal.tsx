@@ -20,12 +20,14 @@ interface AutoScanScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast: (msg: string) => void;
+  activeMarket?: 'US' | 'KR';
 }
 
 export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   isOpen,
   onClose,
   onShowToast,
+  activeMarket = 'US',
 }) => {
   const [activeTab, setActiveTab] = useState<'schedule' | 'telegram' | 'cron_setup'>('telegram');
   const [isRunning, setIsRunning] = useState(false);
@@ -40,6 +42,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   const [inputChatId, setInputChatId] = useState('');
 
   const [scheduleMarketFilter, setScheduleMarketFilter] = useState<'ALL' | 'KR' | 'US'>('ALL');
+  const [testScanMarket, setTestScanMarket] = useState<'US' | 'KR' | 'ALL'>(activeMarket);
 
   const schedules = [
     {
@@ -211,6 +214,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
         method: 'POST',
         headers,
         body: JSON.stringify({
+          market: testScanMarket,
           botToken: cleanToken || undefined,
           chatId: cleanChat || undefined,
         }),
@@ -221,6 +225,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           method: 'POST',
           headers,
           body: JSON.stringify({
+            market: testScanMarket,
             provider_type: 'yahoo',
             send_telegram: true,
             botToken: cleanToken || undefined,
@@ -751,26 +756,65 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                       <span>지금 즉시 스캔 & 텔레그램 알림 발송 테스트</span>
                     </h4>
                     <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
-                      스케줄 시간까지 기다리지 않고 지금 즉시 퀀트 엔진을 가동하여 결과를 확인합니다.
+                      미국장과 국내장을 분리하여 독립 스캔하고 텔레그램 브리핑 결과를 확인합니다.
                     </p>
                   </div>
-                  <button
-                    onClick={handleRunScanNow}
-                    disabled={isRunning}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-cyan-600/30 flex items-center justify-center space-x-1.5 transition-all shrink-0 active:scale-95"
-                  >
-                    {isRunning ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>스캔 중...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>지금 실행하기</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Market Switcher */}
+                    <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setTestScanMarket('US')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                          testScanMarket === 'US'
+                            ? 'bg-cyan-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        🇺🇸 미국장
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTestScanMarket('KR')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                          testScanMarket === 'KR'
+                            ? 'bg-cyan-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        🇰🇷 국내장
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTestScanMarket('ALL')}
+                        className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                          testScanMarket === 'ALL'
+                            ? 'bg-cyan-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        🌐 통합
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleRunScanNow}
+                      disabled={isRunning}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-cyan-600/30 flex items-center justify-center space-x-1.5 transition-all shrink-0 active:scale-95"
+                    >
+                      {isRunning ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{testScanMarket === 'KR' ? '국내장' : testScanMarket === 'US' ? '미국장' : '통합'} 스캔 중...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>{testScanMarket === 'KR' ? '🇰🇷 국내장' : testScanMarket === 'US' ? '🇺🇸 미국장' : '🌐 통합'} 즉시 실행</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Scan Result Output */}
@@ -1129,6 +1173,13 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                   • 🏁 <b>15:40 KST:</b> 국내장 마감 &amp; 일봉 종가 확정 (<code className="text-cyan-300 text-[10px]">40 6 * * 1-5</code>)<br />
                   • 🌃 <b>23:00 KST:</b> 미국장 개장 &amp; 기회종목 브리핑 (<code className="text-cyan-300 text-[10px]">0 14 * * 1-5</code>)<br />
                   👉 <b>Cloudflare 대시보드</b> (<span className="text-slate-200 font-semibold">Workers & Pages &gt; v8qtengine &gt; Settings &gt; Triggers &gt; Cron Triggers</span>)에서 확인하실 수 있으며, 별도의 외부 크론 사이트 등록 없이도 Cloudflare가 시간에 맞춰 Worker의 <code className="text-emerald-300 text-[10px]">scheduled()</code>를 깨워 텔레그램을 100% 자동 발송합니다!
+                </p>
+                <p>
+                  <b className="text-cyan-300">4. 서브리퀘스트 한도(Subrequests Limit) 및 국장/미장 분리 스캔:</b><br />
+                  Cloudflare Workers 무료 플랜은 1회 호출당 50개의 외부 fetch(서브리퀘스트)로 엄격히 제한됩니다.<br />
+                  • <b>해결 1 (시장 격리):</b> 미국장 스캔 시에는 국내 종목을 완전 배제하고, 국내장 스캔 시에는 미국 종목을 배제하여 종목 평가 횟수를 절반 이하로 압축했습니다.<br />
+                  • <b>해결 2 (네이버 직접 수집 &amp; DB 배치):</b> 국내주는 네이버 금융을 다이렉트로 조회하고 DB 저장도 단 1회의 일괄 upsert로 최적화하여 1회 스캔당 서브리퀘스트를 약 20건 수준으로 대폭 절감했습니다.<br />
+                  • <b>해결 3 (유료 계정 한도 해제):</b> <code className="text-emerald-300 font-mono text-[10px]">wrangler.toml</code>에 <code className="text-cyan-300 font-mono text-[10px]">[limits] subrequests = 1000</code> 구성을 추가해 유료 플랜 사용 시 최대 1,000건까지 한도가 자동 증액됩니다.
                 </p>
                 <p>
                   <b className="text-rose-400">⚠️ 중복 실행(Double Trigger) 주의:</b><br />

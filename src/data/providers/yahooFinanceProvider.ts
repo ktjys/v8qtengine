@@ -119,30 +119,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
       return derivedQuote;
     }
 
-    // Fast 5d chart attempt if not in cache
-    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`;
-    try {
-      const res = await fetch(chartUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(2500),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        const meta = json?.chart?.result?.[0]?.meta;
-        const quote = this.extractQuoteFromChart(clean, meta);
-        if (quote) {
-          this.setCache(cacheKey, quote);
-          return quote;
-        }
-      }
-    } catch {}
-
-    // Korean market fallback for quote via Naver Finance
-    if (clean.endsWith('.KS') || clean.endsWith('.KQ') || /^\d{6}/.test(clean)) {
+    // 1. For Korean market stocks (.KS / .KQ / 6-digit), query Naver Finance first (saves subrequests & never blocked)
+    const isKoreanStock = clean.endsWith('.KS') || clean.endsWith('.KQ') || /^\d{6}/.test(clean);
+    if (isKoreanStock) {
       try {
         const sixDigit = clean.replace(/\.(KS|KQ)$/i, '');
         const nRes = await fetch(`https://fchart.stock.naver.com/sise.nhn?symbol=${sixDigit}&timeframe=day&count=5&requestType=0`, {
@@ -181,6 +160,28 @@ export class YahooFinanceProvider implements MarketDataProvider {
         }
       } catch {}
     }
+
+    // 2. Fast 5d chart attempt for US stocks (or fallback)
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(clean)}?interval=1d&range=5d`;
+    try {
+      const res = await fetch(chartUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(2500),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const meta = json?.chart?.result?.[0]?.meta;
+        const quote = this.extractQuoteFromChart(clean, meta);
+        if (quote) {
+          this.setCache(cacheKey, quote);
+          return quote;
+        }
+      }
+    } catch {}
 
     this.lastUsedFallback = true;
     return this.fallbackProvider.getQuote(clean);
@@ -254,16 +255,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
       return bars;
     };
 
-    for (const url of urls) {
-      try {
-        const bars = await fetchHistoryFromUrl(url);
-        this.setCache(cacheKey, bars);
-        return bars;
-      } catch {}
-    }
-
-    // Secondary fallback: For Korean stocks (.KS / .KQ), fetch real historical daily data from Naver Finance chart
-    if (clean.endsWith('.KS') || clean.endsWith('.KQ') || /^\d{6}/.test(clean)) {
+    // 1. For Korean market stocks (.KS / .KQ / 6-digit), query Naver Finance first (saves subrequests & never blocked)
+    const isKorean = clean.endsWith('.KS') || clean.endsWith('.KQ') || /^\d{6}/.test(clean);
+    if (isKorean) {
       try {
         const sixDigit = clean.replace(/\.(KS|KQ)$/i, '');
         let targetCount = 252;
@@ -276,7 +270,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
         const naverUrl = `https://fchart.stock.naver.com/sise.nhn?symbol=${sixDigit}&timeframe=day&count=${targetCount}&requestType=0`;
         const nRes = await fetch(naverUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(3000),
         });
 
         if (nRes.ok) {
@@ -326,9 +320,16 @@ export class YahooFinanceProvider implements MarketDataProvider {
             return bars;
           }
         }
-      } catch (nErr) {
-        // continue to next fallback
-      }
+      } catch (nErr) {}
+    }
+
+    // 2. Query Yahoo Finance (Primary for US stocks)
+    for (const url of urls) {
+      try {
+        const bars = await fetchHistoryFromUrl(url);
+        this.setCache(cacheKey, bars);
+        return bars;
+      } catch {}
     }
 
     // Try Stooq historical daily CSV fallback for US stocks
