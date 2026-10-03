@@ -10,8 +10,6 @@ import { detectMarketRegion, formatTelegramStockName, formatStockDisplayName } f
 import { logger } from '../utils/logger';
 import type { Env, ScanMarket } from './types';
 
-const TERMINAL_STATUSES = new Set(['SUCCESS', 'PARTIAL_SUCCESS', 'FAILED']);
-
 function getKstTimeStr(): string {
   const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
   return `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')} ${String(nowKST.getUTCHours()).padStart(2, '0')}:${String(nowKST.getUTCMinutes()).padStart(2, '0')}:${String(nowKST.getUTCSeconds()).padStart(2, '0')} KST`;
@@ -160,14 +158,6 @@ export async function runFinalizer(options: {
     const run = await scanRunRepository.getById(scanRunId);
     if (!run) {
       logger.error('Finalizer could not load scan run', { component: 'ScanFinalizer', scanRunId });
-      return;
-    }
-    if (TERMINAL_STATUSES.has(run.status)) {
-      logger.info('Finalizer skipped, already finalized', {
-        component: 'ScanFinalizer',
-        scanRunId,
-        status: run.status,
-      });
       return;
     }
 
