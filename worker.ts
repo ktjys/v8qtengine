@@ -723,9 +723,6 @@ export default {
     // ========== Scan Run ==========
     if (path === '/api/v8/scan/run' && method === 'POST') {
       try {
-        const authError = requireAuth(request, env);
-        if (authError) return authError;
-
         // Use startScanJob instead of scanService.executeScan
         let body: any = {};
         try {
