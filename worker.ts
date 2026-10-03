@@ -670,6 +670,9 @@ export default {
         const authError = requireAuth(request, env);
         if (authError) return authError;
         return jsonResponse({ success: true, sql: FULL_SCHEMA_SQL });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
     }
 
     // POST /api/v8/system/provider
