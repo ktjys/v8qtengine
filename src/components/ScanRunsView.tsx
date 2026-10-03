@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Clock, Database, Layers, RefreshCw, Search } from 'lucide-react';
 import { MarketRegion, ScanRunLog } from '../types/v8';
 import { SortableHeader } from './SortableHeader';
@@ -38,6 +38,48 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [sortField, setSortField] = useState<ScanRunsSortField>('started_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // Track running scans for real-time progress polling
+  const [runningScans, setRunningScans] = useState<Map<string, any>>(new Map());
+
+  // Poll running scans for real-time progress
+  useEffect(() => {
+    const runningRunIds = runs
+      .filter((r) => r.status === 'RUNNING')
+      .map((r) => r.run_id);
+
+    if (runningRunIds.length === 0) return;
+
+    const pollRunningScans = async () => {
+      const updates = new Map();
+      
+      for (const runId of runningRunIds) {
+        try {
+          const res = await fetch(`/api/v8/scan/status/${runId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.run) {
+              updates.set(runId, data.run);
+            }
+          }
+        } catch (err) {
+          console.warn(`Failed to poll scan ${runId}:`, err);
+        }
+      }
+
+      if (updates.size > 0) {
+        setRunningScans((prev) => {
+          const next = new Map(prev);
+          updates.forEach((value, key) => next.set(key, value));
+          return next;
+        });
+      }
+    };
+
+    const interval = setInterval(pollRunningScans, 3000);
+    pollRunningScans(); // Initial poll
+    return () => clearInterval(interval);
+  }, [runs]);
 
   const handleSort = (field: ScanRunsSortField) => {
     if (sortField === field) {
@@ -291,13 +333,24 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
                   <span>실패/격리</span>
                 </SortableHeader>
 
+                <SortableHeader<ScanRunsSortField>
+                  field="total_chunks"
+                  currentField={sortField}
+                  currentOrder={sortOrder}
+                  onSort={handleSort}
+                  align="center"
+                  className="py-3.5 px-3 text-center"
+                >
+                  <span>청크 진행</span>
+                </SortableHeader>
+
                 <th className="py-3.5 px-4 text-slate-400 font-semibold">오류/실행 요약</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500 font-sans">
+                  <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
                     <p className="text-sm font-semibold text-slate-300 mb-1">
                       {searchTerm
                         ? `'${searchTerm}' 관련 스캔 실행 이력이 없습니다.`
@@ -337,6 +390,38 @@ export const ScanRunsView: React.FC<ScanRunsViewProps> = ({
                       <span className={(run.failure_count || 0) > 0 ? 'text-rose-400 font-bold' : 'text-slate-500'}>
                         {run.failure_count || 0}건
                       </span>
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      {run.status === 'RUNNING' && run.total_chunks ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-center space-x-1">
+                            <span className="font-mono text-cyan-400 font-bold">
+                              {run.completed_chunks || 0} / {run.total_chunks}
+                            </span>
+                            <span className="text-[10px] text-slate-400">청크</span>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full rounded-full transition-all duration-300"
+                              style={{ width: `${Math.round(((run.completed_chunks || 0) / (run.total_chunks || 1)) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : run.status === 'SUCCESS' ? (
+                        <span className="font-mono text-emerald-400">
+                          {run.total_chunks || 0} / {run.total_chunks || 0}
+                        </span>
+                      ) : run.status === 'PARTIAL_SUCCESS' ? (
+                        <span className="text-amber-400 font-mono text-[11px]">
+                          {(run.completed_chunks || 0)} / {(run.total_chunks || 0)} (부분)
+                        </span>
+                      ) : run.status === 'FAILED' ? (
+                        <span className="text-rose-400 font-mono text-[11px]">
+                          {(run.completed_chunks || 0)} / {(run.total_chunks || 0)} (실패)
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-[10px]">-</span>
+)}
                     </td>
                     <td className="py-3 px-4 text-[11px] font-sans text-slate-400">
                       {run.error_summary || '전체 파이프라인 무결성 평가 완료'}

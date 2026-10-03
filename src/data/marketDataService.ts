@@ -131,11 +131,25 @@ export class MarketDataService {
       this.provider.resetFallbackFlag && this.provider.resetFallbackFlag();
     }
 
-    // 1. Fetch 1y historical bars (Yahoo chart returns 1y bars AND caches the live quote in 1 subrequest!)
-    let dbBars = await this.provider.getHistorical(cleanTicker, '1y');
-    if (!dbBars || dbBars.length < 50) {
-      dbBars = await marketDataRepository.getBars(cleanTicker, 252);
+    // 1. Cache-first: Try DB first for fresh bars
+    let dbBars = await marketDataRepository.getBars(cleanTicker, 252);
+    const lastBar = dbBars.length > 0 ? dbBars[dbBars.length - 1] : null;
+    const lastBarDate = lastBar ? new Date(lastBar.date).getTime() : 0;
+    const now = Date.now();
+    const isFresh = dbBars.length >= 252 && !isNaN(lastBarDate) && (now - lastBarDate) < 24 * 60 * 60 * 1000;
+
+    if (!isFresh) {
+      // DB data stale or missing - fetch from provider
+      const providerBars = await this.provider.getHistorical(cleanTicker, '1y');
+      if (providerBars && providerBars.length >= 50) {
+        dbBars = providerBars;
+        // Persist fresh bars
+        const usedFallback = this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
+        await marketDataRepository.saveBars(cleanTicker, dbBars, usedFallback ? 'seed' : this.provider.name);
+      }
+      // If provider also fails, keep whatever we have from DB (may be empty/partial)
     }
+    // If fresh, use DB bars directly (0 subrequests)
 
     // 2. Retrieve live quote (hits in-memory cache populated by getHistorical, 0 network subrequests!)
     const liveQuote = await this.provider.getQuote(cleanTicker);

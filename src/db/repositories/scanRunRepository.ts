@@ -25,6 +25,12 @@ export class ScanRunRepository {
             failure_count: r.failure_count || 0,
             failed_tickers: [],
             error_summary: r.error_summary,
+            market_region: r.market_region,
+            chunk_size: r.chunk_size,
+            total_chunks: r.total_chunks,
+            completed_chunks: r.completed_chunks,
+            failed_chunks: r.failed_chunks,
+            meta: r.meta,
           }));
           mapped.forEach((item) => dbClient.scan_runs.set(item.run_id, item));
           return mapped;
@@ -35,6 +41,128 @@ export class ScanRunRepository {
     }
 
     return Array.from(dbClient.scan_runs.values());
+  }
+
+  async getById(runId: string): Promise<ScanRunLog | null> {
+    if (dbClient.isTableAvailable('scan_runs') && dbClient.supabase) {
+      try {
+        const { data, error } = await dbClient.supabase
+          .from('scan_runs')
+          .select('*')
+          .eq('id', runId)
+          .maybeSingle();
+
+        if (error) {
+          dbClient.handleDbError('scan_runs', 'getById', error);
+        } else if (data) {
+          return {
+            run_id: data.id,
+            status: data.status,
+            started_at: data.started_at,
+            finished_at: data.finished_at,
+            watchlist_count: data.watchlist_count,
+            evaluated_count: data.evaluated_count,
+            signal_count: data.signal_count,
+            failure_count: data.failure_count || 0,
+            failed_tickers: [],
+            error_summary: data.error_summary,
+            market_region: data.market_region,
+            chunk_size: data.chunk_size,
+            total_chunks: data.total_chunks,
+            completed_chunks: data.completed_chunks,
+            failed_chunks: data.failed_chunks,
+            meta: data.meta,
+          };
+        }
+      } catch (err) {
+        dbClient.handleDbError('scan_runs', 'getById', err);
+      }
+    }
+
+    return dbClient.scan_runs.get(runId) || null;
+  }
+
+  async createChunkedRun(log: ScanRunLog): Promise<ScanRunLog> {
+    if (dbClient.isTableAvailable('scan_runs') && dbClient.supabase) {
+      try {
+        const payload = {
+          started_at: log.started_at,
+          finished_at: log.finished_at,
+          watchlist_count: log.watchlist_count,
+          evaluated_count: log.evaluated_count,
+          signal_count: log.signal_count,
+          failure_count: log.failure_count || 0,
+          status: log.status,
+          error_summary: log.error_summary,
+          market_region: log.market_region,
+          chunk_size: log.chunk_size,
+          total_chunks: log.total_chunks,
+          completed_chunks: 0,
+          failed_chunks: 0,
+          meta: log.meta || {},
+        };
+
+        const { data, error } = await dbClient.supabase
+          .from('scan_runs')
+          .insert(payload)
+          .select('id')
+          .maybeSingle();
+
+        if (error) {
+          dbClient.handleDbError('scan_runs', 'createChunkedRun', error);
+        } else if (data?.id) {
+          log.run_id = data.id;
+        }
+      } catch (err) {
+        dbClient.handleDbError('scan_runs', 'createChunkedRun', err);
+      }
+    }
+
+    dbClient.scan_runs.set(log.run_id, log);
+    return log;
+  }
+
+  async recordChunk(
+    runId: string,
+    chunkStatus: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED',
+    evaluatedCount: number,
+    signalCount: number,
+    failureCount: number
+  ): Promise<boolean> {
+    if (dbClient.isTableAvailable('scan_runs') && dbClient.supabase) {
+      try {
+        const { data, error } = await dbClient.supabase
+          .rpc('record_scan_chunk', {
+            p_scan_run_id: runId,
+            p_chunk_status: chunkStatus,
+            p_evaluated_count: evaluatedCount,
+            p_signal_count: signalCount,
+            p_failure_count: failureCount,
+          });
+
+        if (error) {
+          dbClient.handleDbError('scan_runs', 'recordChunk', error);
+        }
+
+        return data === true;
+      } catch (err) {
+        dbClient.handleDbError('scan_runs', 'recordChunk', err);
+      }
+    }
+
+const local = dbClient.scan_runs.get(runId);
+    if (local) {
+      local.completed_chunks += 1;
+      local.evaluated_count += 1;
+      local.signal_count += 1;
+      local.failure_count += 1;
+      if (local.total_chunks && local.completed_chunks >= local.total_chunks) {
+        local.status = 'SUCCESS';
+        local.finished_at = new Date().toISOString();
+        return true;
+      }
+    }
+    return false;
   }
 
   async save(log: ScanRunLog): Promise<ScanRunLog> {
@@ -49,6 +177,12 @@ export class ScanRunRepository {
           failure_count: log.failure_count || 0,
           status: log.status,
           error_summary: log.error_summary,
+          market_region: log.market_region,
+          chunk_size: log.chunk_size,
+          total_chunks: log.total_chunks,
+          completed_chunks: log.completed_chunks,
+          failed_chunks: log.failed_chunks,
+          meta: log.meta || {},
         };
 
         const { data, error } = await dbClient.supabase

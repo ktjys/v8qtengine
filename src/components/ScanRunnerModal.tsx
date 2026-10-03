@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle,
   Bell,
@@ -21,6 +21,28 @@ interface ScanRunnerModalProps {
   activeMarket?: MarketRegion;
 }
 
+interface ScanStatusResponse {
+  success: boolean;
+  run?: {
+    run_id: string;
+    status: 'RUNNING' | 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' | 'SKIPPED_CLOSED_MARKET' | 'SKIPPED_EMPTY_WATCHLIST';
+    started_at: string;
+    finished_at: string | null;
+    watchlist_count: number;
+    evaluated_count: number;
+    signal_count: number;
+    failure_count: number;
+    error_summary: string | null;
+    market_region: string;
+    chunk_size: number;
+    total_chunks: number;
+    completed_chunks: number;
+    failed_chunks: number;
+    meta: any;
+  };
+  error?: string;
+}
+
 export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   onClose,
   onScanCompleted,
@@ -32,16 +54,21 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [sendTelegramOption, setSendTelegramOption] = useState(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
-  const [completedLog, setCompletedLog] = useState<ScanRunLog | null>(null);
-  const [newSignals, setNewSignals] = useState<SignalSnapshot[]>([]);
+  const [completedLog, setCompletedLog] = useState<any>(null);
+  const [newSignals, setNewSignals] = useState<any[]>([]);
   const [actionableSignals, setActionableSignals] = useState<any[]>([]);
   const [telegramStatus, setTelegramStatus] = useState<{ sent: boolean; message: string } | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
 
-  // ESC key handler & body scroll lock (P0-3)
+  // New: scan status polling state
+  const [scanId, setScanId] = useState<string | null>(null);
+  const [scanStatus, setScanStatus] = useState<any>(null);
+  const [polling, setPolling] = useState(false);
+
+  // ESC key handler & body scroll lock
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isRunning) {
+      if (e.key === 'Escape' && !isRunning && !polling) {
         onClose();
       }
     };
@@ -52,7 +79,90 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = origOverflow;
     };
-  }, [isRunning, onClose]);
+  }, [isRunning, polling, onClose]);
+
+  // Polling effect for scan status
+  useEffect(() => {
+    if (!polling || !scanId) return;
+
+    const pollStatus = async () => {
+      try {
+        const res = await fetch(`/api/v8/scan/status/${scanId}`);
+        if (!res.ok) throw new Error('Failed to fetch scan status');
+        const data: any = await res.json();
+
+        if (data.success && data.run) {
+          setScanStatus(data.run);
+
+          // If scan is complete, stop polling and fetch results
+          if (data.run.status !== 'RUNNING') {
+            setPolling(false);
+            await fetchFinalResults(scanId);
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+        console.warn('Polling error, will retry:', err);
+      }
+    };
+
+    const interval = setInterval(pollStatus, 2000);
+    pollStatus(); // Initial poll
+    return () => clearInterval(interval);
+  }, [polling, scanId]);
+
+  const fetchFinalResults = useCallback(async (scanId: string) => {
+    try {
+      const [evalRes, signalRes] = await Promise.all([
+        fetch(`/api/v8/evaluations`),
+        fetch(`/api/vapi/v8/signals`),
+      ]);
+
+      const evalData = await evalRes.json();
+      const signalData = await signalRes.json();
+
+      const evaluations = evalData.success ? evalData.evaluations || [] : [];
+      const signals = signalData.success ? signalData.signals || [] : [];
+
+      // Get the scan run
+      const runRes = await fetch(`/api/v8/scan/status/${scanId}`);
+      const runData = await runRes.json();
+
+      if (runData.success && runData.run) {
+        const run = runData.run;
+        setCompletedLog(run);
+
+        const evaluations = await fetch('/api/v8/evaluations').then(r => r.json()).then(d => d.success ? d.evaluations || [] : []);
+        const actionable = evaluations.filter((e: any) => e.signal_generated);
+        setActionableSignals(actionable);
+        setNewSignals([]);
+
+        onScanCompleted({ scan_log: run, new_signals: [] });
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: { scan_log: run } }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch final results:', err);
+    }
+  }, []);
+
+  // ESC key handler & body scroll lock
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isRunning && !polling) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isRunning, polling, onClose]);
 
   const steps = [
     { title: '1. Watchlist 동기화', desc: '워치리스트 종목 시세 및 지표 로드' },
@@ -69,8 +179,11 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     setActionableSignals([]);
     setTelegramStatus(null);
     setScanError(null);
+    setScanId(null);
+    setScanStatus(null);
+    setPolling(false);
 
-    // Step-by-step visual animation
+    // Step-by-step visual animation (pre-scan animation)
     for (let i = 0; i < steps.length; i++) {
       setCurrentStep(i);
       await new Promise((r) => setTimeout(r, 350));
@@ -81,7 +194,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
       const storedChatId = (typeof localStorage !== 'undefined' ? localStorage.getItem('v8_telegram_chat_id') || '' : '').trim();
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (storedToken) headers['x-telegram-token'] = storedToken;
+      if (storedToken) headers['Authorization'] = `Bearer ${storedToken}`;
       if (storedChatId) headers['x-telegram-chat-id'] = storedChatId;
 
       const res = await fetch('/api/v8/scan/run', {
@@ -90,9 +203,6 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
         body: JSON.stringify({
           market: activeMarket,
           simulate_partial_failure: simulateFailure,
-          send_telegram: sendTelegramOption,
-          botToken: storedToken || undefined,
-          chatId: storedChatId || undefined,
         }),
       });
 
@@ -107,29 +217,20 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
       } catch (parseErr) {
         throw new Error(
           res.ok
-            ? '서버 응답 형식이 올바르지 않습니다 (HTML/텍스트 반환).'
+            ? '서버 응답 형식이 올바르지 않습니다.'
             : `서버 오류 (${res.status}): ${text.slice(0, 100)}`
         );
       }
 
-      if (data.success) {
-        setCompletedLog(data.scan_log);
-        setNewSignals(data.new_signals || []);
-        setActionableSignals(data.actionable_signals || data.new_signals || []);
-        if (data.telegram_status) {
-          setTelegramStatus(data.telegram_status);
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: data }));
-        }
-        onScanCompleted(data);
+      if (data.success && data.scan_id) {
+        setScanId(data.scan_id);
+        setPolling(true); // Start polling for status
       } else {
-        throw new Error(data.error || '스캔 엔진 실행 중 오류가 발생했습니다.');
+        throw new Error(data.error || '스캔 시작 실패');
       }
     } catch (err: any) {
       console.error('Scan failed', err);
       setScanError(err.message || '스캔 실행 중 문제가 발생했습니다.');
-    } finally {
       setIsRunning(false);
     }
   };
@@ -140,7 +241,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
       aria-modal="true"
       aria-labelledby="scan-modal-title"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !isRunning) onClose();
+        if (e.target === e.currentTarget && !isRunning && !polling) onClose();
       }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fadeIn"
     >
@@ -149,7 +250,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/60">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-xl bg-cyan-600/20 text-cyan-400 flex items-center justify-center shrink-0">
-              <RefreshCw className={`w-4 h-4 ${isRunning ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isRunning || polling ? 'animate-spin' : ''}`} />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -163,12 +264,14 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                 )}
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 font-mono">
-                {activeMarket === 'KR' ? 'KOSPI / KOSDAQ 전종목 일괄 평가 파이프라인' : 'NYSE / NASDAQ 전종목 일괄 평가 파이프라인'}
+                {polling
+                  ? `청크 ${scanStatus?.completed_chunks || 0} / ${scanStatus?.total_chunks || 0} | 평가 ${scanStatus?.evaluated_count || 0} / ${scanStatus?.watchlist_count || 0} | 시그널 ${scanStatus?.signal_count || 0} | 실패 ${scanStatus?.failure_count || 0}`
+                  : (activeMarket === 'KR' ? 'KOSPI / KOSDAQ 전종목 일괄 평가 파이프라인' : 'NYSE / NASDAQ 전종목 일괄 평가 파이프라인')}
               </p>
             </div>
           </div>
 
-          {!isRunning && (
+          {!isRunning && !polling && (
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
@@ -180,49 +283,94 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
 
         {/* Modal Scrollable Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1">
-          {/* Step Progress Display */}
+          {/* Scan Progress / Step Progress Display */}
           <div className="space-y-2">
-            {steps.map((step, idx) => {
-              const isDone = isRunning ? idx < currentStep : completedLog !== null;
-              const isCurrent = isRunning && idx === currentStep;
-
-              return (
-                <div
-                  key={idx}
-                  className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all text-xs flex items-center justify-between ${
-                    isCurrent
-                      ? 'bg-cyan-950/40 border-cyan-500/50 text-cyan-200 shadow-sm'
-                      : isDone
-                      ? 'bg-slate-950/70 border-emerald-500/30 text-slate-200'
-                      : 'bg-slate-950/40 border-slate-800 text-slate-500'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5 sm:space-x-3">
-                    <div
-                      className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center font-mono font-bold text-[9px] sm:text-[10px] shrink-0 ${
-                        isDone
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : isCurrent
-                          ? 'bg-cyan-500 text-slate-950 animate-pulse'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {isDone ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> : idx + 1}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-[11px] sm:text-xs">{step.title}</div>
-                      <div className="text-[10px] opacity-75">{step.desc}</div>
+            {(polling || isRunning) && scanStatus ? (
+              // Show chunk progress when polling
+              <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-cyan-300">
+                    {scanStatus.status === 'RUNNING' ? '청크 처리 중...' :
+                     scanStatus.status === 'SUCCESS' ? '완료' :
+                     scanStatus.status === 'PARTIAL_SUCCESS' ? '부분 완료' :
+                     scanStatus.status === 'FAILED' ? '실패' : scanStatus.status}
+                  </span>
+                  <span className="font-mono text-[10px] text-cyan-400">
+                    청크 {scanStatus.completed_chunks || 0} / {scanStatus.total_chunks || 0}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center font-mono py-1 text-slate-300">
+                  <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400">청크 진행</div>
+                    <div className="text-xs sm:text-sm font-bold text-cyan-400">
+                      {scanStatus.completed_chunks || 0} / {scanStatus.total_chunks || 0}
                     </div>
                   </div>
-
-                  {isCurrent && <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 animate-spin shrink-0" />}
+                  <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400">평가 완료</div>
+                    <div className="text-xs sm:text-sm font-bold text-cyan-400">
+                      {scanStatus.evaluated_count || 0} / {scanStatus.watchlist_count || 0}
+                    </div>
+                  </div>
+                  <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400">시그널</div>
+                    <div className="text-xs sm:text-sm font-bold text-amber-400">
+                      {scanStatus.signal_count || 0}건
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
+                {scanStatus.failure_count > 0 && (
+                  <div className="bg-rose-950/30 border border-rose-500/30 p-2 rounded-xl text-[10px] text-rose-300 font-mono">
+                    ⚠️ {scanStatus.failed_chunks || scanStatus.failure_count}개 청크/종목 실패 - 부분 실패 격리됨
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Original step progress display
+              <div className="space-y-2">
+                {steps.map((step, idx) => {
+                  const isDone = isRunning ? idx < currentStep : completedLog !== null;
+                  const isCurrent = isRunning && idx === currentStep;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all text-xs flex items-center justify-between ${
+                        isCurrent
+                          ? 'bg-cyan-950/40 border-cyan-500/50 text-cyan-200 shadow-sm'
+                          : isDone
+                          ? 'bg-slate-950/70 border-emerald-500/30 text-slate-200'
+                          : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5 sm:space-x-3">
+                        <div
+                          className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center font-mono font-bold text-[9px] sm:text-[10px] shrink-0 ${
+                            isDone
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : isCurrent
+                              ? 'bg-cyan-500 text-slate-950 animate-pulse'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {isDone ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> : idx + 1}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-[11px] sm:text-xs">{step.title}</div>
+                          <div className="text-[10px] opacity-75">{step.desc}</div>
+                        </div>
+                      </div>
+
+                      {isCurrent && <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 animate-spin shrink-0" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* Scan Options */}
-          {!isRunning && !completedLog && (
+          {/* Scan Options - only show when not running/polling and not completed */}
+          {!isRunning && !polling && !completedLog && (
             <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs">
               <div className="flex items-center justify-between">
                 <label className="flex items-center space-x-2 text-slate-300 cursor-pointer">
@@ -402,7 +550,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
 
         {/* Modal Fixed Footer Action Buttons */}
         <div className="p-3.5 sm:p-4 border-t border-slate-800/80 bg-slate-950/60 shrink-0">
-          {!completedLog ? (
+          {!completedLog && !polling ? (
             <button
               onClick={handleStartScan}
               disabled={isRunning}
@@ -411,12 +559,12 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
               {isRunning ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>엔진 평가 진행 중...</span>
+                  <span>엔진 평가 시작 중...</span>
                 </>
               ) : (
                 <>
                   <Zap className="w-4 h-4" />
-                  <span>전체 파이프라인 스캔 시작</span>
+                  <span>청크 기반 스캔 시작</span>
                 </>
               )}
             </button>
@@ -444,9 +592,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
                   }
                   onClose();
                 }}
-                className={`w-full ${
-                  onViewAlertHistory ? 'sm:w-1/2' : ''
-                } py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-bold transition-all active:scale-95`}
+                className={`w-full ${onViewAlertHistory ? 'sm:w-1/2' : ''} py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-bold transition-all active:scale-95`}
               >
                 스캔 결과 확인 및 닫기
               </button>

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -e
+# Sync version metadata with current HEAD
+SHA=$(git rev-parse --short HEAD)
+MSG=$(git log -1 --pretty=%s | head -c 80)
+# update vite.config.ts fallback strings if present (best-effort)
+if command -v python3 >/dev/null 2>&1; then
+  python3 -c "
+import re,sys
+from pathlib import Path
+p=Path('vite.config.ts')
+if p.exists():
+  t=p.read_text(encoding='utf-8')
+  # replace last fallback sha/msg if hardcoded 7-digit
+  t=re.sub(r\"'([0-9a-f]{7})'\", lambda m: f\"'{SHA}'\", t)
+  p.write_text(t,encoding='utf-8')
+" 2>/dev/null || true
+fi

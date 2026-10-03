@@ -1,0 +1,25 @@
+{
+  "servers": {
+    "typescript": {
+      "command": "typescript-language-server",
+      "args": [
+        "--stdio"
+      ],
+      "extensions": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mts",
+        ".cts"
+      ],
+      "projects": [
+        {
+          "name": "v8qtengine",
+          "description": "V8 QT Engine React application",
+          "path": "/home/dragon/v8qtengine"
+        }
+      ]
+    }
+  }
+}

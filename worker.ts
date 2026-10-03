@@ -3,6 +3,7 @@ import { watchlistRepository } from './src/db/repositories/watchlistRepository';
 import { assetRepository } from './src/db/repositories/assetRepository';
 import { signalRepository } from './src/db/repositories/signalRepository';
 import { scanRunRepository } from './src/db/repositories/scanRunRepository';
+import { scanRunItemRepository } from './src/db/repositories/scanRunItemRepository';
 import { alertHistoryRepository } from './src/db/repositories/alertHistoryRepository';
 import { evaluationService } from './src/pipeline/evaluationService';
 import { scanService } from './src/pipeline/scanService';
@@ -16,6 +17,9 @@ import { ensureDipEvaluation } from './src/engine/dipBuyEngine';
 import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
+import { startScanJob } from './src/engine/scanOrchestrator';
+import { runFinalizer } from './src/engine/scanFinalizer';
+import { queueHandler } from './src/engine/scanChunkProcessor';
 import { telegramNotifier } from './src/notification/telegramNotifier';
 import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from './src/constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from './src/utils/stockSearchService';
@@ -31,6 +35,40 @@ function jsonResponse(data: any, status = 200) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
     },
   });
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+function checkAuth(request: Request, env: any, required: boolean = true): boolean {
+  const apiToken = env?.API_AUTH_TOKEN || env?.CRON_SECRET_TOKEN || '';
+  if (!apiToken) {
+    if (!env?.REQUIRE_API_AUTH) {
+      return true;
+    }
+  }
+  const authHeader = request.headers.get('authorization') || '';
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : null;
+  const headerToken = request.headers.get('x-api-token') || '';
+  const providedToken = bearerToken || headerToken;
+  if (!providedToken) return !required;
+  return safeEqual(providedToken, apiToken);
+}
+
+function requireAuth(request: Request, env: any): Response | null {
+  if (!checkAuth(request, env, true)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid or missing API token' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return null;
 }
 
 async function ensureDbConnected(env: any): Promise<boolean> {
@@ -627,7 +665,10 @@ export default {
 
     // GET /api/v8/system/db/schema-sql
     if (path === '/api/v8/system/db/schema-sql') {
-      return jsonResponse({ success: true, sql: FULL_SCHEMA_SQL });
+      try {
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
+        return jsonResponse({ success: true, sql: FULL_SCHEMA_SQL });
     }
 
     // POST /api/v8/system/provider
@@ -647,8 +688,11 @@ export default {
 
     // System DB Clear / Seed
     if (path === '/api/v8/system/db/clear' && method === 'POST') {
-      const result = await dbClient.clearAllData();
-      return jsonResponse({
+      try {
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
+        const result = await dbClient.clearAllData();
+        return jsonResponse({
         success: true,
         message: '모든 데이터베이스 테이블 및 메모리 레코드가 성공적으로 초기화/삭제되었습니다.',
         clearedTables: result.clearedTables,
@@ -656,8 +700,11 @@ export default {
     }
 
     if (path === '/api/v8/system/db/seed' && method === 'POST') {
-      const result = await dbClient.seedToActiveDb();
-      return jsonResponse({
+      try {
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
+        const result = await dbClient.seedToActiveDb();
+        return jsonResponse({
         success: true,
         message: `기본 유니버스 및 시그널 데이터(${result.seededCount}개)가 주입되었습니다.`,
         seededCount: result.seededCount,
@@ -667,222 +714,32 @@ export default {
     // ========== Scan Run ==========
     if (path === '/api/v8/scan/run' && method === 'POST') {
       try {
-        let body: any = {};
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
+
+        // Use startScanJob instead of scanService.executeScan
+        const body: any = {};
         try {
           body = await request.json();
         } catch {}
 
-        const targetMarketRaw = (body.market || '').toUpperCase().trim();
-        if (targetMarketRaw !== 'KR' && targetMarketRaw !== 'US') {
-          return jsonResponse({
-            success: false,
-            error: "market must be 'US' or 'KR'. Combined market scans are not supported.",
-          }, 400);
-        }
-        const effectiveMarket = targetMarketRaw;
-
-        const result = await scanService.executeScan({
-          market: effectiveMarket,
+        const result = await startScanJob(env, {
+          market: (body.market || 'US').toUpperCase() as 'KR' | 'US',
           simulatePartialFailure: body.simulate_partial_failure === true,
           providerType: body.provider_type || 'yahoo',
           saveToDb: true,
+          triggeredBy: 'ManualTrigger',
+          sourceUrl: url.origin,
+          botToken: env?.TELEGRAM_BOT_TOKEN,
+          chatId: env?.TELEGRAM_CHAT_ID,
         });
-
-        const runLog = result.runLog;
-
-        // Strictly isolate signals by target market if specified
-        let actionableSignals = (result.evaluations || []).filter((e: any) => e.signal_generated);
-        if (effectiveMarket) {
-          actionableSignals = actionableSignals.filter((e: any) => detectMarketRegion(e.ticker) === effectiveMarket);
-        }
-
-        // Calculate Strategy B Dip Buy evaluations (strictly isolated by market)
-        let dipBuyOpportunities = (result.evaluations || [])
-          .map((e: any) => ensureDipEvaluation(e))
-          .filter(
-            (e: any) =>
-              e.dip_evaluation &&
-              e.dip_evaluation.suitability.tier !== 'D' &&
-              e.dip_evaluation.isActionableDip
-          );
-        if (effectiveMarket) {
-          dipBuyOpportunities = dipBuyOpportunities.filter((e: any) => detectMarketRegion(e.ticker) === effectiveMarket);
-        }
-
-        // Telegram Notification Dispatch
-        let telegramStatus: { sent: boolean; message: string; target?: string | null } = {
-          sent: false,
-          message: '텔레그램 미전송 (비활성화 또는 설정 미등록)',
-        };
-
-        const sendTelegram = body.send_telegram !== false;
-        const cfg = telegramNotifier.getConfig();
-        const botToken = (
-          body.botToken ||
-          request.headers.get('x-telegram-token') ||
-          env?.TELEGRAM_BOT_TOKEN ||
-          process.env.TELEGRAM_BOT_TOKEN ||
-          cfg.botToken ||
-          ''
-        ).trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '');
-
-        const chatId = (
-          body.chatId ||
-          request.headers.get('x-telegram-chat-id') ||
-          env?.TELEGRAM_CHAT_ID ||
-          process.env.TELEGRAM_CHAT_ID ||
-          cfg.chatId ||
-          ''
-        ).trim().replace(/^['"]|['"]$/g, '');
-
-        const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
-        const kstTimeStr = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')} ${String(nowKST.getUTCHours()).padStart(2, '0')}:${String(nowKST.getUTCMinutes()).padStart(2, '0')}:${String(nowKST.getUTCSeconds()).padStart(2, '0')} KST`;
-
-        const formatPrice = (ticker: string, price: number) => {
-          const isKr = detectMarketRegion(ticker) === 'KR';
-          return isKr ? `₩${Math.round(price).toLocaleString('ko-KR')}` : `$${price.toFixed(2)}`;
-        };
-        const marketBadge = effectiveMarket === 'KR' ? '🇰🇷 국내장' : effectiveMarket === 'US' ? '🇺🇸 미국장' : '🌐 통합';
-
-        let reportText = `<b>🚀 퀀트 스캐너 [${marketBadge}] 듀얼 전략 리포트</b>\n`;
-        reportText += `🕒 <b>실행 시각:</b> ${kstTimeStr}\n`;
-        reportText += `━━━━━━━━━━━━━━━━━━━━━\n`;
-        reportText += `• <b>검토 대상:</b> ${(result.evaluations || []).length}개 종목\n`;
-        reportText += `• <b>전략 A (모멘텀 돌파):</b> <b>${actionableSignals.length}건</b>\n`;
-        reportText += `• <b>전략 B (우량주 눌림추매):</b> <b>${dipBuyOpportunities.length}건</b>\n`;
-        reportText += `• <b>고위험 종목:</b> ${(result.evaluations || []).filter((e: any) => e.risk?.risk_level === 'HIGH').length}개\n\n`;
-
-        // 1. 전략 A 섹션
-        reportText += `<b>🎯 전략 A: 모멘텀 & 추세돌파 포착 종목</b>\n`;
-        if (actionableSignals.length > 0) {
-          actionableSignals.slice(0, 5).forEach((sig: any, idx: number) => {
-            const arrow = (sig.change1d ?? 0) >= 0 ? '🔺' : '🔻';
-            const changeStr = `${(sig.change1d ?? 0) >= 0 ? '+' : ''}${(sig.change1d ?? 0).toFixed(1)}%`;
-            const stockTitle = formatTelegramStockName(sig.ticker, sig.name);
-            reportText += `${idx + 1}. ${stockTitle}\n`;
-            reportText += `   - 현재가: ${formatPrice(sig.ticker, sig.price ?? 0)} (전일대비: ${arrow} ${changeStr})\n`;
-            reportText += `   - 기회점수: <b>${sig.opportunity?.opportunity_score ?? 50}점</b> | 판정: <code>${sig.decision?.decision || 'BUY'}</code>\n`;
-            reportText += `   - 핵심이유: ${sig.decision?.reason || '기술적 반등 및 팩터 점수 우수'}\n\n`;
-          });
-        } else {
-          reportText += `ℹ️ 현재 엄격한 모멘텀 돌파 제약을 통과한 신규 진입 신호 없음\n\n`;
-        }
-
-        // 2. 전략 B 섹션
-        reportText += `<b>🛡️ 전략 B: 우량대형주 & 지수ETF 분할적립/눌림목 포착</b>\n`;
-        if (dipBuyOpportunities.length > 0) {
-          dipBuyOpportunities.slice(0, 5).forEach((dip: any, idx: number) => {
-            const evalData = dip.dip_evaluation!;
-            const arrow = (dip.change1d ?? 0) >= 0 ? '🔺' : '🔻';
-            const changeStr = `${(dip.change1d ?? 0) >= 0 ? '+' : ''}${(dip.change1d ?? 0).toFixed(1)}%`;
-            const stockTitle = formatTelegramStockName(dip.ticker, dip.name);
-            reportText += `${idx + 1}. ${stockTitle}\n`;
-            reportText += `   - 현재가: ${formatPrice(dip.ticker, dip.price ?? 0)} (${arrow} ${changeStr})\n`;
-            reportText += `   - 적합도: <b>💎 ${evalData.suitability.tierLabel}</b> (${evalData.suitability.score}점)\n`;
-            reportText += `   - 눌림타이밍: <b>${evalData.timing.score}점</b> (RSI ${evalData.timing.rsi.toFixed(1)}, ${evalData.timing.drawdownLabel})\n`;
-            reportText += `   - 실행신호: <code>${evalData.actionSignal}</code> (${evalData.signalLabel})\n`;
-            reportText += `   - <b>💡 권고 분할적립 배수:</b> <b>${evalData.suggestedDcaRatio}</b>\n\n`;
-          });
-        } else {
-          reportText += `ℹ️ 현재 최적의 과매도 눌림목에 도달한 종목 없음 (정기 일정 유지)\n\n`;
-        }
-
-        if (url.origin) {
-          reportText += `🔗 <a href="${url.origin}">퀀트 시스템 대시보드 바로가기</a>`;
-        }
-
-        if (sendTelegram) {
-          if (botToken && chatId) {
-            try {
-              const sendRes = await telegramNotifier.sendMessage(reportText, botToken, chatId);
-              if (sendRes.success && !sendRes.previewOnly) {
-                telegramStatus = {
-                  sent: true,
-                  message: '텔레그램 발송 완료',
-                  target: chatId ? `${chatId.slice(0, 3)}****` : null,
-                };
-              } else {
-                telegramStatus = {
-                  sent: false,
-                  message: sendRes.error || '텔레그램 발송 실패',
-                };
-              }
-            } catch (tErr: any) {
-              console.warn('[WorkerScan] Telegram send error:', tErr);
-              telegramStatus = {
-                sent: false,
-                message: tErr.message || '텔레그램 발송 예외',
-              };
-            }
-          } else {
-            telegramStatus = {
-              sent: false,
-              message: '텔레그램 봇 토큰/챗ID 미등록 (알림 모달에서 등록 필요)',
-            };
-          }
-        }
-
-        // Record the alert notification log (Audit trail for UI viewing)
-        try {
-          const allActionTickers = Array.from(
-            new Set([
-              ...actionableSignals.map((e: any) => e.ticker),
-              ...dipBuyOpportunities.map((e: any) => e.ticker),
-            ])
-          );
-
-          const alertDeliveryStatus = telegramStatus.sent
-            ? 'SENT'
-            : (!botToken || !chatId)
-            ? 'LOCAL_LOGGED'
-            : 'FAILED';
-
-          const alertLog: AlertNotificationLog = {
-            id: `alert-manual-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            kst_time: kstTimeStr,
-            strategy_type: 'DUAL_SCAN_REPORT',
-            title: `⚡ [수동 스캔 - ${marketBadge}] 듀얼 퀀트 브리핑 (모멘텀 ${actionableSignals.length}건 + 눌림목 ${dipBuyOpportunities.length}건)`,
-            tickers: allActionTickers,
-            signals_count: actionableSignals.length + dipBuyOpportunities.length,
-            delivery_status: alertDeliveryStatus,
-            delivery_target: telegramStatus.target || (chatId ? `${chatId.slice(0, 3)}****` : null),
-            message_preview: `전략 A ${actionableSignals.length}건, 전략 B ${dipBuyOpportunities.length}건 (${telegramStatus.message})`,
-            message_body: reportText,
-            details: {
-              strategy_a_tickers: actionableSignals.map((e: any) => ({
-                ticker: e.ticker,
-                score: e.opportunity?.opportunity_score ?? 50,
-                decision: e.decision?.decision || 'BUY',
-                price: e.price ?? 0,
-                change1d: e.change1d ?? 0,
-              })),
-              strategy_b_tickers: dipBuyOpportunities.map((e: any) => ({
-                ticker: e.ticker,
-                tier: e.dip_evaluation?.suitability.tier || 'A',
-                dip_score: e.dip_evaluation?.dip_score || 0,
-                rsi: e.dip_evaluation?.timing.rsi || 50,
-                drawdown: e.dip_evaluation?.timing.drawdownLabel || '0.0%',
-                suggested_action: e.dip_evaluation?.suggestedDcaRatio || '1.0x 정기 적립',
-              })),
-            },
-          };
-
-          await alertHistoryRepository.save(alertLog);
-        } catch (aErr) {
-          console.warn('[WorkerScan] Failed to save alert log:', aErr);
-        }
 
         return jsonResponse({
           success: true,
-          scan_log: runLog,
-          new_signals: result.newSignals || [],
-          actionable_signals: actionableSignals,
-          dip_buy_signals: dipBuyOpportunities,
-          evaluations_count: (result.evaluations || []).length,
-          evaluations: result.evaluations || [],
-          telegram_status: telegramStatus,
-        });
+          scan_id: result.scanId,
+          status: result.status,
+          message: '스캔이 시작되었습니다.',
+        }, 202);
       } catch (err: any) {
         console.error('[WorkerScan] scan execution error:', err);
         return jsonResponse({
@@ -1066,6 +923,53 @@ export default {
         }, 500);
       }
     }
+    // ========== Scan Status & Routes ==========
+    // GET /api/v8/scan/status/:scanId
+    if (path.startsWith('/api/v8/scan/status/') && method === 'GET') {
+      const scanId = path.replace('/api/v8/scan/status/', '').split('?')[0].split('/')[0];
+      try {
+        const run = await scanRunRepository.getById(scanId);
+        if (!run) {
+          return jsonResponse({ success: false, error: 'Scan run not found' }, 404);
+        }
+        return jsonResponse({ success: true, run });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
+    // GET /api/v8/scan/runs
+    if (path === '/api/v8/scan/runs' && method === 'GET') {
+      try {
+        const runs = await scanRunRepository.getAll();
+        return jsonResponse({ success: true, runs: runs.length > 0 ? runs : [] });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
+    // GET /api/v8/scan/budget
+    if (path === '/api/v8/scan/budget' && method === 'GET') {
+      try {
+        const runs = await scanRunRepository.getAll();
+        const totalRuns = runs.length;
+        const successfulRuns = runs.filter((r: any) => r.status === 'SUCCESS').length;
+        const failedRuns = runs.filter((r: any) => r.status === 'FAILED').length;
+        const totalEvaluations = runs.reduce((sum: number, r: any) => sum + (r.evaluated_count || 0), 0);
+        const totalSignals = runs.reduce((sum: number, r: any) => sum + (r.signal_count || 0), 0);
+        return jsonResponse({
+          success: true,
+          totalRuns,
+          successfulRuns,
+          failedRuns,
+          totalEvaluations,
+          totalSignals,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
+    }
+
 
     // ========== Backtest Backfill ==========
     if (path === '/api/v8/backtest/backfill-init' && method === 'POST') {
@@ -1233,6 +1137,9 @@ export default {
 
     if (path === '/api/v8/schedule/trigger' && method === 'POST') {
       try {
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
+
         const cfg = telegramNotifier.getConfig();
         const botToken = (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || cfg.botToken || '').trim();
         const chatId = (env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || cfg.chatId || '').trim();
@@ -1250,6 +1157,8 @@ export default {
 
     if (path === '/api/v8/telegram/test-broadcast' && method === 'POST') {
       try {
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
         let body: any = {};
         try { body = await request.json(); } catch {}
         let botToken = (env?.TELEGRAM_BOT_TOKEN || body.botToken || '').trim().replace(/^['"]|['"]$/g, '');
@@ -1342,6 +1251,9 @@ export default {
       path === '/api/scan/cron'
     ) {
       try {
+        const authError = requireAuth(request, env);
+        if (authError) return authError;
+
         const startTime = Date.now();
         const runId = `CRON_${Date.now()}`;
 
@@ -1349,7 +1261,7 @@ export default {
         const rawSearch = url.search ? url.search.substring(1).replace(/\?/g, '&') : '';
         const searchParams = new URLSearchParams(rawSearch);
 
-        // 1. Cron Secret Token Check (Security Gate)
+        // 1. Cron Secret Token Check (Security Gate) - kept existing secret token check
         const secretToken = env?.CRON_SECRET_TOKEN || env?.V8_CRON_SECRET || process.env.CRON_SECRET_TOKEN;
         if (secretToken) {
           const authHeader = request.headers.get('authorization') || '';
@@ -1417,12 +1329,12 @@ export default {
           bodyData.mode === 'async';
 
         if (isAsync && ctx && typeof ctx.waitUntil === 'function') {
-          const scanTask = executeCronScan({
-            botToken: botToken || undefined,
-            chatId: chatId || undefined,
+          const scanTask = startScanJob(env, {
             market: reqMarket,
             triggeredBy: 'WorkerHttpWebhookAsync',
             sourceUrl: url.origin,
+            botToken: botToken || undefined,
+            chatId: chatId || undefined,
           }).catch((err) => {
             console.error('[WorkerCronWebhook] Background execution error:', err);
           });
@@ -1439,8 +1351,8 @@ export default {
           }, 202);
         }
 
-        // 2. Execute Quant Pipeline synchronously
-        const cronResult = await executeCronScan({
+        // 2. Execute scan job via orchestrator
+        const cronResult = await startScanJob(env, {
           botToken: botToken || undefined,
           chatId: chatId || undefined,
           market: reqMarket,
@@ -1449,9 +1361,12 @@ export default {
         });
 
         return jsonResponse({
-          ...cronResult,
+          success: true,
+          status: 'RUNNING',
+          scan_id: cronResult.scanId,
+          message: '스캔이 시작되었습니다.',
           duration_ms: Date.now() - startTime,
-        }, cronResult.success ? 200 : 500);
+        }, 202);
       } catch (err: any) {
         return jsonResponse({ success: false, error: err.message }, 500);
       }
@@ -1488,7 +1403,8 @@ export default {
       targetMarket = 'US'; // 미국장 마감(06:30 KST) 또는 개장(23:00 KST)
     }
 
-    const scanTask = executeCronScan({
+    // Use startScanJob instead of executeCronJob - just enqueue, don't await fully
+    const scanTask = startScanJob(env, {
       triggeredBy: `CloudflareCron:${eventCron || 'scheduled'}`,
       market: targetMarket,
       botToken: botToken || undefined,
@@ -1500,6 +1416,11 @@ export default {
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(scanTask);
     }
-    await scanTask;
+    // Don't await the full scan - just enqueue it for background processing
+  },
+
+  // Cloudflare Queue Consumer
+  async queue(batch: any, env: any, ctx: any): Promise<void> {
+    await queueHandler(batch, env, ctx);
   },
 };

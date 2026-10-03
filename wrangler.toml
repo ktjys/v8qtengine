@@ -29,4 +29,14 @@ crons = [
 # plan error even though `--dry-run` passes locally.
 # See CLOUDFLARE_DEPLOYMENT.md for subrequest budgeting.
 
+[[queues.producers]]
+binding = "SCAN_QUEUE"
+queue = "v8-scan-chunks"
+
+[[queues.consumers]]
+queue = "v8-scan-chunks"
+max_batch_size = 1
+max_retries = 2
+dead_letter_queue = "v8-scan-dead"
+
 
