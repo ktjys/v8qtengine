@@ -12,11 +12,16 @@ import { logger } from '../utils/logger';
 
 export class ScanService {
   async executeScan(
-    options: PipelineExecutionOptions = {},
+    options: PipelineExecutionOptions,
     manualOverrides: Record<string, AssetClassification> = {}
   ): Promise<PipelineScanResult> {
+    const market = options.market;
+    if (market !== 'US' && market !== 'KR') {
+      throw new Error(`executeScan requires market 'US' or 'KR', received: ${String(market)}`);
+    }
+
     const startTime = new Date();
-    const runId = `run-${Date.now()}`;
+    const runId = `run-${Date.now()}-${market}`;
     let watchlist: any[] = [];
     try {
       watchlist = await watchlistRepository.getAll();
@@ -26,20 +31,17 @@ export class ScanService {
     } catch (wErr) {
       logger.warn('Failed to load watchlist from repo', {
         component: 'ScanService',
-        operation: 'executeScan',
+        operation: 'executeMarketScan',
         error: String(wErr),
       });
     }
 
-    // Filter by market region if options.market is specified
     let tickers = watchlist.map((w) => w.ticker.toUpperCase().trim());
-    if (options.market) {
-      tickers = tickers.filter((t) => detectMarketRegion(t) === options.market);
-    }
+    tickers = tickers.filter((t) => detectMarketRegion(t) === market);
 
-    // If empty for either market, fall back to default standard tickers so scans never fail empty
+    // If empty for this market, fall back to default standard tickers so scans never fail empty
     if (tickers.length === 0) {
-      if (options.market === 'KR') {
+      if (market === 'KR') {
         tickers = [
           '005930.KS', // 삼성전자
           '000660.KS', // SK하이닉스
@@ -53,7 +55,7 @@ export class ScanService {
           '247540.KQ', // 에코프로비엠
           '196170.KQ', // 알테오젠
         ];
-      } else if (!options.market || options.market === 'US') {
+      } else if (market === 'US') {
         tickers = [
           'AAPL', 'AMD', 'AMZN', 'GOOGL', 'HOOD', 'JNJ', 'META', 'MSFT',
           'NVDA', 'OKLO', 'ORCL', 'PLTR', 'QQQ', 'SCHD', 'SMH', 'SPCX',
@@ -154,7 +156,7 @@ export class ScanService {
       } catch (err) {
         logger.warn('evaluationRepository.saveAll warning', {
           component: 'ScanService',
-          operation: 'executeScan',
+          operation: 'executeMarketScan',
           error: String(err),
         });
       }
@@ -163,7 +165,7 @@ export class ScanService {
       } catch (err) {
         logger.warn('marketDataService.flushIndicators warning', {
           component: 'ScanService',
-          operation: 'executeScan',
+          operation: 'executeMarketScan',
           error: String(err),
         });
       }
@@ -195,7 +197,7 @@ export class ScanService {
       } catch (err) {
         logger.warn('signalRepository.saveSignals warning', {
           component: 'ScanService',
-          operation: 'executeScan',
+          operation: 'executeMarketScan',
           error: String(err),
         });
       }
@@ -206,7 +208,7 @@ export class ScanService {
       run_id: runId,
       started_at: startTime.toISOString(),
       finished_at: finishTime.toISOString(),
-      market_region: options.market || 'US',
+      market_region: market,
       watchlist_count: watchlist.length || tickers.length,
       evaluated_count: evaluations.length,
       signal_count: actionableList.length, // 현재 유효 기회 총 건수
@@ -226,7 +228,7 @@ export class ScanService {
       } catch (err) {
         logger.warn('scanRunRepository.save warning', {
           component: 'ScanService',
-          operation: 'executeScan',
+          operation: 'executeMarketScan',
           error: String(err),
         });
       }

@@ -7,7 +7,7 @@ import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { runV8PipelineOnSeedData } from '../data/seed/initialData';
 
 export async function runV8Pipeline(
-  options: PipelineExecutionOptions = {},
+  options: PipelineExecutionOptions,
   manualOverrides: Record<string, AssetClassification> = {}
 ): Promise<PipelineScanResult> {
   return scanService.executeScan(options, manualOverrides);
