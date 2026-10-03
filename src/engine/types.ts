@@ -44,5 +44,5 @@ export interface ScanChunkResult {
 
 export interface ScanStartResult {
   scanId: string;
-  status: 'RUNNING' | 'SKIPPED_CLOSED_MARKET' | 'SKIPPED_EMPTY_WATCHLIST' | 'QUEUE_MISSING';
+  status: 'RUNNING' | 'FAILED' | 'SKIPPED_CLOSED_MARKET' | 'SKIPPED_EMPTY_WATCHLIST' | 'QUEUE_MISSING';
 }

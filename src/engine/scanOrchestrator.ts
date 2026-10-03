@@ -1,6 +1,7 @@
 import { watchlistRepository } from '../db/repositories/watchlistRepository';
 import { scanRunRepository } from '../db/repositories/scanRunRepository';
 import { getOptimalChunkSize } from './scanChunkProcessor';
+import { logger } from '../utils/logger';
 import type { ScanRunLog, ScanRunStatus } from '../types/v8';
 import type { Env, ScanChunkMessage, ScanMarket, ScanStartResult } from './types';
 
@@ -107,7 +108,11 @@ async function createTerminalRun(
     failed_chunks: 0,
     meta,
   };
-  return scanRunRepository.createChunkedRun(log);
+  try {
+    return await scanRunRepository.createChunkedRun(log);
+  } catch {
+    return log;
+  }
 }
 
 export async function startScanJob(
@@ -194,8 +199,18 @@ export async function startScanJob(
     meta: { triggeredBy: options.triggeredBy, slot },
   };
 
-  const created = await scanRunRepository.createChunkedRun(scanRun);
-  const scanRunId = created.run_id;
+  let scanRunId: string;
+  try {
+    scanRunId = (await scanRunRepository.createChunkedRun(scanRun)).run_id;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('Scan run could not be persisted, no chunks enqueued', {
+      component: 'ScanOrchestrator',
+      market,
+      error: message,
+    });
+    return { scanId: '', status: 'FAILED' };
+  }
 
   const messages: ScanChunkMessage[] = tickerChunks.map((tickerChunk, index) => ({
     scanRunId,

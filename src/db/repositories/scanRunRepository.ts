@@ -84,37 +84,47 @@ export class ScanRunRepository {
 
   async createChunkedRun(log: ScanRunLog): Promise<ScanRunLog> {
     if (dbClient.isTableAvailable('scan_runs') && dbClient.supabase) {
-      try {
-        const payload = {
-          started_at: log.started_at,
-          finished_at: log.finished_at,
-          watchlist_count: log.watchlist_count,
-          evaluated_count: log.evaluated_count,
-          signal_count: log.signal_count,
-          failure_count: log.failure_count || 0,
-          status: log.status,
-          error_summary: log.error_summary,
-          market_region: log.market_region,
-          chunk_size: log.chunk_size,
-          total_chunks: log.total_chunks,
-          completed_chunks: 0,
-          failed_chunks: 0,
-          meta: log.meta || {},
-        };
+      const payload = {
+        started_at: log.started_at,
+        finished_at: log.finished_at,
+        watchlist_count: log.watchlist_count,
+        evaluated_count: log.evaluated_count,
+        signal_count: log.signal_count,
+        failure_count: log.failure_count || 0,
+        status: log.status,
+        error_summary: log.error_summary,
+        market_region: log.market_region,
+        chunk_size: log.chunk_size,
+        total_chunks: log.total_chunks,
+        completed_chunks: 0,
+        failed_chunks: 0,
+        meta: log.meta || {},
+      };
 
-        const { data, error } = await dbClient.supabase
+      let data: { id?: string } | null = null;
+      let failure: any = null;
+
+      try {
+        const inserted = await dbClient.supabase
           .from('scan_runs')
           .insert(payload)
           .select('id')
           .maybeSingle();
-
-        if (error) {
-          dbClient.handleDbError('scan_runs', 'createChunkedRun', error);
-        } else if (data?.id) {
-          log.run_id = data.id;
-        }
+        data = inserted.data;
+        failure = inserted.error;
       } catch (err) {
-        dbClient.handleDbError('scan_runs', 'createChunkedRun', err);
+        failure = err;
+      }
+
+      if (failure) {
+        dbClient.handleDbError('scan_runs', 'createChunkedRun', failure);
+        throw new Error(
+          `[db] scan_runs.createChunkedRun failed: ${(failure as any).message || String(failure)}`
+        );
+      }
+
+      if (data?.id) {
+        log.run_id = data.id;
       }
     }
 
