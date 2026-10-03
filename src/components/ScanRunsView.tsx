@@ -12,6 +12,7 @@ export type ScanRunsSortField =
   | 'watchlist_count'
   | 'evaluated_count'
   | 'signal_count'
+  | 'total_chunks'
   | 'failure_count';
 
 interface ScanRunsViewProps {

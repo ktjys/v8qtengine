@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
 import { watchlistRepository } from './src/db/repositories/watchlistRepository';
 import { assetRepository } from './src/db/repositories/assetRepository';
@@ -19,8 +18,8 @@ import { FULL_SCHEMA_SQL } from './src/db/schemaSql';
 import { runDatabaseDiagnostics } from './src/db/diagnostics';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { startScanJob } from './src/engine/scanOrchestrator';
-import { runFinalizer } from './src/engine/scanFinalizer';
 import { queueHandler } from './src/engine/scanChunkProcessor';
+import type { ScanMarket } from './src/engine/types';
 import { telegramNotifier } from './src/notification/telegramNotifier';
 import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from './src/constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from './src/utils/stockSearchService';
@@ -735,13 +734,8 @@ export default {
 
         const result = await startScanJob(env, {
           market: (body.market || 'US').toUpperCase() as 'KR' | 'US',
-          simulatePartialFailure: body.simulate_partial_failure === true,
-          providerType: body.provider_type || 'yahoo',
-          saveToDb: true,
           triggeredBy: 'ManualTrigger',
           sourceUrl: url.origin,
-          botToken: env?.TELEGRAM_BOT_TOKEN,
-          chatId: env?.TELEGRAM_CHAT_ID,
         });
 
         return jsonResponse({
@@ -1330,6 +1324,10 @@ export default {
         const reqMarketRaw = (searchParams.get('market') || bodyData.market || '').toUpperCase().trim();
         const reqMarket = (reqMarketRaw === 'KR' || reqMarketRaw === 'US' || reqMarketRaw === 'ALL') ? (reqMarketRaw as 'KR' | 'US' | 'ALL') : undefined;
 
+        // `[undefined]` (never `[]`) so an absent market falls through to startScanJob's KST default.
+        const requestedMarkets: (ScanMarket | undefined)[] =
+          reqMarket === 'ALL' ? ['KR', 'US'] : [reqMarket as ScanMarket | undefined];
+
         // Check if asynchronous background execution is requested (recommended for external cron services to avoid timeouts)
         const isAsync =
           searchParams.get('async') === 'true' ||
@@ -1339,13 +1337,15 @@ export default {
           bodyData.mode === 'async';
 
         if (isAsync && ctx && typeof ctx.waitUntil === 'function') {
-          const scanTask = startScanJob(env, {
-            market: reqMarket,
-            triggeredBy: 'WorkerHttpWebhookAsync',
-            sourceUrl: url.origin,
-            botToken: botToken || undefined,
-            chatId: chatId || undefined,
-          }).catch((err) => {
+          const scanTask = Promise.all(
+            requestedMarkets.map((market) =>
+              startScanJob(env, {
+                market,
+                triggeredBy: 'WorkerHttpWebhookAsync',
+                sourceUrl: url.origin,
+              })
+            )
+          ).catch((err) => {
             console.error('[WorkerCronWebhook] Background execution error:', err);
           });
 
@@ -1355,6 +1355,7 @@ export default {
             success: true,
             status: 'ACCEPTED',
             mode: 'async',
+            markets: requestedMarkets,
             message: '크론 스캔이 백그라운드 태스크로 시작되었습니다. 스캔 완료 시 텔레그램 발송 및 DB 저장이 자동 완료됩니다.',
             telegram_target: chatId ? `${chatId.slice(0, 3)}****` : null,
             timestamp: new Date().toISOString(),
@@ -1362,18 +1363,21 @@ export default {
         }
 
         // 2. Execute scan job via orchestrator
-        const cronResult = await startScanJob(env, {
-          botToken: botToken || undefined,
-          chatId: chatId || undefined,
-          market: reqMarket,
-          triggeredBy: 'WorkerHttpWebhook',
-          sourceUrl: url.origin,
-        });
+        const cronResults = await Promise.all(
+          requestedMarkets.map((market) =>
+            startScanJob(env, {
+              market,
+              triggeredBy: 'WorkerHttpWebhook',
+              sourceUrl: url.origin,
+            })
+          )
+        );
 
         return jsonResponse({
           success: true,
           status: 'RUNNING',
-          scan_id: cronResult.scanId,
+          scan_ids: cronResults.map((r) => r.scanId),
+          statuses: cronResults.map((r) => r.status),
           message: '스캔이 시작되었습니다.',
           duration_ms: Date.now() - startTime,
         }, 202);
@@ -1396,29 +1400,16 @@ export default {
     const eventCron = (event?.cron || '').trim();
     console.log('[Cloudflare Cron Trigger] Scheduled event triggered:', eventCron);
 
-    const cfg = telegramNotifier.getConfig();
-    const botToken = (env?.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || cfg.botToken || '')
-      .trim()
-      .replace(/^['"]|['"]$/g, '')
-      .replace(/^bot/i, '');
-    const chatId = (env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID || cfg.chatId || '')
-      .trim()
-      .replace(/^['"]|['"]$/g, '');
-
-    // Map Cloudflare Cron Trigger to target market
     let targetMarket: 'KR' | 'US' | undefined;
     if (eventCron === '30 0 * * 1-5' || eventCron === '40 6 * * 1-5') {
-      targetMarket = 'KR'; // 국내장 개장(09:30 KST) 또는 마감(15:40 KST)
+      targetMarket = 'KR';
     } else if (eventCron === '30 21 * * 1-5' || eventCron === '0 14 * * 1-5') {
-      targetMarket = 'US'; // 미국장 마감(06:30 KST) 또는 개장(23:00 KST)
+      targetMarket = 'US';
     }
 
-    // Use startScanJob instead of executeCronJob - just enqueue, don't await fully
     const scanTask = startScanJob(env, {
       triggeredBy: `CloudflareCron:${eventCron || 'scheduled'}`,
       market: targetMarket,
-      botToken: botToken || undefined,
-      chatId: chatId || undefined,
     }).catch((err) => {
       console.error('[Cloudflare Cron Trigger] Execution error:', err);
     });
@@ -1426,11 +1417,11 @@ export default {
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(scanTask);
     }
-    // Don't await the full scan - just enqueue it for background processing
   },
 
   // Cloudflare Queue Consumer
   async queue(batch: any, env: any, ctx: any): Promise<void> {
+    await ensureDbConnected(env);
     await queueHandler(batch, env, ctx);
   },
 };

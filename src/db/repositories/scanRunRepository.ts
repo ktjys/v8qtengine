@@ -1,5 +1,5 @@
 import { dbClient } from '../supabaseClient';
-import { ScanRunLog } from '../../types/v8';
+import { ScanRunLog, ScanRunStatus } from '../../types/v8';
 
 export class ScanRunRepository {
   async getAll(): Promise<ScanRunLog[]> {
@@ -152,17 +152,50 @@ export class ScanRunRepository {
 
 const local = dbClient.scan_runs.get(runId);
     if (local) {
-      local.completed_chunks += 1;
-      local.evaluated_count += 1;
-      local.signal_count += 1;
-      local.failure_count += 1;
-      if (local.total_chunks && local.completed_chunks >= local.total_chunks) {
-        local.status = 'SUCCESS';
+      local.evaluated_count += evaluatedCount;
+      local.signal_count += signalCount;
+      local.failure_count += failureCount;
+      if (chunkStatus === 'FAILED') {
+        local.failed_chunks = (local.failed_chunks ?? 0) + 1;
+      } else {
+        local.completed_chunks = (local.completed_chunks ?? 0) + 1;
+      }
+      const settled = (local.completed_chunks ?? 0) + (local.failed_chunks ?? 0);
+      if (local.total_chunks && settled >= local.total_chunks) {
+        local.status = (local.failed_chunks ?? 0) > 0 ? 'PARTIAL_SUCCESS' : 'SUCCESS';
         local.finished_at = new Date().toISOString();
         return true;
       }
     }
     return false;
+  }
+
+  async finalizeRun(
+    runId: string,
+    patch: { status?: ScanRunStatus; error_summary?: string | null }
+  ): Promise<void> {
+    if (dbClient.isTableAvailable('scan_runs') && dbClient.supabase) {
+      const { error } = await dbClient.supabase
+        .from('scan_runs')
+        .update({
+          ...(patch.status ? { status: patch.status } : {}),
+          ...(patch.error_summary !== undefined ? { error_summary: patch.error_summary } : {}),
+          finished_at: new Date().toISOString(),
+        })
+        .eq('id', runId);
+
+      if (error) {
+        dbClient.handleDbError('scan_runs', 'finalizeRun', error);
+      }
+      return;
+    }
+
+    const local = dbClient.scan_runs.get(runId);
+    if (local) {
+      if (patch.status) local.status = patch.status;
+      if (patch.error_summary !== undefined) local.error_summary = patch.error_summary;
+      local.finished_at = new Date().toISOString();
+    }
   }
 
   async save(log: ScanRunLog): Promise<ScanRunLog> {

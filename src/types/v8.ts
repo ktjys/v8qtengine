@@ -317,20 +317,33 @@ export interface ScanRunItem {
   decision?: DecisionType;
 }
 
+export type ScanRunStatus =
+  | 'RUNNING'
+  | 'SUCCESS'
+  | 'PARTIAL_SUCCESS'
+  | 'FAILED'
+  | 'SKIPPED_CLOSED_MARKET'
+  | 'SKIPPED_EMPTY_WATCHLIST';
+
 export interface ScanRunLog {
   run_id: string;
   started_at: string;
-  finished_at: string;
+  finished_at: string | null;
   market_region?: MarketRegion;
   watchlist_count: number;
   evaluated_count: number;
   signal_count: number;
   failure_count: number;
-  failed_tickers: { ticker: string; error: string }[];
+  failed_tickers?: { ticker: string; error: string }[];
   items?: ScanRunItem[];
-  status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED';
-  error_summary?: string;
+  status: ScanRunStatus;
+  error_summary?: string | null;
   created_at?: string;
+  chunk_size?: number;
+  total_chunks?: number;
+  completed_chunks?: number;
+  failed_chunks?: number;
+  meta?: Record<string, unknown>;
 }
 
 export interface BacktestSummary {
