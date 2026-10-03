@@ -728,7 +728,7 @@ export default {
         if (authError) return authError;
 
         // Use startScanJob instead of scanService.executeScan
-        const body: any = {};
+        let body: any = {};
         try {
           body = await request.json();
         } catch {}
