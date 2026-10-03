@@ -39,7 +39,4 @@ max_batch_size = 1
 max_retries = 2
 dead_letter_queue = "v8-scan-dead"
 
-[env.production]
-# Production environment (uses same bindings as root)
-
 
