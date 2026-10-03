@@ -38,6 +38,16 @@ export interface TableStatusInfo {
 // Credentials are loaded from environment variables or UI-configured at runtime.
 // No hardcoded defaults — set SUPABASE_URL and SUPABASE_KEY via .env or Cloudflare runtime vars
 
+// The table exists but a column/RPC was never migrated. These must be handled
+// as schema drift and never mark the table missing, because doing so disables
+// every read and write through isTableAvailable() for the rest of the isolate.
+const SCHEMA_DRIFT_CODES = new Set([
+  'PGRST204', // PostgREST: column absent from schema cache
+  'PGRST202', // PostgREST: function absent from schema cache
+  '42703', // Postgres: undefined_column
+  '42883', // Postgres: undefined_function
+]);
+
 class UniversalDatabaseClient {
   public supabase: SupabaseClient | null = null;
   public isSupabaseConnected = false;
@@ -114,9 +124,9 @@ class UniversalDatabaseClient {
     const msg = error.message || String(error);
     const code = error.code ? String(error.code) : '';
 
-    if (code === 'PGRST204' || /Could not find the '.*' column/i.test(msg)) {
+    if (SCHEMA_DRIFT_CODES.has(code) || /Could not find the '.*' column/i.test(msg)) {
       console.error(
-        `[SupabaseClient] SCHEMA DRIFT: '${tableName}.${operation}' needs an unmigrated column. ` +
+        `[SupabaseClient] SCHEMA DRIFT: '${tableName}.${operation}' needs an unmigrated column or RPC. ` +
           `Apply the matching file in supabase/migrations/. ${msg}`
       );
       return;
