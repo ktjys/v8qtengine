@@ -694,10 +694,13 @@ export default {
         if (authError) return authError;
         const result = await dbClient.clearAllData();
         return jsonResponse({
-        success: true,
-        message: '모든 데이터베이스 테이블 및 메모리 레코드가 성공적으로 초기화/삭제되었습니다.',
-        clearedTables: result.clearedTables,
-      });
+          success: true,
+          message: '모든 데이터베이스 테이블 및 메모리 레코드가 성공적으로 초기화/삭제되었습니다.',
+          clearedTables: result.clearedTables,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
     }
 
     if (path === '/api/v8/system/db/seed' && method === 'POST') {
@@ -706,10 +709,13 @@ export default {
         if (authError) return authError;
         const result = await dbClient.seedToActiveDb();
         return jsonResponse({
-        success: true,
-        message: `기본 유니버스 및 시그널 데이터(${result.seededCount}개)가 주입되었습니다.`,
-        seededCount: result.seededCount,
-      });
+          success: true,
+          message: `기본 유니버스 및 시그널 데이터(${result.seededCount}개)가 주입되었습니다.`,
+          seededCount: result.seededCount,
+        });
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message }, 500);
+      }
     }
 
     // ========== Scan Run ==========
