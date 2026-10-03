@@ -24,7 +24,9 @@ crons = [
   "0 14 * * 1-5"   # 🌃 [미국장 개장] 23:00 KST (월~금 KST / 월~금 UTC 14:00)
 ]
 
-[limits]
-subrequests = 1000
+# ⚠️ Do NOT add `[limits]` while on the Workers Free plan: it is Standard-model
+# only, and free `subrequests` is hard-capped at 50. It fails the upload with a
+# plan error even though `--dry-run` passes locally.
+# See CLOUDFLARE_DEPLOYMENT.md for subrequest budgeting.
 
 
