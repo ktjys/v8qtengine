@@ -341,7 +341,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="스캔 실행"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">스캔 실행</span>
+              <span className="hidden md:inline">스캔 실행</span>
             </button>
 
             {/* Mobile / Tablet Drawer Toggle Button */}
