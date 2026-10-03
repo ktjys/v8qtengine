@@ -673,10 +673,13 @@ export default {
         } catch {}
 
         const targetMarketRaw = (body.market || '').toUpperCase().trim();
-        const targetMarket = (targetMarketRaw === 'KR' || targetMarketRaw === 'US' || targetMarketRaw === 'ALL')
-          ? (targetMarketRaw as 'KR' | 'US' | 'ALL')
-          : undefined;
-        const effectiveMarket = targetMarket === 'ALL' ? undefined : targetMarket;
+        if (targetMarketRaw !== 'KR' && targetMarketRaw !== 'US') {
+          return jsonResponse({
+            success: false,
+            error: "market must be 'US' or 'KR'. Combined market scans are not supported.",
+          }, 400);
+        }
+        const effectiveMarket = targetMarketRaw;
 
         const result = await scanService.executeScan({
           market: effectiveMarket,
