@@ -115,7 +115,7 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     try {
       const [evalRes, signalRes] = await Promise.all([
         fetch(`/api/v8/evaluations`),
-        fetch(`/api/vapi/v8/signals`),
+        fetch(`/api/v8/signals`),
       ]);
 
       const evalData = await evalRes.json();
