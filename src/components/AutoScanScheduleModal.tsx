@@ -42,7 +42,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
   const [inputChatId, setInputChatId] = useState('');
 
   const [scheduleMarketFilter, setScheduleMarketFilter] = useState<'ALL' | 'KR' | 'US'>('ALL');
-  const [testScanMarket, setTestScanMarket] = useState<'US' | 'KR' | 'ALL'>(activeMarket);
+  const [testScanMarket, setTestScanMarket] = useState<'US' | 'KR'>(activeMarket);
 
   const schedules = [
     {
@@ -226,7 +226,6 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
       if (cleanToken) headers['x-telegram-token'] = cleanToken;
       if (cleanChat) headers['x-telegram-chat-id'] = cleanChat;
 
-      // Execute live scan via /api/v8/cron-scan or /api/v8/scan/run
       let res = await fetch('/api/v8/cron-scan', {
         method: 'POST',
         headers,
@@ -809,17 +808,6 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                       >
                         🇰🇷 국내장
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setTestScanMarket('ALL')}
-                        className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                          testScanMarket === 'ALL'
-                            ? 'bg-cyan-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        🌐 통합
-                      </button>
                     </div>
 
                     <button
@@ -830,12 +818,12 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
                       {isRunning ? (
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>{testScanMarket === 'KR' ? '국내장' : testScanMarket === 'US' ? '미국장' : '통합'} 스캔 중...</span>
+                          <span>{testScanMarket === 'KR' ? '국내장' : '미국장'} 스캔 중...</span>
                         </>
                       ) : (
                         <>
                           <RefreshCw className="w-3.5 h-3.5" />
-                          <span>{testScanMarket === 'KR' ? '🇰🇷 국내장' : testScanMarket === 'US' ? '🇺🇸 미국장' : '🌐 통합'} 즉시 실행</span>
+                          <span>{testScanMarket === 'KR' ? '🇰🇷 국내장' : '🇺🇸 미국장'} 즉시 실행</span>
                         </>
                       )}
                     </button>
