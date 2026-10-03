@@ -146,7 +146,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40">
       <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-2">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-1 sm:gap-1.5">
           {/* Logo & Brand */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
