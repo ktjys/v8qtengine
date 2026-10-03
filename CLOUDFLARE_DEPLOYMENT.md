@@ -68,17 +68,65 @@ Cloudflare Workers의 `wrangler.toml`에 4개 트리거가 기본 등록되어 �
 
 ## ⚡ Cloudflare Subrequests 한도 관리 ("Too many subrequests" 방지)
 
-1. **무료 플랜 (Free Plan) 서브리퀘스트 한도 (50회):**
-   - Cloudflare 무료 플랜 Worker는 1회 호출당 외부 `fetch` subrequest가 최대 50개로 제한됩니다.
-   - **시장 분리 스캔:** 미국장 스캔 시에는 국내 종목을 완전히 배제하고, 국내장 스캔 시에는 미국 종목을 배제하여 평가 종목 수를 절반으로 압축합니다.
-   - **네이버 다이렉트 수집 & DB 배치 적재:** 국내주는 네이버 금융을 1회 호출로 직접 조회하며, DB 적재는 단 1회의 batch upsert로 처리하여 1회 스캔당 서브리퀘스트를 약 20건 수준으로 안전하게 유지합니다.
+### Free 플랜 서브리퀘스트 예산 (하드캡 50 / invocation)
 
-2. **유료 플랜 (Paid Plan) 한도 증액 설정 (`wrangler.toml`):**
-   - 유료 플랜에서는 `wrangler.toml` 파일에 아래 설정을 통해 서브리퀘스트 한도를 1,000개 이상으로 증액할 수 있습니다:
-     ```toml
-     [limits]
-     subrequests = 1000
-     ```
+무료 플랜 Worker는 1회 호출당 외부 `fetch` subrequest가 **최대 50개**로 고정됩니다.
+**이 값은 설정으로 올릴 수 없습니다.** (아래 `[limits]` 참고)
+
+현재 코드 기준 1회 스캔의 서브리퀘스트 구성:
+
+| 호출 | 건수 | 비고 |
+| --- | --- | --- |
+| `getHistorical` (Yahoo/Naver) | 종목수 × 1~2 | ticker당 1회. `query1` 실패 시 `query2`로 재시도 → 2회 |
+| `getQuote` | **0** | `getHistorical`이 채운 인메모리 캐시를 재사용 (`marketDataService.ts:140`) |
+| `getFundamentals` | **0** | Yahoo 프로바이어는 시드 fallback으로 처리, 네트워크 미사용 |
+| DB 쓰기 (평가/지표/시그널/스캔이력) | ~6~10 | 배치 upsert 적용 (`69ef499`) |
+| Telegram 발송 | 1~2 | |
+
+- **국내장 스캔 (11종목): 약 18~34건 — 안전**
+- **미국장 스캔 (21종목): 약 28~54건 — 위험**
+  Yahoo `query1`이 다수 종목에서 실패해 `query2`로 폴백하면 **50을 초과**합니다.
+
+**시장 분리 스캔** (미국장 스캔 시 국내 종목 완전 배제, 그 반대) 은 이 예산 안에서 평가 종목 수를
+절반으로 압축하기 위한 필수 전략입니다.
+
+> ⚠️ 서브리퀘스트 한도는 **invocation(= 요청) 단위**로 누적됩니다.
+> 핸들러 안에서 US → KR을 순차 실행해도 같은 요청 안이라 합산되므로 통합 스캔은 예산 안에서 불가능합니다.
+> (워치리스트는 미장 21 + 국장 11 = **32종목**)
+>
+> 대신 `market`을 **필수**로 강제합니다:
+>
+> | 계층 | 처리 |
+> | --- | --- |
+> | `PipelineExecutionOptions.market` | 컴파일 타임 필수 필드 |
+> | `scanService.executeScan` | `'US'`/`'KR'` 아니면 즉시 throw |
+> | `POST /api/v8/scan/run` | market 누락·불명 시 `400` |
+> | `POST /api/v8/cron-scan` (worker) | 동일하게 `400` |
+
+### ⚠️ `[limits]` 는 Workers **Paid** 전용입니다
+
+```toml
+# ❌ Free 플랜에서 이 블록을 추가하면 wrangler deploy가 실패합니다.
+[limits]
+subrequests = 1000
+```
+
+- `limits`는 **Standard(유료) Usage Model 전용**입니다. Free 계정에서 `subrequests` 최대치는 **50이며 상향 자체가 불가능**합니다.
+- wrangler는 클라이언트에서 타입 검증만 하고 **계정 플랜을 검증하지 않아서** `wrangler deploy --dry-run`은 통과합니다.
+  실제 업로드 시 서버가 플랜 오류로 거부합니다.
+- Paid 플랜으로 승격한 뒤에야 유효합니다.
+
+### ⚠️ Free 플랜의 CPU 한도 (더 큰 제약)
+
+무료 플랜 CPU 한도는 **HTTP 요청당 10ms, Cron Trigger당 10ms** 입니다. (Paid는 Cron당 30초~15분)
+
+현재 크론 스캔은 종목당 252봉 기반 technical/momentum 지표 계산을 수행하므로
+(KR 11종목 / US 21종목) 순수 계산량이 **10ms 예산에 근접하거나 초과**합니다.
+커런 스캔이 `Error 1102 (Worker exceeded resource limits)`로 실패할 수 있습니다.
+
+**Free 플랜을 유지하려면:** 크론 트리거를 Worker 내부는 비워두고, **계산은 외부(cron-job.org/GitHub Actions)에서 수행한 뒤
+Supabase에 결과를 적재**하고, Worker는 읽기 전용 API로만 동작시키는 구조를 권장합니다.
+이 경우 Worker CPU는 거의 0이 되어 Free 한도 내에서 안정적으로 동작합니다.
 
 ---
 
