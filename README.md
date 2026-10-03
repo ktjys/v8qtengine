@@ -176,7 +176,7 @@ npm run dev
 # Vite 클라이언트 빌드 & esbuild 서버 번들링
 npm run build
 
-# 프로덕션 서버 실행 (dist/server.cjs)
+# 프로덕션 서버 실행 (dist-server/server.cjs)
 npm start
 ```
 
