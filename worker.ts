@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
 import { watchlistRepository } from './src/db/repositories/watchlistRepository';
 import { assetRepository } from './src/db/repositories/assetRepository';

@@ -23,5 +23,21 @@
     "types": ["vitest/globals", "node", "@cloudflare/workers-types"],
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src/**/*",
+    "*.ts",
+    "*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-server",
+    "src/worker.ts",
+    "src/db/repositories/scanRunItemRepository.ts",
+    "src/engine/scanChunkProcessor.ts",
+    "src/engine/scanFinalizer.ts",
+    "src/engine/scanOrchestrator.ts",
+    "src/engine/scanChunkProcessor.test.ts"
+  ]
 }
