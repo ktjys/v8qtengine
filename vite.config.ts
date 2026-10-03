@@ -2,6 +2,26 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import {execSync} from 'child_process';
+
+const getGitCommitHash = () => {
+  try {
+    if (process.env.CF_PAGES_COMMIT_SHA) return process.env.CF_PAGES_COMMIT_SHA.slice(0,7);
+    if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0,7);
+    if (process.env.COMMIT_SHA) return process.env.COMMIT_SHA.slice(0,7);
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch (e) {
+    return 'c6e04de';
+  }
+};
+
+const getGitCommitMessage = () => {
+  try {
+    return execSync('git log -1 --pretty=%s').toString().trim().slice(0, 80);
+  } catch (e) {
+    return 'fix(ui): tighten navbar gaps to prevent scan button overflow';
+  }
+};
 
 export default defineConfig(() => {
   return {
@@ -13,21 +33,14 @@ export default defineConfig(() => {
     },
     define: {
       __APP_VERSION__: JSON.stringify('8.2.4'),
-      __COMMIT_HASH__: JSON.stringify(
-        process.env.CF_PAGES_COMMIT_SHA?.slice(0, 7) ||
-        process.env.GITHUB_SHA?.slice(0, 7) ||
-        'd5584e7'
-      ),
-      __COMMIT_MESSAGE__: JSON.stringify('fix(ui): fix modal visibility and navbar overflow'),
+      __COMMIT_HASH__: JSON.stringify(getGitCommitHash()),
+      __COMMIT_MESSAGE__: JSON.stringify(getGitCommitMessage()),
       __BUILD_TIME__: JSON.stringify(
         new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' KST'
       ),
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
