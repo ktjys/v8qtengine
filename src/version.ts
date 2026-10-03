@@ -18,8 +18,8 @@ declare const __BUILD_TIME__: string | undefined;
 
 export const APP_VERSION_INFO: AppVersionInfo = {
   version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '8.2.4',
-  commitHash: typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : '14c4db1',
-  commitMessage: typeof __COMMIT_MESSAGE__ !== 'undefined' ? __COMMIT_MESSAGE__ : 'fix: cloudflare subrequests limit & market isolation',
+  commitHash: typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'd5584e7',
+  commitMessage: typeof __COMMIT_MESSAGE__ !== 'undefined' ? __COMMIT_MESSAGE__ : 'fix(ui): fix modal visibility and navbar overflow',
   buildTime: typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '2026-10-03 08:45 KST',
   environment: typeof process !== 'undefined' && process.env?.NODE_ENV === 'development' ? 'development' : 'production',
 };
@@ -28,7 +28,7 @@ export const RECENT_RELEASE_CHANGELOG = [
   {
     version: 'v8.2.4',
     date: '2026-10-03',
-    commit: '14c4db1',
+    commit: 'd5584e7',
     title: 'Cloudflare Worker 서브리퀘스트 한도 초과 해결 & 국장/미장 완전 분리 스캔',
     items: [
       'Cloudflare 무료 플랜 50 subrequests 초과 문제 완벽 해결 (1회 스캔당 ~18회로 최적화)',

@@ -16,9 +16,9 @@ export default defineConfig(() => {
       __COMMIT_HASH__: JSON.stringify(
         process.env.CF_PAGES_COMMIT_SHA?.slice(0, 7) ||
         process.env.GITHUB_SHA?.slice(0, 7) ||
-        '14c4db1'
+        'd5584e7'
       ),
-      __COMMIT_MESSAGE__: JSON.stringify('fix: subrequests limit, market scan isolation & UX audit'),
+      __COMMIT_MESSAGE__: JSON.stringify('fix(ui): fix modal visibility and navbar overflow'),
       __BUILD_TIME__: JSON.stringify(
         new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' KST'
       ),
