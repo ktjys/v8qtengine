@@ -361,78 +361,74 @@ export const StrategyOptimizerView: React.FC<StrategyOptimizerViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* 1. 우량주 기회점수 임계값 */}
             <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-white">우량/성장주 기회점수 임계값</span>
-                <span className="font-mono font-bold text-emerald-400 text-sm">
-                  {customConfig.scoreThresholdGrowth}점
-                </span>
-              </div>
-              <input
-                type="range"
-                min="60"
-                max="85"
-                step="1"
-                value={customConfig.scoreThresholdGrowth}
-                onChange={(e) =>
-                  setCustomConfig({
-                    ...customConfig,
-                    scoreThresholdGrowth: Number(e.target.value),
-                  })
-                }
-                className="w-full accent-emerald-400 cursor-pointer"
-              />
-              <p className="text-[11px] text-slate-400">
-                기본값 76점. 70점으로 하향 시 AAPL, MSFT 등 유망 우량주의 진입 시점이 앞당겨집니다.
-              </p>
+<div className="flex justify-between items-center text-xs">
+                    <label htmlFor="score-threshold-growth" className="font-semibold text-white cursor-pointer">
+                      우량/성장주 기회점수 임계값
+                    </label>
+                    <span className="font-mono font-bold text-emerald-400 text-sm">
+                      {customConfig.scoreThresholdGrowth}점
+                    </span>
+                  </div>
+                  <input
+                    id="score-threshold-growth"
+                    type="range"
+                    min="60"
+                    max="85"
+                    step="1"
+                    value={customConfig.scoreThresholdGrowth}
+                    onChange={(e) =>
+                      setCustomConfig({
+                        ...customConfig,
+                        scoreThresholdGrowth: Number(e.target.value),
+                      })
+                    }
+                    className="w-full accent-emerald-400 cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    성장주 종목은 이 점수 이상을 받아야 모니터링 대상(진입 가능)으로 분류됩니다.
+                  </p>
             </div>
 
             {/* 2. 신호 생성 최소 기준 점수 */}
             <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-white">시그널 생성 최소 점수 (Signal Floor)</span>
-                <span className="font-mono font-bold text-cyan-400 text-sm">
-                  {customConfig.signalMinScore}점
-                </span>
-              </div>
-              <input
-                type="range"
-                min="60"
-                max="80"
-                step="1"
-                value={customConfig.signalMinScore}
-                onChange={(e) =>
-                  setCustomConfig({
-                    ...customConfig,
-                    signalMinScore: Number(e.target.value),
-                  })
-                }
-                className="w-full accent-cyan-400 cursor-pointer"
-              />
-              <p className="text-[11px] text-slate-400">
-                이 점수를 충족하는 종목만 시스템의 공식 트레이딩 시그널로 발행됩니다.
-              </p>
+<div className="flex justify-between items-center text-xs">
+                    <label htmlFor="signal-min-score" className="font-semibold text-white cursor-pointer">
+                      시그널 생성 최소 점수 (Signal Floor)
+                    </label>
+                    <span className="font-mono font-bold text-cyan-400 text-sm">
+                      {customConfig.signalMinScore}점
+                    </span>
+                  </div>
+                  <input
+                    id="signal-min-score"
+                    type="range"
+                    min="60"
+                    max="80"
+                    step="1"
+                    value={customConfig.signalMinScore}
+                    onChange={(e) =>
+                      setCustomConfig({
+                        ...customConfig,
+                        signalMinScore: Number(e.target.value),
+                      })
+                    }
+                    className="w-full accent-cyan-400 cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    이 점수를 충족하는 종목만 시스템의 공식 트레이딩 시그널로 발행됩니다.
+                  </p>
             </div>
 
             {/* 3. 손절 ATR 배수 */}
             <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-white">손절선 ATR 배수 (Stop Loss)</span>
+                <label htmlFor="stop-loss-atr-mult" className="font-semibold text-white cursor-pointer">
+                  손절선 ATR 배수 (Stop Loss)
+                </label>
                 <span className="font-mono font-bold text-amber-400 text-sm">
                   {customConfig.stopLossAtrMult.toFixed(1)}x ATR
                 </span>
-              </div>
-              <input
-                type="range"
-                min="1.2"
-                max="3.5"
-                step="0.1"
-                value={customConfig.stopLossAtrMult}
-                onChange={(e) =>
-                  setCustomConfig({
-                    ...customConfig,
-                    stopLossAtrMult: Number(e.target.value),
-                  })
-                }
+              </div
                 className="w-full accent-amber-400 cursor-pointer"
               />
               <p className="text-[11px] text-slate-400">
@@ -443,7 +439,9 @@ export const StrategyOptimizerView: React.FC<StrategyOptimizerViewProps> = ({
             {/* 4. 익절 ATR 배수 */}
             <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-white">목표가 ATR 배수 (Take Profit)</span>
+                <label htmlFor="take-profit-atr-mult" className="font-semibold text-white cursor-pointer">
+                  목표가 ATR 배수 (Take Profit)
+                </label>
                 <span className="font-mono font-bold text-emerald-400 text-sm">
                   {customConfig.takeProfitAtrMult.toFixed(1)}x ATR
                 </span>
@@ -470,7 +468,9 @@ export const StrategyOptimizerView: React.FC<StrategyOptimizerViewProps> = ({
             {/* 5. RSI 과열 차단 상한 */}
             <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-white">RSI 과열 매수 차단 상한</span>
+                <label htmlFor="rsi-upper-limit" className="font-semibold text-white cursor-pointer">
+                  RSI 과열 매수 차단 상한
+                </label>
                 <span className="font-mono font-bold text-rose-400 text-sm">
                   {customConfig.rsiUpperLimit}
                 </span>

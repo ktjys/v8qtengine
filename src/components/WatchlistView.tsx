@@ -585,7 +585,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 placeholder="티커 / 종목명 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950/70 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950/70 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus-visible:border-cyan-500"
               />
             </div>
 
@@ -707,7 +707,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <select
               value={filterAssetType}
               onChange={(e) => setFilterAssetType(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus-visible:border-cyan-500"
             >
               <option value="ALL">자산 분류 (전체)</option>
               <option value="etf">ETF</option>
@@ -718,7 +718,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <select
               value={filterStrategy}
               onChange={(e) => setFilterStrategy(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus-visible:border-cyan-500"
             >
               <option value="ALL">전략 (전체)</option>
               <option value="broad_market_etf">Broad Market ETF</option>
@@ -735,7 +735,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <select
               value={filterRisk}
               onChange={(e) => setFilterRisk(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus-visible:border-cyan-500"
             >
               <option value="ALL">리스크 레벨 (전체)</option>
               <option value="LOW">LOW Risk</option>
@@ -747,7 +747,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <select
               value={filterDecision}
               onChange={(e) => setFilterDecision(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-cyan-500"
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-300 focus-visible:border-cyan-500"
             >
               <option value="ALL">의사결정 (전체)</option>
               <option value="STRONG_OPPORTUNITY">STRONG OPPORTUNITY</option>

@@ -33,6 +33,7 @@ export function SortableHeader<T extends string>({
     <th
       scope="col"
       aria-sort={ariaSort}
+      role="button"
       className={`p-0 whitespace-nowrap text-xs font-semibold ${className}`}
     >
       <button
@@ -44,6 +45,7 @@ export function SortableHeader<T extends string>({
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
         }`}
         title={`클릭하여 ${isActive ? (currentOrder === 'desc' ? '오름차순' : '내림차순') : '정렬'} 변경`}
+        aria-label={isActive ? (currentOrder === 'desc' ? '내림차순 정렬' : '오름차순 정렬') : '정렬 토글'}
       >
         <span className="truncate">{children}</span>
         <span className="shrink-0 transition-transform">

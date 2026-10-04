@@ -307,12 +307,12 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               <input
                 id="pos-account-equity"
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
                 step={isKr ? 1000000 : 1000}
                 min={isKr ? 1000000 : 1000}
                 value={accountEquity}
                 onChange={(e) => setAccountEquity(Math.max(isKr ? 1000000 : 1000, Number(e.target.value)))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-sm font-mono font-bold text-white focus-visible:border-cyan-500"
               />
             </div>
           </div>

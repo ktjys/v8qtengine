@@ -431,8 +431,10 @@ export const MacroEarningsView: React.FC<MacroEarningsViewProps> = ({
 
           {/* Search Box */}
           <div className="relative w-full sm:w-64">
+            <label htmlFor="macro-search-input" className="sr-only">티커 / 종목명 검색</label>
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
+              id="macro-search-input"
               type="text"
               placeholder="티커 / 종목명 검색..."
               value={searchQuery}

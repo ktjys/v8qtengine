@@ -393,13 +393,14 @@ export const BackfillModal: React.FC<BackfillModalProps> = ({
                 {/* 2. Opportunity Score Threshold */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-300 flex items-center space-x-1.5">
+                    <label htmlFor="backfill-threshold" className="font-semibold text-slate-300 flex items-center space-x-1.5 cursor-pointer">
                       <Sliders className="w-4 h-4 text-cyan-400" />
                       <span>시그널 진입 점수 임계값 (Min Opportunity Score)</span>
-                    </span>
+                    </label>
                     <span className="font-mono font-bold text-cyan-400">{threshold}점 이상</span>
                   </div>
                   <input
+                    id="backfill-threshold"
                     type="range"
                     min="60"
                     max="85"

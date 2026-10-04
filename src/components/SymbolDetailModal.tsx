@@ -73,6 +73,18 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
   if (!evaluation) return null;
 
   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'dip_buy' | 'sizing' | 'opportunity' | 'risk' | 'decision' | 'override' | 'signals' | 'alerts'>(initialTab);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const [copiedTelegram, setCopiedTelegram] = useState(false);
   const [copiedDipTelegram, setCopiedDipTelegram] = useState(false);
 
@@ -1306,10 +1318,11 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label htmlFor="override-confidence" className="block text-slate-300 font-semibold mb-1">
                   분류 신뢰도 확신 (Confidence: {(editConfidence * 100).toFixed(0)}%)
                 </label>
                 <input
+                  id="override-confidence"
                   type="range"
                   min="0.5"
                   max="1.0"
@@ -1321,8 +1334,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">수동 지정 사유 (Reason)</label>
+                <label htmlFor="override-reason" className="block text-slate-300 font-semibold mb-1">수동 지정 사유 (Reason)</label>
                 <input
+                  id="override-reason"
                   type="text"
                   value={editReason}
                   onChange={(e) => setEditReason(e.target.value)}

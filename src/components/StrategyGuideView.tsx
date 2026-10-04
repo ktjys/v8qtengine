@@ -1351,6 +1351,7 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                     <label className="text-xs text-slate-400">진입 주가 (USD $)</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       value={calcStockPrice}
                       onChange={(e) => setCalcStockPrice(Math.max(1, Number(e.target.value)))}
                       className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-100 font-mono"
@@ -1360,6 +1361,7 @@ export const StrategyGuideView: React.FC<StrategyGuideViewProps> = ({
                     <label className="text-xs text-slate-400">일간 변동폭 ATR (USD $)</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       step={0.1}
                       value={calcAtr}
                       onChange={(e) => setCalcAtr(Math.max(0.1, Number(e.target.value)))}

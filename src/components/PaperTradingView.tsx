@@ -1014,7 +1014,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     value={orderTicker}
                     onChange={(e) => setOrderTicker(e.target.value.toUpperCase())}
                     placeholder={isKr ? '005930.KS' : 'NVDA'}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus-visible:border-cyan-500"
                     required
                   />
                   {/* Quick Select Chips */}
@@ -1089,7 +1089,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     id="paper-order-strategy"
                     value={orderStrategy}
                     onChange={(e) => setOrderStrategy(e.target.value as TradeStrategySource)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus-visible:border-cyan-500"
                   >
                     <option value="STRATEGY_A">전략 A (모멘텀 돌파)</option>
                     <option value="STRATEGY_B">전략 B (우량주 눌림적립)</option>
@@ -1126,12 +1126,12 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                   <input
                     id="paper-order-shares"
                     type="number"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     min="1"
                     step="1"
                     value={orderShares}
                     onChange={(e) => setOrderShares(Math.max(1, Number(e.target.value)))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus-visible:border-cyan-500"
                     required
                   />
                 </div>
@@ -1147,7 +1147,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     step={isKr ? 1 : 0.01}
                     value={orderPrice}
                     onChange={(e) => setOrderPrice(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus-visible:border-cyan-500"
                     required
                   />
                 </div>
@@ -1169,15 +1169,21 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 </div>
               </div>
 
-              {/* Reason */}
-              <div>
-                <label htmlFor="paper-order-reason" className="text-xs font-medium text-slate-400 block mb-1">매매 메모 (선택)</label>
-                <input
-                  id="paper-order-reason"
-                  type="text"
-                  placeholder="예: 20일 돌파 신호 확인 후 1차 진입"
-                  value={orderReason}
-                  onChange={(e) => setOrderReason(e.target.value)}
+matplotlib.pyplot as plt
+import numpy as np
+
+# Sample data
+x = np.linspace(0, 10, 100)
+y = np.sin(x)
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plt.plot(x, y, 'b-', linewidth=2)
+plt.title('Sine Wave')
+plt.xlabel('X-axis')
+plt.ylabel('Y-axis')
+plt.grid(True, alpha=0.3)
+plt.show()
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
                 />
               </div>

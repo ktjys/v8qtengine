@@ -86,8 +86,13 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
     };
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
     }
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
   }, [isOpen, onClose]);
 
   const fetchDiagnostics = async () => {

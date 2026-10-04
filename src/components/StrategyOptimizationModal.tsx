@@ -381,12 +381,15 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
                 {/* 1. 우량주 기회점수 임계값 */}
                 <div className="space-y-1.5 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white">우량/성장주 기회점수 임계값</span>
+                    <label htmlFor="score-threshold-growth" className="font-semibold text-white cursor-pointer">
+                      우량/성장주 기회점수 임계값
+                    </label>
                     <span className="font-mono font-bold text-emerald-400 text-sm">
                       {customConfig.scoreThresholdGrowth}점
                     </span>
                   </div>
                   <input
+                    id="score-threshold-growth"
                     type="range"
                     min="60"
                     max="85"
@@ -408,12 +411,15 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
                 {/* 2. 신호 생성 최소 기준 점수 */}
                 <div className="space-y-1.5 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white">시그널 생성 최소 점수 (Signal Floor)</span>
+                    <label htmlFor="signal-min-score" className="font-semibold text-white cursor-pointer">
+                      시그널 생성 최소 점수 (Signal Floor)
+                    </label>
                     <span className="font-mono font-bold text-cyan-400 text-sm">
                       {customConfig.signalMinScore}점
                     </span>
                   </div>
                   <input
+                    id="signal-min-score"
                     type="range"
                     min="60"
                     max="80"
@@ -435,12 +441,15 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
                 {/* 3. 손절 ATR 배수 */}
                 <div className="space-y-1.5 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white">손절선 ATR 배수 (Stop Loss)</span>
+                    <label htmlFor="stop-loss-atr-mult" className="font-semibold text-white cursor-pointer">
+                      손절선 ATR 배수 (Stop Loss)
+                    </label>
                     <span className="font-mono font-bold text-amber-400 text-sm">
                       {customConfig.stopLossAtrMult.toFixed(1)}x ATR
                     </span>
                   </div>
                   <input
+                    id="stop-loss-atr-mult"
                     type="range"
                     min="1.2"
                     max="3.5"
@@ -462,12 +471,15 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
                 {/* 4. 익절 ATR 배수 */}
                 <div className="space-y-1.5 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white">목표가 ATR 배수 (Take Profit)</span>
+                    <label htmlFor="take-profit-atr-mult" className="font-semibold text-white cursor-pointer">
+                      목표가 ATR 배수 (Take Profit)
+                    </label>
                     <span className="font-mono font-bold text-emerald-400 text-sm">
                       {customConfig.takeProfitAtrMult.toFixed(1)}x ATR
                     </span>
                   </div>
                   <input
+                    id="take-profit-atr-mult"
                     type="range"
                     min="2.5"
                     max="6.0"
@@ -489,12 +501,15 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
                 {/* 5. RSI 과열 차단 상한 */}
                 <div className="space-y-1.5 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white">RSI 과열 매수 차단 상한 (RSI Max)</span>
+                    <label htmlFor="rsi-upper-limit" className="font-semibold text-white cursor-pointer">
+                      RSI 과열 매수 차단 상한 (RSI Max)
+                    </label>
                     <span className="font-mono font-bold text-rose-400 text-sm">
                       {customConfig.rsiUpperLimit}
                     </span>
                   </div>
                   <input
+                    id="rsi-upper-limit"
                     type="range"
                     min="45"
                     max="75"

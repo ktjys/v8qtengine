@@ -324,7 +324,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
             placeholder="티커 또는 종목명 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-64 bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+            className="w-full sm:w-64 bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus-visible:border-rose-500"
           />
         </div>
       </div>
@@ -641,7 +641,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   }
                   value={newTicker}
                   onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500 font-mono"
                 />
                 {/* Recommended Quick Preset Buttons */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
@@ -718,7 +718,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   placeholder={activeMarket === 'KR' ? '예: 삼성전자, SK하이닉스' : '예: 엔비디아, 애플'}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500"
                 />
               </div>
 
@@ -736,7 +736,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                     placeholder={detectMarketRegion(newTicker) === 'KR' ? '예: 74000' : '예: 120.50'}
                     value={newEntryPrice}
                     onChange={(e) => setNewEntryPrice(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500 font-mono"
                   />
                 </div>
                 <div>
@@ -746,12 +746,12 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   <input
                     id="add-pos-shares"
                     type="number"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     step="1"
                     placeholder="10"
                     value={newShares}
                     onChange={(e) => setNewShares(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500 font-mono"
                   />
                 </div>
               </div>
@@ -769,7 +769,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                     placeholder="15"
                     value={newTpPct}
                     onChange={(e) => setNewTpPct(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500 font-mono"
                   />
                   <p className="text-[10px] text-slate-500 mt-0.5">기본값: +15%</p>
                 </div>
@@ -785,7 +785,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                     placeholder="-7"
                     value={newSlPct}
                     onChange={(e) => setNewSlPct(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500 font-mono"
                   />
                   <p className="text-[10px] text-slate-500 mt-0.5">기본값: -7%</p>
                 </div>
@@ -801,7 +801,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   placeholder="예: 20일선 눌림목 반등 매수"
                   value={newMemo}
                   onChange={(e) => setNewMemo(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:border-rose-500"
                 />
               </div>
 

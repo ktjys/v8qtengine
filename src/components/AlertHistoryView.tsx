@@ -531,8 +531,10 @@ export const AlertHistoryView: React.FC<AlertHistoryViewProps> = ({
         {/* Right side: Search & Refresh */}
         <div className="flex items-center space-x-2">
           <div className="relative flex-1 md:w-48">
+            <label htmlFor="alert-history-search-input" className="sr-only">티커 검색</label>
             <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-400" />
             <input
+              id="alert-history-search-input"
               type="text"
               placeholder="티커 검색 (예: NVDA, SPY)"
               value={searchTerm}
