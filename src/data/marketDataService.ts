@@ -41,6 +41,18 @@ export class MarketDataService {
   private pendingIndicators: { ticker: string; indicators: RawMarketIndicators; date: string }[] = [];
   private pendingFundamentals: { data: FundamentalData; source: string }[] = [];
 
+  // In-memory indicator cache: key = `${ticker}:${latestBarDate}`
+  // Survives for the lifetime of the Worker instance (evicted on cold start)
+  private indicatorCache = new Map<string, {
+    indicators: RawMarketIndicators;
+    riskInputs: RawRiskInputs;
+    latestBarDate: string;
+    timestamp: number;
+  }>();
+
+  // Cache TTL: 12 hours (covers multiple scans in a trading day)
+  private readonly CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
   async flushIndicators(): Promise<void> {
     if (this.pendingIndicators.length > 0) {
       const items = [...this.pendingIndicators];
@@ -131,6 +143,48 @@ export class MarketDataService {
       this.provider.resetFallbackFlag && this.provider.resetFallbackFlag();
     }
 
+    // 1. Get latest bar date first (lightweight DB query - just 1 row)
+    const latestBarDate = await marketDataRepository.getLatestBarDate(cleanTicker);
+    const effectiveBarDate = latestBarDate || new Date().toISOString().split('T')[0];
+
+    // 2. Check indicator cache (key = ticker:latestBarDate)
+    const cacheKey = `${cleanTicker}:${effectiveBarDate}`;
+    const cached = this.indicatorCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      // Cache hit: return pre-computed indicators + risk inputs
+      // Need to fetch live quote for current price/change
+      const liveQuote = await this.provider.getQuote(cleanTicker);
+      const dbFund = await fundamentalsRepository.getLatest(cleanTicker);
+      const dbAsset = await assetRepository.findByTicker(cleanTicker);
+      const isEtf = dbAsset?.asset_type === 'etf' || isEtfHint;
+
+      let finalChange1d = liveQuote.changePercent;
+      if ((finalChange1d === undefined || isNaN(finalChange1d) || finalChange1d === null)) {
+        // Use cached bar data for change calculation if quote doesn't have it
+        const cachedBars = await marketDataRepository.getBars(cleanTicker, 2);
+        if (cachedBars.length >= 2) {
+          const last = cachedBars[cachedBars.length - 1].close;
+          const prev = cachedBars[cachedBars.length - 2].close;
+          if (prev > 0) {
+            finalChange1d = Math.round(((last - prev) / prev) * 100) / 100;
+          }
+        }
+      }
+
+      return this.buildProcessedAssetDataFromCache(
+        cleanTicker,
+        liveQuote,
+        cached.indicators,
+        cached.riskInputs,
+        dbFund,
+        dbAsset,
+        isEtf,
+        finalChange1d ?? 0,
+        effectiveBarDate
+      );
+    }
+
+    // 3. Cache miss: full computation path
     // 1. Cache-first: Try DB first for fresh bars
     let dbBars = await marketDataRepository.getBars(cleanTicker, 252);
     const lastBar = dbBars.length > 0 ? dbBars[dbBars.length - 1] : null;
@@ -333,7 +387,7 @@ export class MarketDataService {
       }
     }
 
-    return {
+    const result = {
       ticker: cleanTicker,
       name: normalized.quote.longName || normalized.quote.shortName || cleanTicker,
       price: normalized.quote.price,
@@ -347,6 +401,11 @@ export class MarketDataService {
       marketDataSource,
       fundamentalDataSource,
     };
+
+    // Store in cache for subsequent calls with same latest bar date
+    this.cacheIndicators(cleanTicker, effectiveBarDate, indicators, riskInputs);
+
+    return result;
   }
 
   async processBatch(tickers: string[]): Promise<ProcessedAssetData[]> {
@@ -417,6 +476,113 @@ export class MarketDataService {
       results.push(...chunkResults);
     }
     return results;
+  }
+
+  /**
+   * Build ProcessedAssetData from cached indicators + fresh live quote
+   * Used when indicator cache hits (same latest bar date)
+   */
+  private buildProcessedAssetDataFromCache(
+    cleanTicker: string,
+    liveQuote: QuoteData,
+    cachedIndicators: RawMarketIndicators,
+    cachedRiskInputs: RawRiskInputs,
+    dbFund: any,
+    dbAsset: any,
+    isEtf: boolean,
+    change1d: number,
+    latestBarDate: string
+  ): ProcessedAssetData {
+    const rawMetadata: RawYahooMetadata = {
+      quoteType: isEtf ? 'ETF' : 'EQUITY',
+      shortName: liveQuote.shortName,
+      longName: liveQuote.longName,
+      sector: dbAsset?.sector,
+      industry: dbAsset?.industry,
+      marketCap: dbFund?.market_cap,
+      revenueGrowth: dbFund?.revenue_growth,
+      earningsGrowth: dbFund?.eps_growth,
+      beta: cachedRiskInputs.beta,
+      trailingPE: dbFund?.trailing_pe,
+      forwardPE: dbFund?.forward_pe,
+      dividendYield: dbFund?.dividend_yield,
+    };
+
+    // Determine fallback status from cached data
+    const hasSeedBars = false; // Cached data is from DB, source tracked separately
+    const providerFellBack = this.provider.name === 'yahoo' && !!this.provider.getHadFallback?.();
+    const isFallback = providerFellBack || hasSeedBars;
+    const marketDataSource = isFallback ? 'seed' : this.provider.name;
+    const fundamentalDataSource = dbFund?.source || (this.provider.name === 'yahoo' ? 'seed' : this.provider.name);
+
+    const normalized: NormalizedMarketData = {
+      ticker: cleanTicker,
+      quote: liveQuote,
+      bars: [], // Not needed for evaluation, indicators already computed
+      fundamentals: {
+        ticker: cleanTicker,
+        asOfDate: dbFund?.as_of_date,
+        marketCap: dbFund?.market_cap,
+        revenueGrowthYoy: dbFund?.revenue_growth,
+        earningsGrowthYoy: dbFund?.eps_growth,
+        operatingMargin: dbFund?.operating_margin,
+        freeCashFlowMargin: dbFund?.fcf_margin,
+        trailingPe: dbFund?.trailing_pe,
+        forwardPe: dbFund?.forward_pe,
+        psRatio: dbFund?.ps_ratio,
+        pegRatio: dbFund?.peg_ratio,
+        sector: dbAsset?.sector,
+        industry: dbAsset?.industry,
+        quoteType: isEtf ? 'ETF' : 'EQUITY',
+        beta: cachedRiskInputs.beta,
+      },
+      benchmarkBars: [],
+      fetchedAt: new Date().toISOString(),
+      source: this.provider.name,
+    };
+
+    const dataQuality = {
+      data_quality_score: 90,
+      data_freshness: 'FRESH' as const,
+      last_updated: new Date().toISOString(),
+      source: marketDataSource,
+      data_warnings: [] as string[],
+      bars_count: 252,
+      has_fundamentals: !!dbFund,
+    };
+
+    return {
+      ticker: cleanTicker,
+      name: liveQuote.longName || liveQuote.shortName || cleanTicker,
+      price: liveQuote.price,
+      change1d,
+      rawMetadata,
+      indicators: cachedIndicators,
+      riskInputs: cachedRiskInputs,
+      dataQuality,
+      normalized,
+      isFallback,
+      marketDataSource,
+      fundamentalDataSource,
+    };
+  }
+
+  /**
+   * Store computed indicators in cache after full computation
+   */
+  private cacheIndicators(
+    cleanTicker: string,
+    latestBarDate: string,
+    indicators: RawMarketIndicators,
+    riskInputs: RawRiskInputs
+  ): void {
+    const cacheKey = `${cleanTicker}:${latestBarDate}`;
+    this.indicatorCache.set(cacheKey, {
+      indicators,
+      riskInputs,
+      latestBarDate,
+      timestamp: Date.now(),
+    });
   }
 }
 

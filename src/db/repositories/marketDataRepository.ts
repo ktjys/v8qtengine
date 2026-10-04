@@ -164,6 +164,40 @@ export class MarketDataRepository {
       source: r.source ?? undefined,
     }));
   }
+
+  async getLatestBarDate(ticker: string): Promise<string | null> {
+    const clean = ticker.toUpperCase().trim();
+
+    if (dbClient.isTableAvailable('market_data_daily') && dbClient.supabase) {
+      try {
+        const { data, error } = await dbClient.supabase
+          .from('market_data_daily')
+          .select('trade_date')
+          .eq('ticker', clean)
+          .order('trade_date', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          dbClient.handleDbError('market_data_daily', 'getLatestBarDate', error);
+        } else if (data && data.length > 0) {
+          return data[0].trade_date;
+        }
+      } catch (err) {
+        dbClient.handleDbError('market_data_daily', 'getLatestBarDate', err);
+      }
+    }
+
+    // Local fallback
+    let latestDate: string | null = null;
+    for (const [k, v] of dbClient.market_data_daily.entries()) {
+      if (k.startsWith(`${clean}_`)) {
+        if (!latestDate || v.trade_date > latestDate) {
+          latestDate = v.trade_date;
+        }
+      }
+    }
+    return latestDate;
+  }
 }
 
 export const marketDataRepository = new MarketDataRepository();
