@@ -53,6 +53,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Sync version metadata
+        run: node scripts/update-version.cjs "${{ github.sha }}"
+
       - name: Build production bundle
         run: bun run build
         continue-on-error: false
@@ -102,6 +105,9 @@ jobs:
           name: build-artifacts
           path: ./
 
+      - name: Sync version metadata
+        run: node scripts/update-version.cjs "${{ github.sha }}"
+
       - name: Upload preview version
         run: |
           npx wrangler versions upload \
@@ -135,6 +141,9 @@ jobs:
           name: build-artifacts
           path: ./
 
+      - name: Sync version metadata
+        run: node scripts/update-version.cjs "${{ github.sha }}"
+
       - name: Deploy to Cloudflare Workers
         run: |
           npx wrangler deploy
@@ -158,6 +167,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Sync version metadata
+        run: node scripts/update-version.cjs "${{ github.sha }}"
 
       - name: Build production
         run: bun run build

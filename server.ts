@@ -23,6 +23,7 @@ import { getInitialOrLatestEvaluations } from './src/pipeline/v8Pipeline';
 import { evaluationRepository } from './src/db/repositories/evaluationRepository';
 import { createSignalSnapshot } from './src/engine/signalEngine';
 import { buildSignalTelegramMessage } from './src/notification/templates';
+import { APP_VERSION_INFO } from './src/version';
 
 function createRateLimiter(windowMs: number, max: number) {
   const hits = new Map<string, number[]>();
@@ -64,6 +65,9 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'ok',
+      version: APP_VERSION_INFO.version,
+      commit_hash: APP_VERSION_INFO.commitHash,
+      build_time: APP_VERSION_INFO.buildTime,
       timestamp: new Date().toISOString(),
     });
   });

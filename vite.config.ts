@@ -19,7 +19,7 @@ const getGitCommitMessage = () => {
   try {
     return execSync('git log -1 --pretty=%s').toString().trim().slice(0, 80);
   } catch (e) {
-    return 'fix(ui): tighten navbar gaps to prevent scan button overflow';
+    return 'fix(ui): responsive two-tier navbar and mobile layout';
   }
 };
 

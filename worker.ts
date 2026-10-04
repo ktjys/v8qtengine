@@ -24,6 +24,7 @@ import { telegramNotifier } from './src/notification/telegramNotifier';
 import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from './src/constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from './src/utils/stockSearchService';
 import { detectMarketRegion, formatTelegramStockName, formatStockDisplayName } from './src/utils/marketUtils';
+import { APP_VERSION_INFO } from './src/version';
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -102,6 +103,27 @@ async function ensureDbConnected(env: any): Promise<boolean> {
   return false;
 }
 
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.5" result="glow" />
+      <feComposite in="SourceGraphic" in2="glow" operator="over" />
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0f172a" />
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#grad)" fill-opacity="0.18" stroke="url(#grad)" stroke-width="2" />
+  <path d="M12 36 L22 36 L28 19 L36 45 L42 29 L48 36 L52 36" stroke="#22d3ee" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)" />
+  <circle cx="28" cy="19" r="2.5" fill="#ffffff" />
+  <circle cx="36" cy="45" r="2.5" fill="#ffffff" />
+  <circle cx="42" cy="29" r="2.5" fill="#ffffff" />
+</svg>`;
+
+const FAVICON_ICO_BASE64 = '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';
+
 export default {
   async fetch(request: Request, env: any, ctx: any): Promise<Response> {
     const url = new URL(request.url);
@@ -119,6 +141,39 @@ export default {
       });
     }
 
+    // Static Favicon & Icon Handler (Prevents 404 on /favicon.ico and /favicon.svg)
+    if (path === '/favicon.ico' || path === '/favicon.svg' || path === '/apple-touch-icon.png') {
+      if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+        try {
+          const assetRes = await env.ASSETS.fetch(request);
+          if (assetRes.status < 400) {
+            return assetRes;
+          }
+        } catch {}
+      }
+
+      if (path === '/favicon.svg') {
+        return new Response(FAVICON_SVG, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/svg+xml; charset=utf-8',
+            'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+
+      const icoBytes = Uint8Array.from(atob(FAVICON_ICO_BASE64), (c) => c.charCodeAt(0));
+      return new Response(icoBytes, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/x-icon',
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
     await ensureDbConnected(env);
 
     const dbNotConnected = !dbClient.isSupabaseConnected;
@@ -130,11 +185,15 @@ export default {
 
     // Health check
     if (path === '/api/health') {
+      const commitHash =
+        (typeof env !== 'undefined' && (env?.COMMIT_HASH || env?.CF_PAGES_COMMIT_SHA || env?.GITHUB_SHA))?.slice(0, 7) ||
+        APP_VERSION_INFO.commitHash;
+
       return jsonResponse({
         status: 'ok',
-        version: '8.2.4',
-        commit_hash: '14c4db1',
-        build_time: '2026-10-03 08:45 KST',
+        version: APP_VERSION_INFO.version,
+        commit_hash: commitHash,
+        build_time: APP_VERSION_INFO.buildTime,
         provider: evaluationService.getProviderName(),
         db_connected: dbClient.isSupabaseConnected,
         db_config_source: dbClient.configSource,
