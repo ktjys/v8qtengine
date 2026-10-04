@@ -145,44 +145,161 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40">
+      {/* Tier 1: Brand & Core Utility Bar */}
       <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14 sm:h-16 gap-1 sm:gap-1.5">
-          {/* Logo & Brand */}
+        <div className="flex items-center justify-between h-13 sm:h-14 gap-2 sm:gap-4">
+          {/* Logo, Brand & Market Toggle */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
-              <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
+              <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-white stroke-[2.5]" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center space-x-1.5">
-                <span className="font-bold text-xs sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent truncate">
-                  QUANT ENGINE
-                </span>
-                <span className="hidden sm:inline-flex px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
-                  LIVE
-                </span>
+            <div className="min-w-0 flex items-center space-x-2">
+              <span className="font-bold text-sm sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent truncate">
+                QUANT ENGINE
+              </span>
+              <span className="hidden sm:inline-flex px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+                LIVE
+              </span>
+            </div>
+
+            {/* Market Region Segmented Toggle */}
+            {onSelectMarket && (
+              <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner shrink-0 ml-1 sm:ml-2">
+                <button
+                  id="market-select-us-btn"
+                  type="button"
+                  onClick={() => onSelectMarket('US')}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-all ${
+                    activeMarket === 'US'
+                      ? 'bg-blue-600 text-white shadow-sm font-bold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                  title="미국 주식 & ETF (USD $ / S&P500 기준)"
+                >
+                  <span className="text-xs leading-none">🇺🇸</span>
+                  <span className="text-xs">US</span>
+                  <span className="hidden md:inline text-xs">장</span>
+                </button>
+                <button
+                  id="market-select-kr-btn"
+                  type="button"
+                  onClick={() => onSelectMarket('KR')}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-all ${
+                    activeMarket === 'KR'
+                      ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                  title="국내 주식 & ETF (KRW ₩ / KOSPI200 기준)"
+                >
+                  <span className="text-xs leading-none">🇰🇷</span>
+                  <span className="text-xs">KR</span>
+                  <span className="hidden md:inline text-xs">장</span>
+                </button>
               </div>
-              <p className="text-[10px] text-slate-400 font-mono hidden xl:block truncate max-w-[220px]">
-                Dual Quant v8.2 Matrix
-              </p>
-            </div>
+            )}
           </div>
 
-          {/* Desktop Navigation Tabs (Clean Responsive Layout) */}
-          <nav className="hidden lg:flex items-center space-x-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
+          {/* Action Trigger Controls & Tools */}
+          <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+            {/* P1-1: Data Freshness Badge */}
+            <DataFreshnessBadge
+              evaluations={evaluations}
+              onRefresh={onRefreshData}
+              isRefreshing={isRefreshingData}
+              className="hidden sm:inline-flex"
+            />
+
+            {/* Commit & Version Indicator (Req 3) */}
+            {onOpenVersionModal && (
+              <button
+                id="header-version-btn"
+                type="button"
+                onClick={onOpenVersionModal}
+                className="hidden md:flex items-center space-x-1 py-1 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-all active:scale-95 shrink-0"
+                title={`시스템 버전 v${APP_VERSION_INFO.version} (커밋 #${APP_VERSION_INFO.commitHash}) - 클릭하여 배포 세부정보 및 캐시 갱신 확인`}
+              >
+                <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="font-bold">#{APP_VERSION_INFO.commitHash}</span>
+              </button>
+            )}
+
+            {/* DB Health Modal Button */}
+            {onOpenDbHealthModal && (
+              <button
+                id="header-db-health-btn"
+                type="button"
+                onClick={onOpenDbHealthModal}
+                className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/80 transition-all active:scale-95 shrink-0"
+                title="데이터베이스 헬스체크 & DDL"
+              >
+                <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="hidden lg:inline">DB 헬스</span>
+              </button>
+            )}
+
+            {/* Schedule Auto Alert Button */}
+            <button
+              id="header-schedule-btn"
+              type="button"
+              onClick={onOpenScheduleModal}
+              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all active:scale-95 shrink-0"
+              title="하루 2회 자동 스캔 & 텔레그램 알림 설정"
+            >
+              <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="hidden lg:inline">자동 알림</span>
+            </button>
+
+            {/* Run Scan Button */}
+            <button
+              id="header-run-scan-btn"
+              type="button"
+              onClick={onOpenScanModal}
+              className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 shrink-0"
+              title="실시간 퀀트 스캔 실행"
+            >
+              <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+              <span>스캔 실행</span>
+            </button>
+
+            {/* Mobile / Tablet Drawer Toggle Button */}
+            <button
+              id="header-mobile-menu-btn"
+              type="button"
+              onClick={() => setIsMobileDrawerOpen((prev) => !prev)}
+              className="md:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 shrink-0 ml-0.5"
+              aria-label="전체 메뉴 열기"
+            >
+              {isMobileDrawerOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tier 2: Dedicated Navigation Tab Bar (Desktop & Responsive) */}
+      <div className="border-t border-slate-800/80 bg-slate-950/60 backdrop-blur-sm">
+        <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+          <nav
+            role="tablist"
+            aria-label="메인 내비게이션 탭"
+            className="flex items-center space-x-1 sm:space-x-1.5 py-1.5 overflow-x-auto no-scrollbar whitespace-nowrap"
+          >
             {mainTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   id={`tab-${tab.id}-btn`}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`tabpanel-${tab.id}`}
                   onClick={() => {
                     setActiveTab(tab.id);
                     setIsMoreMenuOpen(false);
                   }}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 ${
                     isActive
-                      ? 'bg-slate-800 text-cyan-300 shadow-sm font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                      ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30 font-semibold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
                   }`}
                 >
                   {tab.icon}
@@ -202,18 +319,34 @@ export const Navbar: React.FC<NavbarProps> = ({
               );
             })}
 
+            {/* Subtle Divider */}
+            <div className="h-4 w-px bg-slate-800 shrink-0 mx-1" aria-hidden="true" />
+
             {/* More Menu Dropdown for Secondary Tabs */}
-            <div className="relative" ref={moreMenuRef}>
+            <div className="relative shrink-0" ref={moreMenuRef}>
               <button
                 id="tab-more-menu-btn"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded={isMoreMenuOpen}
                 onClick={() => setIsMoreMenuOpen((prev) => !prev)}
-                className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 ${
                   isSecondaryActive
-                    ? 'bg-slate-800 text-purple-300 shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                    ? 'bg-slate-800 text-purple-300 shadow-sm border border-purple-500/30 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
                 }`}
               >
-                <span>{isSecondaryActive && activeSecondaryItem ? activeSecondaryItem.label : '분석 도구'}</span>
+                {isSecondaryActive && activeSecondaryItem ? (
+                  <>
+                    <span className="shrink-0">{activeSecondaryItem.icon}</span>
+                    <span>{activeSecondaryItem.label}</span>
+                  </>
+                ) : (
+                  <>
+                    <Sliders className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span>분석 도구</span>
+                  </>
+                )}
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform duration-200 ${
                     isMoreMenuOpen ? 'rotate-180 text-purple-300' : 'text-slate-400'
@@ -222,7 +355,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {isMoreMenuOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-xl shadow-slate-950/80 p-1.5 z-50 animate-fadeIn">
+                <div
+                  role="menu"
+                  className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-72 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-xl shadow-slate-950/80 p-1.5 z-50 animate-fadeIn"
+                >
                   <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-800/80 mb-1">
                     심층 퀀트 & 자산배분 도구
                   </div>
@@ -232,6 +368,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <button
                         key={tab.id}
                         id={`tab-dropdown-${tab.id}-btn`}
+                        role="menuitem"
                         onClick={() => {
                           setActiveTab(tab.id);
                           setIsMoreMenuOpen(false);
@@ -254,246 +391,109 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
           </nav>
-
-          {/* Action Trigger Controls & Market Selector */}
-          <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
-            {/* Market Region Segmented Toggle */}
-            {onSelectMarket && (
-              <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner shrink-0">
-                <button
-                  id="market-select-us-btn"
-                  onClick={() => onSelectMarket('US')}
-                  className={`flex items-center space-x-1 px-1.5 sm:px-2.5 py-1 rounded-md transition-all ${
-                    activeMarket === 'US'
-                      ? 'bg-blue-600 text-white shadow-md font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                  title="미국 주식 & ETF (USD $ / S&P500 기준)"
-                >
-                  <span className="text-xs sm:text-sm leading-none">🇺🇸</span>
-                  <span className="text-[11px] sm:text-xs">US</span>
-                  <span className="hidden md:inline text-xs">장</span>
-                </button>
-                <button
-                  id="market-select-kr-btn"
-                  onClick={() => onSelectMarket('KR')}
-                  className={`flex items-center space-x-1 px-1.5 sm:px-2.5 py-1 rounded-md transition-all ${
-                    activeMarket === 'KR'
-                      ? 'bg-emerald-600 text-white shadow-md font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                  title="국내 주식 & ETF (KRW ₩ / KOSPI200 기준)"
-                >
-                  <span className="text-xs sm:text-sm leading-none">🇰🇷</span>
-                  <span className="text-[11px] sm:text-xs">KR</span>
-                  <span className="hidden md:inline text-xs">장</span>
-                </button>
-              </div>
-            )}
-
-            {/* P1-1: Data Freshness Badge */}
-            <DataFreshnessBadge
-              evaluations={evaluations}
-              onRefresh={onRefreshData}
-              isRefreshing={isRefreshingData}
-              className="hidden lg:inline-flex"
-            />
-
-            {/* Commit & Version Indicator (Req 3) */}
-            {onOpenVersionModal && (
-              <button
-                id="header-version-btn"
-                onClick={onOpenVersionModal}
-                className="flex items-center space-x-1 py-1 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-all active:scale-95 shrink-0"
-                title={`시스템 버전 v${APP_VERSION_INFO.version} (커밋 #${APP_VERSION_INFO.commitHash}) - 클릭하여 배포 세부정보 및 캐시 갱신 확인`}
-              >
-                <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span className="font-bold">#{APP_VERSION_INFO.commitHash}</span>
-              </button>
-            )}
-
-            {onOpenDbHealthModal && (
-              <button
-                id="header-db-health-btn"
-                onClick={onOpenDbHealthModal}
-                className="hidden md:flex items-center space-x-1 p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/80 transition-all active:scale-95"
-                title="데이터베이스 헬스체크 & DDL"
-              >
-                <Database className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden xl:inline">DB 헬스</span>
-              </button>
-            )}
-
-            <button
-              id="header-schedule-btn"
-              onClick={onOpenScheduleModal}
-              className="hidden md:flex items-center space-x-1 p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all active:scale-95"
-              title="하루 2회 자동 스캔 & 텔레그램 알림 설정"
-            >
-              <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">자동 알림</span>
-            </button>
-
-            <button
-              id="header-run-scan-btn"
-              onClick={onOpenScanModal}
-              className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 shrink-0"
-              title="스캔 실행"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">스캔 실행</span>
-            </button>
-
-            {/* Mobile / Tablet Drawer Toggle Button */}
-            <button
-              id="header-mobile-menu-btn"
-              onClick={() => setIsMobileDrawerOpen((prev) => !prev)}
-              className="lg:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 shrink-0"
-              aria-label="전체 메뉴 열기"
-            >
-              {isMobileDrawerOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
-          </div>
         </div>
+      </div>
 
-        {/* Medium Screen (md) & Mobile Horizontal Scrolling Bar */}
-        <div className="flex lg:hidden overflow-x-auto items-center space-x-1.5 py-2 border-t border-slate-800/80 no-scrollbar w-full max-w-full -mx-2.5 px-2.5 sm:mx-0 sm:px-0">
-          {mainTabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-1 px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium transition-all shrink-0 ${
-                  isActive
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-slate-400 bg-slate-950/40 hover:text-slate-200'
-                }`}
-              >
-                <span>{tab.label}</span>
-                {tab.badge && (
-                  <span
-                    className={`text-[10px] px-1 py-0.2 rounded-full font-mono ${
-                      isActive ? 'bg-slate-950/30 text-slate-950 font-bold' : 'text-slate-400'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {secondaryTabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-1 px-2.5 py-1 text-xs rounded-lg whitespace-nowrap font-medium transition-all shrink-0 ${
-                  isActive
-                    ? 'bg-purple-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-slate-400 bg-slate-950/40 hover:text-slate-200'
-                }`}
-              >
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Mobile Full Dropdown Drawer */}
-        {isMobileDrawerOpen && (
-          <div className="lg:hidden border-t border-slate-800 py-3 px-2 bg-slate-900/98 rounded-b-2xl shadow-2xl animate-fadeIn space-y-2">
-            {/* Market Region Toggle in Mobile */}
-            {onSelectMarket && (
-              <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800 mb-2">
-                <div className="text-[10px] text-slate-400 font-semibold mb-1.5 uppercase tracking-wider">
-                  분석 대상 시장 선택
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    onClick={() => {
-                      onSelectMarket('US');
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                      activeMarket === 'US'
-                        ? 'bg-blue-600 text-white shadow-md font-bold'
-                        : 'text-slate-400 bg-slate-900 hover:text-slate-200'
-                    }`}
-                  >
-                    <span>🇺🇸</span>
-                    <span>미국장 (USD $)</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onSelectMarket('KR');
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                      activeMarket === 'KR'
-                        ? 'bg-emerald-600 text-white shadow-md font-bold'
-                        : 'text-slate-400 bg-slate-900 hover:text-slate-200'
-                    }`}
-                  >
-                    <span>🇰🇷</span>
-                    <span>국내장 (KRW ₩)</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Actions (DB Health & Auto Notifications) */}
-            <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800 mb-2">
+      {/* Mobile & Small Screen Full Drawer */}
+      {isMobileDrawerOpen && (
+        <div className="md:hidden border-t border-slate-800 py-3 px-3 bg-slate-900/98 rounded-b-2xl shadow-2xl animate-fadeIn space-y-3">
+          {/* Market Region Toggle in Mobile */}
+          {onSelectMarket && (
+            <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
               <div className="text-[10px] text-slate-400 font-semibold mb-1.5 uppercase tracking-wider">
-                시스템 & 알림 관리
+                분석 대상 시장 선택
               </div>
               <div className="grid grid-cols-2 gap-1.5">
-                {onOpenDbHealthModal && (
-                  <button
-                    onClick={() => {
-                      onOpenDbHealthModal();
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
-                  >
-                    <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                    <span>DB 헬스체크</span>
-                  </button>
-                )}
                 <button
+                  type="button"
                   onClick={() => {
-                    onOpenScheduleModal();
+                    onSelectMarket('US');
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    activeMarket === 'US'
+                      ? 'bg-blue-600 text-white shadow-md font-bold'
+                      : 'text-slate-400 bg-slate-900 hover:text-slate-200'
+                  }`}
+                >
+                  <span>🇺🇸</span>
+                  <span>미국장 (USD $)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectMarket('KR');
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    activeMarket === 'KR'
+                      ? 'bg-emerald-600 text-white shadow-md font-bold'
+                      : 'text-slate-400 bg-slate-900 hover:text-slate-200'
+                  }`}
+                >
+                  <span>🇰🇷</span>
+                  <span>국내장 (KRW ₩)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions (DB Health & Auto Notifications & Version) */}
+          <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
+            <div className="text-[10px] text-slate-400 font-semibold mb-1.5 uppercase tracking-wider">
+              시스템 & 알림 관리
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {onOpenDbHealthModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenDbHealthModal();
                     setIsMobileDrawerOpen(false);
                   }}
                   className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
                 >
-                  <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>자동 알림 설정</span>
+                  <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>DB 헬스체크</span>
                 </button>
-                {onOpenVersionModal && (
-                  <button
-                    onClick={() => {
-                      onOpenVersionModal();
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className="col-span-2 flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-semibold hover:bg-slate-800 transition-colors"
-                  >
-                    <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                    <span>배포 커밋: #{APP_VERSION_INFO.commitHash} (v{APP_VERSION_INFO.version})</span>
-                  </button>
-                )}
-              </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenScheduleModal();
+                  setIsMobileDrawerOpen(false);
+                }}
+                className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs font-semibold hover:bg-slate-800 transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>자동 알림 설정</span>
+              </button>
+              {onOpenVersionModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenVersionModal();
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className="col-span-2 flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg bg-slate-900 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-semibold hover:bg-slate-800 transition-colors"
+                >
+                  <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>배포 커밋: #{APP_VERSION_INFO.commitHash} (v{APP_VERSION_INFO.version})</span>
+                </button>
+              )}
             </div>
+          </div>
 
-            <div className="text-[11px] font-semibold text-slate-400 px-2 uppercase tracking-wider">
+          {/* Main Tabs */}
+          <div>
+            <div className="text-[11px] font-semibold text-slate-400 px-1 mb-1.5 uppercase tracking-wider">
               핵심 퀀트 메뉴
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {mainTabs.map((tab) => (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => {
                     setActiveTab(tab.id);
                     setIsMobileDrawerOpen(false);
@@ -510,14 +510,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               ))}
             </div>
+          </div>
 
-            <div className="text-[11px] font-semibold text-slate-400 px-2 uppercase tracking-wider pt-2 border-t border-slate-800/80">
+          {/* Secondary Tabs */}
+          <div>
+            <div className="text-[11px] font-semibold text-slate-400 px-1 mb-1.5 uppercase tracking-wider pt-2 border-t border-slate-800/80">
               심층 분석 및 설정
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {secondaryTabs.map((tab) => (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => {
                     setActiveTab(tab.id);
                     setIsMobileDrawerOpen(false);
@@ -534,8 +538,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               ))}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 };
