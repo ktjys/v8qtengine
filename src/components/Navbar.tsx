@@ -168,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Desktop Navigation Tabs (Clean Responsive Layout) */}
-          <nav className="hidden lg:flex items-center space-x-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80 shrink-0">
+          <nav className="hidden lg:flex items-center space-x-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
             {mainTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -179,7 +179,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setActiveTab(tab.id);
                     setIsMoreMenuOpen(false);
                   }}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
                     isActive
                       ? 'bg-slate-800 text-cyan-300 shadow-sm font-semibold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
