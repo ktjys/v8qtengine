@@ -281,48 +281,51 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav
             role="tablist"
             aria-label="메인 내비게이션 탭"
-            className="flex items-center space-x-1 sm:space-x-1.5 py-1.5 overflow-x-auto no-scrollbar whitespace-nowrap"
+            className="flex items-center space-x-1 sm:space-x-1.5 py-1.5"
           >
-            {mainTabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`tab-${tab.id}-btn`}
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`tabpanel-${tab.id}`}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setIsMoreMenuOpen(false);
-                  }}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 ${
-                    isActive
-                      ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
-                  }`}
-                >
-                  {tab.icon}
-                  <span>{tab.label}</span>
-                  {tab.badge && (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                        isActive
-                          ? 'bg-cyan-500/20 text-cyan-300'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {/* Scrollable Main Tabs */}
+            <div className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto no-scrollbar whitespace-nowrap">
+              {mainTabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    id={`tab-${tab.id}-btn`}
+                    role="tab"
+                    aria-selected={isActive}
+                    aria-controls={`tabpanel-${tab.id}`}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setIsMoreMenuOpen(false);
+                    }}
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 ${
+                      isActive
+                        ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
+                    }`}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                    {tab.badge && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                          isActive
+                            ? 'bg-cyan-500/20 text-cyan-300'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
             {/* Subtle Divider */}
             <div className="h-4 w-px bg-slate-800 shrink-0 mx-1" aria-hidden="true" />
 
-            {/* More Menu Dropdown for Secondary Tabs */}
+            {/* More Menu Dropdown for Secondary Tabs (outside scrollable area) */}
             <div className="relative shrink-0" ref={moreMenuRef}>
               <button
                 id="tab-more-menu-btn"
