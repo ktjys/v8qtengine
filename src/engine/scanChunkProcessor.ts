@@ -11,8 +11,8 @@ import type { ScanRunItem } from '../types/v8';
 import type { ChunkStatus, Env, ScanChunkMessage, ScanChunkResult, ScanMarket } from './types';
 
 export const CHUNK_SIZE_LIMITS = {
-  US: 2,
-  KR: 3,
+  US: 5,
+  KR: 5,
 } as const;
 
 export const SUBREQUEST_BUDGET = {
@@ -26,7 +26,9 @@ export const SUBREQUEST_BUDGET = {
 } as const;
 
 export const CPU_ESTIMATES = {
-  PER_TICKER_EVALUATION_MS: 2.5,
+  // Cache hit: ~1.6ms (live quote + DB read/write + evaluation engine)
+  // Cache miss: ~4.5ms (includes Yahoo fetch + indicator calculation)
+  PER_TICKER_EVALUATION_MS: 1.6,
   YAHOO_FETCH_MS: 1.5,
   DB_READ_MS: 0.5,
   DB_WRITE_MS: 1.0,
