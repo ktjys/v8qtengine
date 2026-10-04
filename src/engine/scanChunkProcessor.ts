@@ -129,47 +129,76 @@ export async function processScanChunk(
   const evaluations: Awaited<ReturnType<typeof evaluationService.evaluateTicker>>[] = [];
   const items: ScanRunItem[] = [];
 
-  for (const ticker of tickers) {
-    const startedAt = new Date().toISOString();
-    try {
-      const evaluation = await evaluationService.evaluateTicker(ticker);
-      evaluations.push(evaluation);
+  // Process tickers in small batches to overlap I/O wait times
+  const PARALLEL_BATCH_SIZE = 2;
+  for (let i = 0; i < tickers.length; i += PARALLEL_BATCH_SIZE) {
+    const batch = tickers.slice(i, i + PARALLEL_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (ticker) => {
+        const startedAt = new Date().toISOString();
+        try {
+          const evaluation = await evaluationService.evaluateTicker(ticker);
+          const recent = await signalRepository.findByTickerRecent(ticker, 3);
+          const isSignal = shouldGenerateSignal(evaluation, recent ? [recent] : []);
 
-      const recent = await signalRepository.findByTickerRecent(ticker, 3);
-      if (shouldGenerateSignal(evaluation, recent ? [recent] : [])) {
-        await signalRepository.save(createSignalSnapshot(evaluation));
-        signalCount++;
+          return {
+            success: true,
+            evaluation,
+            recent,
+            isSignal,
+            startedAt,
+            ticker,
+          };
+        } catch (err) {
+          return {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+            ticker,
+          };
+        }
+      })
+    );
+
+    for (const result of batchResults) {
+      if (result.success) {
+        const { evaluation, recent, isSignal, startedAt, ticker } = result;
+        evaluations.push(evaluation);
+
+        if (isSignal) {
+          await signalRepository.save(createSignalSnapshot(evaluation));
+          signalCount++;
+        }
+
+        evaluatedCount++;
+
+        items.push({
+          scan_run_id: scanRunId,
+          ticker,
+          status: 'SUCCESS',
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+          opportunity_score: evaluation.opportunity?.opportunity_score ?? 0,
+          decision: evaluation.decision?.decision ?? 'WATCH',
+        });
+      } else {
+        failureCount++;
+        const errorMessage = result.error;
+        logger.warn('Chunk ticker evaluation failed', {
+          component: 'ScanChunkProcessor',
+          scanRunId: message.scanRunId,
+          ticker: result.ticker,
+          error: errorMessage,
+        });
+        items.push({
+          scan_run_id: scanRunId,
+          ticker: result.ticker,
+          status: 'FAILED',
+          error_code: 'EVALUATION_FAILED',
+          error_message: errorMessage.slice(0, 500),
+          started_at: result.startedAt,
+          finished_at: new Date().toISOString(),
+        });
       }
-
-      evaluatedCount++;
-
-      items.push({
-        scan_run_id: scanRunId,
-        ticker,
-        status: 'SUCCESS',
-        started_at: startedAt,
-        finished_at: new Date().toISOString(),
-        opportunity_score: evaluation.opportunity?.opportunity_score ?? 0,
-        decision: evaluation.decision?.decision ?? 'WATCH',
-      });
-    } catch (err) {
-      failureCount++;
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      logger.warn('Chunk ticker evaluation failed', {
-        component: 'ScanChunkProcessor',
-        scanRunId,
-        ticker,
-        error: errorMessage,
-      });
-      items.push({
-        scan_run_id: scanRunId,
-        ticker,
-        status: 'FAILED',
-        error_code: 'EVALUATION_FAILED',
-        error_message: errorMessage.slice(0, 500),
-        started_at: startedAt,
-        finished_at: new Date().toISOString(),
-      });
     }
   }
 
