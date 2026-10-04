@@ -84,9 +84,10 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
         onClose();
       }
     };
+    let origOverflow = "";
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
-      const origOverflow = document.body.style.overflow;
+      origOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
     }
     return () => {

@@ -1169,43 +1169,46 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 </div>
               </div>
 
-matplotlib.pyplot as plt
-import numpy as np
-
-# Sample data
-x = np.linspace(0, 10, 100)
-y = np.sin(x)
-
-# Create plot
-plt.figure(figsize=(10, 6))
-plt.plot(x, y, 'b-', linewidth=2)
-plt.title('Sine Wave')
-plt.xlabel('X-axis')
-plt.ylabel('Y-axis')
-plt.grid(True, alpha=0.3)
-plt.show()
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
+              {/* Reason */}
+              <div>
+                <label htmlFor="paper-order-reason" className="text-xs font-medium text-slate-400 block mb-1">매매 메모 (선택)</label>
+                <input
+                  id="paper-order-reason"
+                  type="text"
+                  placeholder="예: 20일 돌파 신호 확인 후 1차 진입"
+                  value={orderReason}
+                  onChange={(e) => setOrderReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus-visible:border-cyan-500"
                 />
               </div>
-
               <div className="pt-2 flex items-center justify-end space-x-2">
+
                 <button
+
                   type="button"
+
                   onClick={() => setIsOrderModalOpen(false)}
+
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+
                 >
+
                   취소
+
                 </button>
+
                 <button
+
                   type="submit"
-                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${
-                    orderType === 'BUY'
-                      ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'
-                      : 'bg-rose-500 hover:bg-rose-400 text-white'
-                  }`}
+
+                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${orderType === 'BUY' ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950' : 'bg-rose-500 hover:bg-rose-400 text-white'}`}
+
                 >
+
                   {orderType === 'BUY' ? '가상 매수 실행' : '가상 매도 실행'}
+
                 </button>
+
               </div>
             </form>
           </div>

@@ -419,21 +419,34 @@ export const StrategyOptimizerView: React.FC<StrategyOptimizerViewProps> = ({
                   </p>
             </div>
 
+
+
             {/* 3. 손절 ATR 배수 */}
+
             <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
+
               <div className="flex justify-between items-center text-xs">
+
                 <label htmlFor="stop-loss-atr-mult" className="font-semibold text-white cursor-pointer">
+
                   손절선 ATR 배수 (Stop Loss)
+
                 </label>
+
                 <span className="font-mono font-bold text-amber-400 text-sm">
+
                   {customConfig.stopLossAtrMult.toFixed(1)}x ATR
+
                 </span>
-              </div
-                className="w-full accent-amber-400 cursor-pointer"
+
+              </div>
+
+              <div
+
+                className="w-full h-1.5 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+
               />
-              <p className="text-[11px] text-slate-400">
-                2.4x 이상 권장: 일간 시장 노이즈에 의한 휩소(조기 손절)를 효과적으로 방어합니다.
-              </p>
+
             </div>
 
             {/* 4. 익절 ATR 배수 */}
