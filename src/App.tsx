@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Trash2, RefreshCw, Database } from 'lucide-react';
+import { Trash2, RefreshCw, Database, AlertCircle, GitCommit } from 'lucide-react';
 import {
   ActiveStrategyMode,
   BacktestSummary,
@@ -35,7 +35,6 @@ import {
   StrategyOptimizationConfig,
 } from './engine/strategyOptimizerEngine';
 import { APP_VERSION_INFO } from './version';
-import { GitCommit } from 'lucide-react';
 
 export type TabType =
   | 'dashboard'
@@ -144,9 +143,27 @@ export default function App() {
   const [isDbHealthModalOpen, setIsDbHealthModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [deleteTargetTicker, setDeleteTargetTicker] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [alertRefreshKey, setAlertRefreshKey] = useState<number>(0);
+
+  // ESC key handler & body scroll lock for delete modal (P0-3)
+  useEffect(() => {
+    if (!deleteTargetTicker) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isDeleting) {
+        setDeleteTargetTicker(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [deleteTargetTicker, isDeleting]);
 
   const handleOpenSymbolDetail = (ticker: string, initialTab: 'overview' | 'chart' | 'dip_buy' = 'overview') => {
     setSelectedTicker(ticker);
@@ -251,6 +268,8 @@ export default function App() {
   };
 
   const loadAllData = async () => {
+    setDataLoadError(null);
+    setIsInitialLoading(true);
     try {
       // Parallel execution for near-instant database read across all tables
       const [currentWl, loadedEvals, latestSignals, btData, currentRuns] = await Promise.all([
@@ -260,6 +279,10 @@ export default function App() {
         safeFetchJson('/api/v8/backtest'),
         safeFetchJson('/api/v8/runs'),
       ]);
+
+      if (!currentWl && !loadedEvals && !latestSignals && !btData && !currentRuns) {
+        setDataLoadError('서버 및 데이터베이스와의 통신이 원활하지 않습니다. 네트워크 상태를 확인하시거나 다시 시도해 주세요.');
+      }
 
       if (currentWl?.success && Array.isArray(currentWl.watchlist)) {
         setWatchlist(currentWl.watchlist);
@@ -321,8 +344,9 @@ export default function App() {
       if (btData?.success && (btData.data?.summary || btData.summary)) {
         setBacktestSummary(btData.data?.summary || btData.summary);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load initial data', err);
+      setDataLoadError('데이터를 불러오는 중 예기치 않은 오류가 발생했습니다.');
     } finally {
       setIsInitialLoading(false);
     }

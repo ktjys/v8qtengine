@@ -55,6 +55,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
   // Execution feedback
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [executeSuccess, setExecuteSuccess] = useState<boolean>(false);
+  const [executeError, setExecuteError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
   // Calculate ATR Profile
@@ -80,6 +81,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
   // Execute Paper Order with Sized Shares
   const handleExecutePaperOrder = () => {
     setIsExecuting(true);
+    setExecuteError(null);
     const stratSource = strategyType === 'MOMENTUM_BREAKOUT' ? 'STRATEGY_A' : 'STRATEGY_B';
     const res = PaperTradingEngine.executeOrder({
       ticker,
@@ -94,10 +96,12 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
 
     if (res.success) {
       setExecuteSuccess(true);
+      setExecuteError(null);
       onOrderExecuted?.();
       setTimeout(() => setExecuteSuccess(false), 3000);
     } else {
-      alert(res.error || '모의투자 주문 실패');
+      setExecuteError(res.error || '모의투자 주문에 실패했습니다.');
+      setTimeout(() => setExecuteError(null), 4000);
     }
   };
 
@@ -276,7 +280,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
           {/* 2. Account Equity Setting */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-300">
+              <label htmlFor="pos-account-equity" className="text-xs font-semibold text-slate-300">
                 운용 총자본 (Account Equity)
               </label>
               <div className="flex items-center space-x-1">
@@ -301,7 +305,9 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
                 {isKr ? '₩' : '$'}
               </span>
               <input
+                id="pos-account-equity"
                 type="number"
+                inputMode="numeric"
                 step={isKr ? 1000000 : 1000}
                 min={isKr ? 1000000 : 1000}
                 value={accountEquity}
@@ -314,7 +320,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
           {/* 3. Risk Tolerance % per Trade Slider */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
+              <label htmlFor="pos-risk-tolerance" className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
                 <span>1회 매매 허용 위험 (Risk %)</span>
                 <HelpCircle className="w-3 h-3 text-slate-500" title="손절가에 도달했을 때 계좌에서 잃어도 되는 최대 자본 비율" />
               </label>
@@ -339,6 +345,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               ))}
             </div>
             <input
+              id="pos-risk-tolerance"
               type="range"
               min="0.2"
               max="3.0"
@@ -352,7 +359,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
           {/* 4. Max Allocation Cap Guardrail */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-300">
+              <label htmlFor="pos-max-allocation" className="text-xs font-semibold text-slate-300">
                 단일 종목 최대 비중 상한 (Cap %)
               </label>
               <span className="text-xs font-mono text-slate-400 font-bold">
@@ -360,6 +367,7 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               </span>
             </div>
             <select
+              id="pos-max-allocation"
               value={maxAllocationCap}
               onChange={(e) => setMaxAllocationCap(Number(e.target.value))}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
@@ -503,6 +511,17 @@ export const PositionSizingCalculator: React.FC<PositionSizingCalculatorProps> =
               <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-300 text-xs flex items-start space-x-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{sizing.capWarning}</span>
+              </div>
+            )}
+
+            {/* Error Feedback */}
+            {executeError && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-300 text-xs flex items-start space-x-2 animate-fadeIn"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <span>{executeError}</span>
               </div>
             )}
 

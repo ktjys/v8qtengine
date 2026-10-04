@@ -119,6 +119,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   // Add Ticker Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [addModalError, setAddModalError] = useState<string | null>(null);
   const [newTicker, setNewTicker] = useState('');
   const [newName, setNewName] = useState('');
   const [newMemo, setNewMemo] = useState('');
@@ -126,6 +127,25 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [addModeTab, setAddModeTab] = useState<'search' | 'batch'>('search');
   const [liveApiResults, setLiveApiResults] = useState<StockInfo[]>([]);
   const [isSearchingLive, setIsSearchingLive] = useState(false);
+
+  // ESC key handler & body scroll lock for Watchlist modals (P0-3)
+  useEffect(() => {
+    if (!showAddModal && !showRestoreConfirm) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAddModal(false);
+        setShowRestoreConfirm(false);
+        setAddModalError(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [showAddModal, showRestoreConfirm]);
 
   useEffect(() => {
     const query = searchModalQuery.trim();
@@ -353,16 +373,17 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     const market = detectMarketRegion(clean);
     const marketRemainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - (marketCounts[market] || 0));
     if (marketRemainingSlots <= 0) {
-      alert(getWatchlistCapacityErrorMessage(market));
+      setAddModalError(getWatchlistCapacityErrorMessage(market));
       return;
     }
     if (existingTickerSet.has(clean)) {
-      alert(`'${stockName || clean}'은(는) 이미 워치리스트에 등록되어 있습니다.`);
+      setAddModalError(`'${stockName || clean}'은(는) 이미 워치리스트에 등록되어 있습니다.`);
       return;
     }
     const finalName = stockName || getStockDisplayInfo(clean).primaryName || clean;
     onAddTicker(clean, finalName, newMemo.trim() || '실시간 검색 추가');
     setSearchModalQuery('');
+    setAddModalError(null);
     setShowAddModal(false);
   };
 
@@ -426,9 +447,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
     if (parsedTickers.valid.length === 0) {
       if (parsedTickers.alreadyExists.length > 0) {
-        alert('입력하신 종목이 이미 워치리스트에 모두 등록되어 있습니다.');
+        setAddModalError('입력하신 종목이 이미 워치리스트에 모두 등록되어 있습니다.');
       } else if (parsedTickers.invalid.length > 0) {
-        alert(`유효하지 않은 종목 형식입니다: ${parsedTickers.invalid.join(', ')}\n(종목명 예: LG에너지솔루션, 현대차, 에코프로 또는 티커 심볼 005930.KS, AAPL 등을 입력해주세요)`);
+        setAddModalError(`유효하지 않은 종목 형식입니다: ${parsedTickers.invalid.join(', ')} (종목명 예: 현대차, 에코프로 또는 티커 심볼 005930.KS, AAPL 등을 입력해주세요)`);
       }
       return;
     }
@@ -446,7 +467,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     for (const [market, marketTickers] of tickersByMarket) {
       const marketRemainingSlots = Math.max(0, MAX_WATCHLIST_CAPACITY_PER_MARKET - (marketCounts[market] || 0));
       if (marketTickers.length > marketRemainingSlots) {
-        alert(getWatchlistCapacityErrorMessage(market));
+        setAddModalError(getWatchlistCapacityErrorMessage(market));
         hasCapacityError = true;
         break;
       }
@@ -461,6 +482,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     setNewTicker('');
     setNewName('');
     setNewMemo('');
+    setAddModalError(null);
     setShowAddModal(false);
   };
 
@@ -1340,10 +1362,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
       {/* Add Ticker Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-ticker-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddModal(false);
+              setAddModalError(null);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-slate-100 flex items-center space-x-2">
+              <h3 id="add-ticker-modal-title" className="text-base font-bold text-slate-100 flex items-center space-x-2">
                 <Plus className="w-4 h-4 text-cyan-400" />
                 <span>워치리스트 종목 추가</span>
               </h3>
@@ -1360,13 +1393,29 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   {activeMarket} 슬롯: {currentMarketCount} / {MAX_WATCHLIST_CAPACITY_PER_MARKET}개 ({isCapacityReached ? '가득 참' : `${remainingSlots}개 가능`})
                 </span>
                 <button
-                  onClick={() => setShowAddModal(false)}
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setAddModalError(null);
+                  }}
                   className="p-1 rounded-lg text-slate-400 hover:text-slate-200"
+                  aria-label="닫기 (ESC)"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
+
+            {/* Error Banner if any */}
+            {addModalError && (
+              <div
+                role="alert"
+                className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start space-x-2.5 text-rose-300 text-xs animate-fadeIn"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <span>{addModalError}</span>
+              </div>
+            )}
 
             {/* Capacity Status */}
             {isCapacityReached ? (
@@ -1427,7 +1476,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               <div className="space-y-3.5 text-xs">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="block text-slate-300 font-semibold">
+                    <label htmlFor="watchlist-search-input" className="block text-slate-300 font-semibold">
                       종목명 / 티커 / 종목코드 검색
                     </label>
                     <div className="flex items-center space-x-1.5 text-[11px] text-cyan-400 font-medium">
@@ -1443,6 +1492,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
+                      id="watchlist-search-input"
                       type="text"
                       placeholder="예: 삼전, 엔솔, 한화에어로, 알테오젠, 삼양식품, 005930, PLTR, ARM, TSLA..."
                       value={searchModalQuery}
@@ -1582,8 +1632,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
+                  <label htmlFor="watchlist-search-memo-input" className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
                   <textarea
+                    id="watchlist-search-memo-input"
                     placeholder="관찰 목적 및 전략 메모..."
                     value={newMemo}
                     onChange={(e) => setNewMemo(e.target.value)}
@@ -1595,7 +1646,10 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <div className="pt-2 flex items-center justify-end">
                   <button
                     type="button"
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setAddModalError(null);
+                    }}
                     className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium transition-colors"
                   >
                     닫기
@@ -1609,7 +1663,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-300 font-semibold">
+                    <label htmlFor="watchlist-new-ticker-input" className="block text-slate-300 font-semibold">
                       종목명 또는 티커 심볼 *
                     </label>
                     <span className="text-[11px] text-cyan-400 font-medium">
@@ -1800,7 +1854,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
                 {parsedTickers.valid.length <= 1 && (
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">종목명 (단일 등록 시 직접 지정/선택)</label>
+                    <label htmlFor="watchlist-new-name-input" className="block text-slate-300 font-semibold mb-1">종목명 (단일 등록 시 직접 지정/선택)</label>
                     <input
                       id="watchlist-new-name-input"
                       type="text"
@@ -1814,7 +1868,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 )}
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
+                  <label htmlFor="watchlist-new-memo-input" className="block text-slate-300 font-semibold mb-1">관찰 메모 (선택)</label>
                   <textarea
                     id="watchlist-new-memo-input"
                     placeholder="관찰 목적 및 전략 메모..."
@@ -1828,7 +1882,10 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <div className="pt-2 flex items-center justify-end space-x-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setAddModalError(null);
+                    }}
                     className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium transition-colors"
                   >
                     취소
@@ -1860,6 +1917,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="restore-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowRestoreConfirm(false);
+          }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
         >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">

@@ -135,6 +135,24 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
     loadEquityCurve();
   }, [activeMarket]);
 
+  // ESC key handler & body scroll lock for PaperTrading modals (P0-3)
+  useEffect(() => {
+    if (!isOrderModalOpen && !isResetConfirmOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOrderModalOpen(false);
+        setIsResetConfirmOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isOrderModalOpen, isResetConfirmOpen]);
+
   const handleOpenOrderModal = (ticker?: string, type: OrderType = 'BUY', price?: number, strategy?: TradeStrategySource) => {
     if (ticker) {
       setOrderTicker(ticker);
@@ -903,11 +921,21 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
 
       {/* 5. New Order Modal */}
       {isOrderModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paper-order-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsOrderModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn"
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative space-y-4">
             <button
+              type="button"
               onClick={() => setIsOrderModalOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              aria-label="닫기 (ESC)"
             >
               <X className="w-5 h-5" />
             </button>
@@ -917,7 +945,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                 <span className="font-bold text-lg">{currencySymbol}</span>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">
+                <h3 id="paper-order-modal-title" className="text-lg font-bold text-white">
                   {isKr ? '국내 가상 모의투자 주문' : '미국 가상 모의투자 주문'}
                 </h3>
                 <p className="text-xs text-slate-400">실시간 가상 체결 시뮬레이션 ({currencySymbol})</p>
@@ -969,7 +997,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-slate-400">종목 코드/티커</label>
+                    <label htmlFor="paper-order-ticker" className="text-xs font-medium text-slate-400">종목 코드/티커</label>
                     {orderTicker && (
                       <StockDisplayBadge
                         ticker={orderTicker}
@@ -981,6 +1009,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     )}
                   </div>
                   <input
+                    id="paper-order-ticker"
                     type="text"
                     value={orderTicker}
                     onChange={(e) => setOrderTicker(e.target.value.toUpperCase())}
@@ -1055,8 +1084,9 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-400 block mb-1">전략 태그</label>
+                  <label htmlFor="paper-order-strategy" className="text-xs font-medium text-slate-400 block mb-1">전략 태그</label>
                   <select
+                    id="paper-order-strategy"
                     value={orderStrategy}
                     onChange={(e) => setOrderStrategy(e.target.value as TradeStrategySource)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
@@ -1072,7 +1102,7 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-slate-400">주문 수량</label>
+                    <label htmlFor="paper-order-shares" className="text-xs font-medium text-slate-400">주문 수량</label>
                     <button
                       type="button"
                       onClick={() => {
@@ -1094,7 +1124,9 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                     </button>
                   </div>
                   <input
+                    id="paper-order-shares"
                     type="number"
+                    inputMode="numeric"
                     min="1"
                     step="1"
                     value={orderShares}
@@ -1104,11 +1136,13 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-400 block mb-1">
+                  <label htmlFor="paper-order-price" className="text-xs font-medium text-slate-400 block mb-1">
                     주문 단가 ({currencySymbol} Price)
                   </label>
                   <input
+                    id="paper-order-price"
                     type="number"
+                    inputMode="decimal"
                     min={isKr ? 1 : 0.01}
                     step={isKr ? 1 : 0.01}
                     value={orderPrice}
@@ -1137,8 +1171,9 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
 
               {/* Reason */}
               <div>
-                <label className="text-xs font-medium text-slate-400 block mb-1">매매 메모 (선택)</label>
+                <label htmlFor="paper-order-reason" className="text-xs font-medium text-slate-400 block mb-1">매매 메모 (선택)</label>
                 <input
+                  id="paper-order-reason"
                   type="text"
                   placeholder="예: 20일 돌파 신호 확인 후 1차 진입"
                   value={orderReason}
@@ -1173,14 +1208,22 @@ export const PaperTradingView: React.FC<PaperTradingViewProps> = ({ onSelectTick
 
       {/* Reset Account Confirmation Modal */}
       {isResetConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paper-reset-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsResetConfirmOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn"
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
             <div className="flex items-center space-x-3 text-amber-400">
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
                 <RotateCcw className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">
+                <h3 id="paper-reset-modal-title" className="text-base font-bold text-slate-100">
                   {isKr ? '국내 가상 계좌 리셋' : '미국 가상 계좌 리셋'}
                 </h3>
                 <p className="text-xs text-slate-400">초기 투자 자금으로 원복합니다.</p>

@@ -88,6 +88,23 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
     onClose();
   };
 
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isOpen, onClose]);
+
   return (
     <div
       role="dialog"
@@ -127,9 +144,16 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
           </button>
         </div>
 
-        {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-slate-800 bg-slate-900/40 px-3 sm:px-6 pt-2 overflow-x-auto no-scrollbar">
+        {/* Modal Navigation Tabs (P0-2) */}
+        <div
+          role="tablist"
+          aria-label="전략 최적화 탭"
+          className="flex border-b border-slate-800 bg-slate-900/40 px-3 sm:px-6 pt-2 overflow-x-auto no-scrollbar"
+        >
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'recommendations'}
             onClick={() => setActiveTab('recommendations')}
             className={`flex items-center space-x-2 px-4 py-3 border-b-2 text-xs sm:text-sm font-semibold transition-all ${
               activeTab === 'recommendations'
@@ -141,6 +165,9 @@ export const StrategyOptimizationModal: React.FC<StrategyOptimizationModalProps>
             <span>AI 맞춤 최적화 추천안 (3종)</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'custom'}
             onClick={() => setActiveTab('custom')}
             className={`flex items-center space-x-2 px-4 py-3 border-b-2 text-xs sm:text-sm font-semibold transition-all ${
               activeTab === 'custom'

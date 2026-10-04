@@ -271,9 +271,16 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Diagnostic Tabs */}
-        <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-800 px-3 sm:px-5 bg-slate-950/40 text-xs font-medium space-x-1 shrink-0 no-scrollbar">
+        {/* Diagnostic Tabs (P0-2) */}
+        <div
+          role="tablist"
+          aria-label="종목 진단 상세 탭"
+          className="flex overflow-x-auto whitespace-nowrap border-b border-slate-800 px-3 sm:px-5 bg-slate-950/40 text-xs font-medium space-x-1 shrink-0 no-scrollbar"
+        >
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'overview'}
             onClick={() => setActiveTab('overview')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'overview'
@@ -284,6 +291,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             전략 A: 종합 진단
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'dip_buy'}
             onClick={() => setActiveTab('dip_buy')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
               activeTab === 'dip_buy'
@@ -295,6 +305,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             <span>전략 B: 우량주 눌림추매 ({dipEvaluation.suitability.tierLabel})</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'chart'}
             onClick={() => setActiveTab('chart')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
               activeTab === 'chart'
@@ -306,6 +319,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             <span>차트 분석</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'sizing'}
             onClick={() => setActiveTab('sizing')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
               activeTab === 'sizing'
@@ -317,6 +333,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             <span>ATR 손절 & 포지션 사이징</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'opportunity'}
             onClick={() => setActiveTab('opportunity')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'opportunity'
@@ -327,6 +346,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             기회 스코어 ({opp.opportunity_score}점)
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'risk'}
             onClick={() => setActiveTab('risk')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'risk'
@@ -337,6 +359,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             리스크 제약 ({risk.risk_level})
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'decision'}
             onClick={() => setActiveTab('decision')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'decision'
@@ -347,6 +372,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             의사결정 ({decision.decision})
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'signals'}
             onClick={() => setActiveTab('signals')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'signals'
@@ -357,6 +385,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             과거 시그널 ({tickerSignals.length}건)
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'override'}
             onClick={() => setActiveTab('override')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'override'
@@ -367,6 +398,9 @@ export const SymbolDetailModal: React.FC<SymbolDetailModalProps> = ({
             수동 Override
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'alerts'}
             onClick={() => setActiveTab('alerts')}
             className={`py-2.5 px-2.5 sm:py-3 sm:px-3.5 border-b-2 transition-all whitespace-nowrap flex items-center space-x-1.5 ${
               activeTab === 'alerts'

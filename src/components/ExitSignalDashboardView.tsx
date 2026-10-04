@@ -131,6 +131,24 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
     }
   };
 
+  // ESC key handler & body scroll lock (P0-3)
+  useEffect(() => {
+    if (!isAddModalOpen && !deleteTargetTicker) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsAddModalOpen(false);
+        setDeleteTargetTicker(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isAddModalOpen, deleteTargetTicker]);
+
   // Filtered List
   const filteredList = useMemo(() => {
     return exitEvaluations.filter((item) => {
@@ -575,18 +593,28 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
 
       {/* Modal: Add User Position */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-position-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsAddModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in"
+        >
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center space-x-2">
                 <span className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
                   <Plus className="w-5 h-5" />
                 </span>
-                <h3 className="text-lg font-bold text-white">보유 종목 평단가 등록</h3>
+                <h3 id="add-position-title" className="text-lg font-bold text-white">보유 종목 평단가 등록</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAddModalOpen(false)}
                 className="text-slate-400 hover:text-white p-1"
+                aria-label="닫기 (ESC)"
               >
                 ✕
               </button>
@@ -595,7 +623,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
             <form onSubmit={handleAddPosition} className="space-y-3.5">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label htmlFor="add-pos-ticker" className="block text-xs font-semibold text-slate-300">
                     종목 티커 (Symbol)
                   </label>
                   <span className="text-[10px] text-slate-500">
@@ -603,6 +631,7 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   </span>
                 </div>
                 <input
+                  id="add-pos-ticker"
                   type="text"
                   required
                   placeholder={
@@ -680,10 +709,11 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label htmlFor="add-pos-name" className="block text-xs font-semibold text-slate-300 mb-1">
                   종목명 (선택)
                 </label>
                 <input
+                  id="add-pos-name"
                   type="text"
                   placeholder={activeMarket === 'KR' ? '예: 삼성전자, SK하이닉스' : '예: 엔비디아, 애플'}
                   value={newName}
@@ -694,11 +724,13 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label htmlFor="add-pos-price" className="block text-xs font-semibold text-slate-300 mb-1">
                     매수 평단가 ({detectMarketRegion(newTicker) === 'KR' ? '₩' : '$'})
                   </label>
                   <input
+                    id="add-pos-price"
                     type="number"
+                    inputMode="decimal"
                     step={detectMarketRegion(newTicker) === 'KR' ? '1' : '0.01'}
                     required
                     placeholder={detectMarketRegion(newTicker) === 'KR' ? '예: 74000' : '예: 120.50'}
@@ -708,11 +740,13 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label htmlFor="add-pos-shares" className="block text-xs font-semibold text-slate-300 mb-1">
                     보유 수량 (주)
                   </label>
                   <input
+                    id="add-pos-shares"
                     type="number"
+                    inputMode="numeric"
                     step="1"
                     placeholder="10"
                     value={newShares}
@@ -724,11 +758,13 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label htmlFor="add-pos-tp" className="block text-xs font-semibold text-slate-300 mb-1">
                     목표 익절 기준 (%)
                   </label>
                   <input
+                    id="add-pos-tp"
                     type="number"
+                    inputMode="decimal"
                     step="1"
                     placeholder="15"
                     value={newTpPct}
@@ -738,11 +774,13 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                   <p className="text-[10px] text-slate-500 mt-0.5">기본값: +15%</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label htmlFor="add-pos-sl" className="block text-xs font-semibold text-slate-300 mb-1">
                     손절/트레일링 한도 (%)
                   </label>
                   <input
+                    id="add-pos-sl"
                     type="number"
+                    inputMode="decimal"
                     step="1"
                     placeholder="-7"
                     value={newSlPct}
@@ -754,10 +792,11 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label htmlFor="add-pos-memo" className="block text-xs font-semibold text-slate-300 mb-1">
                   투자 메모 (선택)
                 </label>
                 <input
+                  id="add-pos-memo"
                   type="text"
                   placeholder="예: 20일선 눌림목 반등 매수"
                   value={newMemo}
