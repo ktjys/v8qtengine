@@ -171,6 +171,8 @@ npm run dev
 ```
 브라우저에서 `http://localhost:3000`으로 접속하여 Quant Dashboard를 확인할 수 있습니다.
 
+**참고**: 서버 시작 시 내장 크론 스케줄러가 기본 활성화됩니다 (`ENABLE_INTERNAL_SCHEDULER=false` 로 환경 변수로 비활성화 가능).
+
 ### 5) 프로덕션 빌드 및 실행
 ```bash
 # Vite 클라이언트 빌드 & esbuild 서버 번들링
@@ -200,6 +202,9 @@ TELEGRAM_CHAT_ID="-1001234567890"
 
 # Gemini AI 분석용 키 (선택 사항)
 GEMINI_API_KEY=""
+
+# **보안 관련**: 인증 토큰이 필요한 엔드포인트 보호를 위한 시크릿 (선택 사항)
+# CRON_SECRET_TOKEN="your-secret-token" // /api/v8/cron-scan 엔드포인트 보호에 사용
 ```
 
 ---
