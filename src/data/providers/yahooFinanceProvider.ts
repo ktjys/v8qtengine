@@ -1,6 +1,7 @@
 import { MarketDataProvider } from './marketDataProvider';
 import { FundamentalData, NormalizedMarketData, OHLCVBar, QuoteData } from './types';
 import { SeedDataProvider } from '../seed/seedProvider';
+import { getStockDisplayInfo } from '../../utils/marketUtils';
 
 interface CacheEntry<T> {
   data: T;
@@ -145,6 +146,10 @@ export class YahooFinanceProvider implements MarketDataProvider {
             const prev = items.length > 1 ? items[items.length - 2] : last;
             const change = Math.round((last.close - prev.close) * 100) / 100;
             const changePercent = prev.close > 0 ? Math.round((change / prev.close) * 10000) / 100 : 0;
+            const display = getStockDisplayInfo(clean);
+            const shortName = (display.primaryName && display.primaryName !== display.subCode && !display.primaryName.startsWith('국내종목'))
+              ? display.primaryName
+              : clean;
             const derived: QuoteData = {
               ticker: clean,
               price: last.close,
@@ -152,6 +157,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
               changePercent,
               currency: 'KRW',
               exchange: clean.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI',
+              shortName,
+              longName: shortName,
               timestamp: new Date().toISOString(),
             };
             this.setCache(cacheKey, derived);

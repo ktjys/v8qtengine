@@ -126,7 +126,9 @@ export class EvaluationRepository {
             const strategyType = row.strategy_type || 'CORE_MOMENTUM';
 
             const displayInfo = getStockDisplayInfo(ticker, r.name || assetName);
-            const resolvedName = displayInfo.primaryName || r.name || assetName || ticker;
+            const resolvedName = (displayInfo.primaryName && !displayInfo.primaryName.startsWith('국내종목') && displayInfo.primaryName !== displayInfo.subCode)
+              ? displayInfo.primaryName
+              : (r.name && !r.name.startsWith('국내종목') ? r.name : (assetName && !assetName.startsWith('국내종목') ? assetName : displayInfo.primaryName || ticker));
 
             const ev: FullTickerEvaluation = {
               ticker,

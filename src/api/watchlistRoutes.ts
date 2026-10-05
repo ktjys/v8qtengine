@@ -4,7 +4,8 @@ import { evaluationService } from '../pipeline/evaluationService';
 import { evaluationRepository } from '../db/repositories/evaluationRepository';
 import { MAX_WATCHLIST_CAPACITY_PER_MARKET, getWatchlistCapacityErrorMessage } from '../constants/limits';
 import { resolveSingleQuery, searchStockMaster, StockInfo } from '../utils/stockSearchService';
-import { getStockDisplayInfo, detectMarketRegion } from '../utils/marketUtils';
+import { getStockDisplayInfo, detectMarketRegion, registerStockName } from '../utils/marketUtils';
+import { getKoreanEtfName } from '../data/seed/koreanEtfMaster';
 
 export const watchlistRouter = Router();
 
@@ -77,6 +78,58 @@ watchlistRouter.get('/search', async (req, res) => {
   }
 });
 
+// GET /api/v8/watchlist/resolve-name?ticker=... (단일 티커 실시간 종목명 확인/해석)
+watchlistRouter.get('/resolve-name', async (req, res) => {
+  try {
+    const rawTicker = ((req.query.ticker as string) || '').trim().toUpperCase();
+    if (!rawTicker) {
+      return res.status(400).json({ success: false, error: '티커가 누락되었습니다.' });
+    }
+    const code = rawTicker.replace(/\.(KS|KQ)$/i, '');
+    const isKr = detectMarketRegion(rawTicker) === 'KR';
+
+    // 1. 한국 ETF 마스터 딕셔너리 확인
+    let realName = getKoreanEtfName(code);
+
+    // 2. 마켓 유틸 및 정적 딕셔너리 확인
+    if (!realName) {
+      const display = getStockDisplayInfo(rawTicker);
+      if (display.primaryName && display.primaryName !== display.subCode && !display.primaryName.startsWith('국내종목')) {
+        realName = display.primaryName;
+      }
+    }
+
+    // 3. 국내 6자리 코드인데 아직 이름을 모르는 경우 Naver Mobile Basic API 실시간 조회
+    if (!realName && isKr && /^\d{6}$/.test(code)) {
+      try {
+        const nRes = await fetch(`https://m.stock.naver.com/api/stock/${code}/basic`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(2500),
+        });
+        if (nRes.ok) {
+          const data = (await nRes.json()) as any;
+          if (data && data.stockName && typeof data.stockName === 'string') {
+            const fetched = data.stockName.trim();
+            if (fetched && !fetched.startsWith('국내종목')) {
+              realName = fetched;
+              registerStockName(rawTicker, fetched);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    res.json({
+      success: true,
+      ticker: rawTicker,
+      name: realName || rawTicker,
+      isEtf: Boolean(getKoreanEtfName(code)),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/v8/watchlist
 watchlistRouter.get('/', async (req, res) => {
   try {
@@ -146,13 +199,47 @@ async function validateSingleTickerWithYahoo(
   ticker: string,
   preferredName?: string
 ): Promise<{ valid: boolean; symbol: string; name?: string; reason?: string }> {
-  // If already known in master database or preferred name provided, accept immediately
+  const code = ticker.toUpperCase().replace(/\.(KS|KQ)$/i, '').trim();
+  const isKr = detectMarketRegion(ticker) === 'KR';
+
+  // preferredName 플레이스홀더('국내종목', 티커코드 등) 정제
+  let sanitizedPrefName = (preferredName || '').trim();
+  if (
+    sanitizedPrefName.startsWith('국내종목') ||
+    /^국내\s*종목/i.test(sanitizedPrefName) ||
+    sanitizedPrefName === ticker ||
+    sanitizedPrefName === code ||
+    /^\d{6}$/.test(sanitizedPrefName)
+  ) {
+    sanitizedPrefName = '';
+  }
+
+  // 1. 한국 ETF 마스터 딕셔너리 확인 (1,171개 ETF 즉시 해석)
+  const etfName = isKr ? getKoreanEtfName(code) : undefined;
+  if (etfName) {
+    const normalizedTicker = ticker.endsWith('.KQ') ? `${code}.KQ` : `${code}.KS`;
+    registerStockName(normalizedTicker, etfName);
+    return {
+      valid: true,
+      symbol: normalizedTicker,
+      name: sanitizedPrefName || etfName,
+    };
+  }
+
+  // 2. 통합 종목 검색 마스터 해석
   const resolved = resolveSingleQuery(ticker);
   if (resolved.resolved) {
+    const cleanResolvedName = (resolved.name && !resolved.name.startsWith('국내종목') && !/^\d{6}$/.test(resolved.name))
+      ? resolved.name
+      : undefined;
+    const finalName = sanitizedPrefName || cleanResolvedName || etfName;
+    if (finalName) {
+      registerStockName(resolved.ticker, finalName);
+    }
     return {
       valid: true,
       symbol: resolved.ticker,
-      name: preferredName || resolved.name,
+      name: finalName || resolved.ticker,
     };
   }
 
@@ -160,6 +247,32 @@ async function validateSingleTickerWithYahoo(
     return { valid: false, symbol: ticker, reason: '티커 기호 또는 종목명을 인식할 수 없습니다' };
   }
 
+  // 3. 국내 6자리 종목의 경우 Naver Mobile Basic API로 실시간 공식 종목명 확인
+  if (isKr && /^\d{6}$/.test(code)) {
+    try {
+      const nRes = await fetch(`https://m.stock.naver.com/api/stock/${code}/basic`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(2500),
+      });
+      if (nRes.ok) {
+        const data = (await nRes.json()) as any;
+        if (data && data.stockName && typeof data.stockName === 'string') {
+          const realName = data.stockName.trim();
+          const normTicker = (data.stockExchangeType?.code === 'KQ' || ticker.endsWith('.KQ')) ? `${code}.KQ` : `${code}.KS`;
+          registerStockName(normTicker, realName);
+          return {
+            valid: true,
+            symbol: normTicker,
+            name: sanitizedPrefName || realName,
+          };
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[WatchlistRouter] Naver validation fallback for ${ticker}:`, e.message);
+    }
+  }
+
+  // 4. Yahoo Finance Fallback
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
@@ -181,12 +294,22 @@ async function validateSingleTickerWithYahoo(
       }
       const exactMatch = quotes.find((q: any) => (q.symbol || '').toUpperCase() === ticker);
       if (exactMatch) {
-        return { valid: true, symbol: ticker, name: preferredName || exactMatch.shortname || exactMatch.longname || ticker };
+        const rawQuoteName = exactMatch.shortname || exactMatch.longname;
+        const display = getStockDisplayInfo(ticker, rawQuoteName);
+        const resolvedQuoteName = (display.primaryName && display.primaryName !== display.subCode && !display.primaryName.startsWith('국내종목'))
+          ? display.primaryName
+          : rawQuoteName;
+        return { valid: true, symbol: ticker, name: sanitizedPrefName || resolvedQuoteName || ticker };
       }
       const first = quotes[0];
       const firstSym = (first.symbol || '').toUpperCase();
       if (firstSym === ticker) {
-        return { valid: true, symbol: ticker, name: preferredName || first.shortname || first.longname || ticker };
+        const rawQuoteName = first.shortname || first.longname;
+        const display = getStockDisplayInfo(ticker, rawQuoteName);
+        const resolvedQuoteName = (display.primaryName && display.primaryName !== display.subCode && !display.primaryName.startsWith('국내종목'))
+          ? display.primaryName
+          : rawQuoteName;
+        return { valid: true, symbol: ticker, name: sanitizedPrefName || resolvedQuoteName || ticker };
       }
       return {
         valid: false,
@@ -197,7 +320,13 @@ async function validateSingleTickerWithYahoo(
   } catch (e: any) {
     console.warn(`[WatchlistRouter] Yahoo validation network fallback for ${ticker}:`, e.message);
   }
-  return { valid: true, symbol: ticker, name: preferredName || ticker };
+
+  const displayFallback = getStockDisplayInfo(ticker, sanitizedPrefName);
+  const finalFallbackName = (displayFallback.primaryName && displayFallback.primaryName !== displayFallback.subCode && !displayFallback.primaryName.startsWith('국내종목'))
+    ? displayFallback.primaryName
+    : (sanitizedPrefName || ticker);
+
+  return { valid: true, symbol: ticker, name: finalFallbackName };
 }
 
 // POST /api/v8/watchlist (Supports single ticker or comma-separated/batch tickers or Korean names)
@@ -240,12 +369,21 @@ watchlistRouter.post('/', async (req, res) => {
           reason: validation.reason || '유효하지 않은 종목',
         });
       } else {
+        const code = validation.symbol.replace(/\.(KS|KQ)$/i, '');
+        const etfName = getKoreanEtfName(code);
+        const displayInfo = getStockDisplayInfo(validation.symbol, validation.name);
+        const finalCandidateName = etfName ||
+          (displayInfo.primaryName && displayInfo.primaryName !== displayInfo.subCode && !displayInfo.primaryName.startsWith('국내종목') ? displayInfo.primaryName : '') ||
+          (validation.name && !validation.name.startsWith('국내종목') && !/^\d{6}$/.test(validation.name) ? validation.name : '') ||
+          validation.symbol;
+
         validCandidates.push({
           ticker: validation.symbol,
-          name: validation.name || item.name || validation.symbol,
+          name: finalCandidateName,
         });
       }
     }
+
 
 if (validCandidates.length === 0) {
       return res.status(400).json({

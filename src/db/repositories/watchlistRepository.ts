@@ -23,7 +23,9 @@ export class WatchlistRepository {
           const list: WatchlistItem[] = data.map((row: any) => {
             const assetName = dbClient.assets.get(row.ticker)?.name;
             const displayInfo = getStockDisplayInfo(row.ticker, assetName || row.name);
-            const resolvedName = displayInfo.primaryName || assetName || row.name || row.ticker;
+            const resolvedName = (displayInfo.primaryName && !displayInfo.primaryName.startsWith('국내종목') && displayInfo.primaryName !== displayInfo.subCode)
+              ? displayInfo.primaryName
+              : (assetName && !assetName.startsWith('국내종목') ? assetName : (row.name && !row.name.startsWith('국내종목') ? row.name : displayInfo.primaryName || row.ticker));
             return {
               ticker: row.ticker,
               name: resolvedName,
@@ -43,7 +45,18 @@ export class WatchlistRepository {
       }
     }
 
-    return Array.from(dbClient.watchlist.values());
+    const inMemList = Array.from(dbClient.watchlist.values()).map((item) => {
+      const assetName = dbClient.assets.get(item.ticker)?.name;
+      const displayInfo = getStockDisplayInfo(item.ticker, assetName || item.name);
+      const resolvedName = (displayInfo.primaryName && !displayInfo.primaryName.startsWith('국내종목') && displayInfo.primaryName !== displayInfo.subCode)
+        ? displayInfo.primaryName
+        : (assetName && !assetName.startsWith('국내종목') ? assetName : (item.name && !item.name.startsWith('국내종목') ? item.name : displayInfo.primaryName || item.ticker));
+      if (item.name !== resolvedName) {
+        item.name = resolvedName;
+      }
+      return item;
+    });
+    return inMemList;
   }
 
   async getActive(): Promise<WatchlistItem[]> {
@@ -103,7 +116,9 @@ export class WatchlistRepository {
     const isActive = item.is_active !== undefined ? item.is_active : true;
 
     const displayInfo = getStockDisplayInfo(clean, item.name);
-    const resolvedName = item.name && item.name !== clean ? item.name : (displayInfo.primaryName || clean);
+    const cleanItemName = (item.name || '').trim();
+    const isPlaceholder = !cleanItemName || cleanItemName.startsWith('국내종목') || /^국내\s*종목/i.test(cleanItemName) || cleanItemName === clean || /^\d{6}$/.test(cleanItemName);
+    const resolvedName = !isPlaceholder ? cleanItemName : (displayInfo.primaryName || clean);
 
     // Ensure asset entry exists
     await assetRepository.upsert({
@@ -120,7 +135,11 @@ export class WatchlistRepository {
     if (existing) {
       existing.is_active = true;
       if (item.memo) existing.memo = item.memo;
-      if (item.name) existing.name = item.name;
+      if (!isPlaceholder) {
+        existing.name = cleanItemName;
+      } else if (!existing.name || existing.name.startsWith('국내종목') || /^\d{6}$/.test(existing.name)) {
+        existing.name = resolvedName;
+      }
 
       if (dbClient.isTableAvailable('watchlist') && dbClient.supabase) {
         const { error } = await dbClient.supabase

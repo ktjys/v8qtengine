@@ -26,6 +26,41 @@ describe('marketUtils & Notification Stock Name Formatting', () => {
       expect(formatTelegramStockName('000660.KS')).toBe('<b>SK하이닉스</b> (000660)');
     });
 
+    it('국내 ETF 코드가 들어왔을 때 국내종목 대신 실제 ETF 공식 종목명으로 표시된다', () => {
+      // 122630 -> KODEX 레버리지
+      const lev = formatStockDisplayName('122630.KS');
+      expect(lev).toBe('KODEX 레버리지 (122630)');
+      expect(formatTelegramStockName('122630.KS')).toBe('<b>KODEX 레버리지</b> (122630)');
+
+      // 252670 -> KODEX 200선물인버스2X (곱버스)
+      const inv2x = formatStockDisplayName('252670.KS');
+      expect(inv2x).toBe('KODEX 200선물인버스2X (252670)');
+
+      // 114800 -> KODEX 인버스
+      expect(formatStockDisplayName('114800.KS')).toBe('KODEX 인버스 (114800)');
+
+      // 458730 -> TIGER 미국배당다우존스
+      expect(formatStockDisplayName('458730.KS')).toBe('TIGER 미국배당다우존스 (458730)');
+
+      // 102110 -> TIGER 200
+      expect(formatStockDisplayName('102110.KS')).toBe('TIGER 200 (102110)');
+    });
+
+    it('기존에 "국내종목" 또는 "국내종목 122630" 같은 플레이스홀더가 들어와도 실제 ETF 종목명으로 정제한다', () => {
+      const displayInfo = getStockDisplayInfo('122630.KS', '국내종목 122630');
+      expect(displayInfo.primaryName).toBe('KODEX 레버리지');
+      expect(displayInfo.primaryName).not.toContain('국내종목');
+
+      const legacyPlaceholder = formatStockDisplayName('252670.KS', '국내종목');
+      expect(legacyPlaceholder).toBe('KODEX 200선물인버스2X (252670)');
+      expect(legacyPlaceholder).not.toContain('국내종목');
+
+      // 사전에 없는 종목에 '국내종목'이 들어온 경우에도 '국내종목' 대신 종목코드 반환
+      const unknownWithLegacy = formatStockDisplayName('999999.KS', '국내종목 999999');
+      expect(unknownWithLegacy).toBe('999999');
+      expect(unknownWithLegacy).not.toContain('국내종목');
+    });
+
     it('미국 종목 코드가 들어왔을 때 친화적 이름과 티커를 올바르게 조합한다', () => {
       const nvdaFormatted = formatTelegramStockName('NVDA');
       expect(nvdaFormatted).toContain('엔비디아');

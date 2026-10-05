@@ -353,7 +353,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       query: q,
       resolved: res.resolved,
       ticker: res.ticker,
-      name: res.name || getStockDisplayInfo(res.ticker).primaryName || res.ticker,
+      name: (res.name && !res.name.startsWith('국내종목'))
+        ? res.name
+        : (getStockDisplayInfo(res.ticker).primaryName || res.ticker),
       market: res.market,
       isAlreadyAdded,
     };
@@ -380,7 +382,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       setAddModalError(`'${stockName || clean}'은(는) 이미 워치리스트에 등록되어 있습니다.`);
       return;
     }
-    const finalName = stockName || getStockDisplayInfo(clean).primaryName || clean;
+    const finalName = (stockName && !stockName.startsWith('국내종목') && !/^\d{6}$/.test(stockName))
+      ? stockName
+      : (getStockDisplayInfo(clean).primaryName || clean);
     onAddTicker(clean, finalName, newMemo.trim() || '실시간 검색 추가');
     setSearchModalQuery('');
     setAddModalError(null);
@@ -422,7 +426,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       if (/^[0-9]{6}$/.test(targetTicker)) {
         targetTicker = `${targetTicker}.KS`;
       }
-      const displayName = resolved.name || getStockDisplayInfo(targetTicker).primaryName || targetTicker;
+      const displayName = (resolved.name && !resolved.name.startsWith('국내종목') && !/^\d{6}$/.test(resolved.name))
+        ? resolved.name
+        : (getStockDisplayInfo(targetTicker).primaryName || targetTicker);
 
       if (!resolved.resolved && !TICKER_REGEX.test(targetTicker)) {
         invalid.push(rawToken);

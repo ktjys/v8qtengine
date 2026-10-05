@@ -1,4 +1,5 @@
 import { getStockDisplayInfo } from './marketUtils';
+import { KOREAN_ETF_DICTIONARY, getKoreanEtfName } from '../data/seed/koreanEtfMaster';
 
 export interface StockInfo {
   ticker: string;          // e.g. '373220.KS', '005930.KS', 'NVDA'
@@ -1444,6 +1445,16 @@ export function resolveSingleQuery(rawQuery: string): {
         matchType: 'exact_ticker',
       };
     }
+    const etfName = getKoreanEtfName(code);
+    if (etfName) {
+      return {
+        ticker: upper,
+        name: etfName,
+        market: 'KR',
+        resolved: true,
+        matchType: 'exact_ticker',
+      };
+    }
     const display = getStockDisplayInfo(upper);
     return {
       ticker: upper,
@@ -1454,7 +1465,7 @@ export function resolveSingleQuery(rawQuery: string): {
     };
   }
 
-  // 2. 6자리 순수 숫자 코드인 경우 (예: '373220' -> '373220.KS')
+  // 2. 6자리 순수 숫자 코드인 경우 (예: '122630' -> '122630.KS')
   if (/^\d{6}$/.test(upper)) {
     const matchedByCode = STOCK_MASTER_DATABASE.find(
       (s) => s.ticker.replace(/\.(KS|KQ)$/i, '') === upper
@@ -1468,6 +1479,16 @@ export function resolveSingleQuery(rawQuery: string): {
         matchType: 'code_digit',
       };
     }
+    const etfName = getKoreanEtfName(upper);
+    if (etfName) {
+      return {
+        ticker: `${upper}.KS`,
+        name: etfName,
+        market: 'KR',
+        resolved: true,
+        matchType: 'exact_ticker',
+      };
+    }
     const display = getStockDisplayInfo(`${upper}.KS`);
     return {
       ticker: `${upper}.KS`,
@@ -1476,6 +1497,36 @@ export function resolveSingleQuery(rawQuery: string): {
       resolved: true,
       matchType: 'code_digit',
     };
+  }
+
+  // 2-1. 대표 ETF 약칭/별칭 매칭
+  if (cleanQ === '레버리지' || cleanQ === 'kodex레버리지') {
+    return { ticker: '122630.KS', name: 'KODEX 레버리지', market: 'KR', resolved: true, matchType: 'alias' };
+  }
+  if (cleanQ === '곱버스' || cleanQ === '인버스2x' || cleanQ === '2x인버스') {
+    return { ticker: '252670.KS', name: 'KODEX 200선물인버스2X', market: 'KR', resolved: true, matchType: 'alias' };
+  }
+  if (cleanQ === '인버스' || cleanQ === 'kodex인버스') {
+    return { ticker: '114800.KS', name: 'KODEX 인버스', market: 'KR', resolved: true, matchType: 'alias' };
+  }
+  if (cleanQ === '코스닥150레버리지') {
+    return { ticker: '233740.KS', name: 'KODEX 코스닥150레버리지', market: 'KR', resolved: true, matchType: 'alias' };
+  }
+  if (cleanQ === '코스닥150인버스') {
+    return { ticker: '251340.KS', name: 'KODEX 코스닥150선물인버스', market: 'KR', resolved: true, matchType: 'alias' };
+  }
+
+  // 2-2. 한국 ETF 마스터 딕셔너리 (1,171개) 공식 종목명 완전 일치 검사
+  for (const [code, etfName] of Object.entries(KOREAN_ETF_DICTIONARY)) {
+    if (normalizeQuery(etfName) === cleanQ) {
+      return {
+        ticker: `${code}.KS`,
+        name: etfName,
+        market: 'KR',
+        resolved: true,
+        matchType: 'name',
+      };
+    }
   }
 
   // 3. 종목명 및 별칭(Aliases) 완전 일치 또는 정규화 일치 검사 (LG에너지솔루션, lg엔솔, 삼전, 엔비디아 등)
@@ -1608,7 +1659,7 @@ export function searchStockMaster(query: string, limit = 10): StockInfo[] {
     }
     // 6. 종목명 부분 포함 (e.g. '에너지솔루션' -> LG에너지솔루션)
     else if (stockCleanName.includes(cleanQ)) {
-      score += 200;
+      score += 250;
     }
     // 7. 별칭 부분 포함
     else if (stock.aliases && stock.aliases.some((a) => normalizeQuery(a).includes(cleanQ))) {
@@ -1620,7 +1671,53 @@ export function searchStockMaster(query: string, limit = 10): StockInfo[] {
     }
 
     if (score > 0) {
+      const diff = Math.abs(stockCleanName.length - cleanQ.length);
+      score += Math.max(0, 100 - diff * 4);
       results.push({ stock, score });
+    }
+  }
+
+  // 1-2. 국내 ETF 마스터 딕셔너리 (KRX 공식 1,171개 ETF) 검색
+  for (const [code, etfName] of Object.entries(KOREAN_ETF_DICTIONARY)) {
+    const etfCleanName = normalizeQuery(etfName);
+    let etfScore = 0;
+
+    if (code === upper) {
+      etfScore += 1000;
+    } else if (etfCleanName === cleanQ) {
+      etfScore += 900;
+    } else if (cleanQ === '레버리지' && code === '122630') {
+      etfScore += 950;
+    } else if (cleanQ === '곱버스' && code === '252670') {
+      etfScore += 950;
+    } else if (cleanQ === '인버스' && code === '114800') {
+      etfScore += 950;
+    } else if (code.startsWith(upper)) {
+      etfScore += 450;
+    } else if (etfCleanName.startsWith(cleanQ)) {
+      etfScore += 350;
+    } else if (etfCleanName.includes(cleanQ)) {
+      etfScore += 250;
+    }
+
+    if (etfScore > 0) {
+      const diff = Math.abs(etfCleanName.length - cleanQ.length);
+      etfScore += Math.max(0, 100 - diff * 4);
+      const norm = `${code}.KS`;
+      if (!results.some((r) => r.stock.ticker.replace(/\.(KS|KQ)$/i, '') === code)) {
+        results.push({
+          stock: {
+            ticker: norm,
+            name: etfName,
+            englishName: `${etfName} ETF`,
+            market: 'KR',
+            exchange: 'ETF',
+            sector: '국내 상장 ETF',
+            aliases: [code, norm, etfName],
+          },
+          score: etfScore,
+        });
+      }
     }
   }
 
@@ -1628,15 +1725,18 @@ export function searchStockMaster(query: string, limit = 10): StockInfo[] {
   if (/^\d{6}(\.(KS|KQ))?$/i.test(trimmed)) {
     const norm = /^\d{6}$/.test(trimmed) ? `${trimmed}.KS` : trimmed.toUpperCase();
     if (!results.some((r) => r.stock.ticker.toUpperCase() === norm.toUpperCase())) {
+      const code = norm.replace(/\.(KS|KQ)$/i, '');
+      const etfName = getKoreanEtfName(code);
       const display = getStockDisplayInfo(norm);
+      const finalName = etfName || (display.primaryName !== norm ? display.primaryName : '') || norm;
       results.unshift({
         stock: {
           ticker: norm,
-          name: display.primaryName || norm,
+          name: finalName,
           englishName: norm,
           market: 'KR',
           exchange: norm.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI',
-          sector: '국내 상장 주식',
+          sector: etfName ? '국내 상장 ETF' : '국내 상장 주식',
           aliases: [trimmed, norm],
         },
         score: 3000,

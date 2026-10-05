@@ -1,4 +1,7 @@
 import { MarketRegion } from '../types/v8';
+import { KOREAN_ETF_DICTIONARY, getKoreanEtfName } from '../data/seed/koreanEtfMaster';
+
+export { KOREAN_ETF_DICTIONARY, getKoreanEtfName };
 
 /**
  * 티커 심볼을 기반으로 시장 지역(US: 미국, KR: 한국)을 판별합니다.
@@ -294,12 +297,50 @@ export const STOCK_NAME_DICTIONARY: Record<string, string> = {
 };
 
 /**
+ * 런타임 동적 종목명 캐시
+ * 실시간 검색, API 응답, 마켓 데이터에서 해석된 종목명을 보관하여 전역에서 즉시 공유
+ */
+const dynamicStockNameCache = new Map<string, string>();
+
+/**
+ * 런타임에 해석된 종목명을 동적 캐시에 등록합니다.
+ */
+export function registerStockName(ticker: string, name: string): void {
+  if (!ticker || !name) return;
+  const cleanTicker = ticker.toUpperCase().trim();
+  const cleanName = name.trim();
+  if (
+    !cleanName ||
+    cleanName === cleanTicker ||
+    cleanName.startsWith('국내종목') ||
+    /^국내\s*종목/i.test(cleanName) ||
+    /^\d{6}$/.test(cleanName)
+  ) {
+    return;
+  }
+  dynamicStockNameCache.set(cleanTicker, cleanName);
+  const code = cleanTicker.replace(/\.(KS|KQ)$/i, '');
+  dynamicStockNameCache.set(code, cleanName);
+  dynamicStockNameCache.set(`${code}.KS`, cleanName);
+}
+
+/**
+ * 여러 종목명 맵을 런타임 동적 캐시에 일괄 등록합니다.
+ */
+export function mergeStockNames(map: Record<string, string>): void {
+  for (const [k, v] of Object.entries(map)) {
+    registerStockName(k, v);
+  }
+}
+
+/**
  * 종목 코드(티커)와 이름을 결합하여 가장 직관적인 '종목명 우선' 표시 형식을 반환합니다.
  *
  * 정책:
- * 1. 국내 종목 (005930.KS 등):
- *    - primary: '삼성전자' (종목명 우선)
- *    - secondary: '005930' (숫자 코드)
+ * 1. 국내 주식 및 ETF (005930.KS, 122630.KS, 252670.KS 등):
+ *    - primary: '삼성전자', 'KODEX 레버리지', 'KODEX 200선물인버스2X' (실제 공식 종목명 우선)
+ *    - secondary: '005930', '122630', '252670' (숫자 코드)
+ *    - 미등록 종목인 경우에도 어색한 '국내종목 122630' 대신 종목코드 자체를 반환
  * 2. 미국 종목 (AAPL, NVDA 등):
  *    - primary: 'Apple Inc.' 혹은 사전 정의된 친화적 이름
  *    - secondary: 'AAPL' (티커)
@@ -311,31 +352,56 @@ export function getStockDisplayInfo(ticker: string, rawName?: string): {
 } {
   const isKr = detectMarketRegion(ticker) === 'KR';
   const cleanTicker = (ticker || '').toUpperCase().trim();
-  const dictName = STOCK_NAME_DICTIONARY[cleanTicker] || STOCK_NAME_DICTIONARY[cleanTicker.replace(/\.(KS|KQ)$/, '')];
+  const numericCode = cleanTicker.replace(/\.(KS|KQ)$/i, '');
+
+  // 1. 런타임 동적 캐시 확인
+  let dictName = dynamicStockNameCache.get(cleanTicker) || dynamicStockNameCache.get(numericCode);
+
+  // 2. 국내 ETF 마스터 딕셔너리 (KRX 공식 상장 1,171개 ETF 전수 지원)
+  if (!dictName && isKr) {
+    dictName = getKoreanEtfName(numericCode) || getKoreanEtfName(cleanTicker);
+  }
+
+  // 3. 정적 종목명 딕셔너리 확인
+  if (!dictName) {
+    dictName = STOCK_NAME_DICTIONARY[cleanTicker] || STOCK_NAME_DICTIONARY[numericCode];
+  }
+
+  // 4. rawName 정제 및 유효성 검사
+  // '국내종목', '국내종목 122630', 단순 티커/숫자 코드 등 플레이스홀더 문자열은 무효 처리
+  let sanitizedRawName = (rawName || '').trim();
+  if (
+    sanitizedRawName === cleanTicker ||
+    sanitizedRawName === numericCode ||
+    sanitizedRawName.startsWith('국내종목') ||
+    /^국내\s*종목/i.test(sanitizedRawName) ||
+    sanitizedRawName.endsWith('.KS') ||
+    sanitizedRawName.endsWith('.KQ') ||
+    /^\d{6}$/.test(sanitizedRawName)
+  ) {
+    sanitizedRawName = '';
+  }
 
   let primaryName = '';
   let subCode = cleanTicker;
 
   if (isKr) {
-    // 숫자를 떼어낸 6자리 코드
-    const numericCode = cleanTicker.replace(/\.(KS|KQ)$/, '');
     subCode = numericCode;
 
-    // 종목명이 유의미한 한글/이름인지 검사
     if (dictName) {
       primaryName = dictName;
-    } else if (rawName && rawName !== ticker && !rawName.startsWith('0') && rawName.trim().length > 0) {
-      primaryName = rawName;
+    } else if (sanitizedRawName && sanitizedRawName.length > 0) {
+      primaryName = sanitizedRawName;
     } else {
-      primaryName = `국내종목 ${numericCode}`;
+      // 사전 및 입력 종목명이 아직 없는 경우에도 '국내종목 123456' 대신 순수 종목코드 표기
+      primaryName = subCode;
     }
   } else {
-    // 미국 종목
     subCode = cleanTicker;
     if (dictName) {
       primaryName = dictName;
-    } else if (rawName && rawName !== ticker && rawName.trim().length > 0) {
-      primaryName = rawName;
+    } else if (sanitizedRawName && sanitizedRawName.length > 0) {
+      primaryName = sanitizedRawName;
     } else {
       primaryName = cleanTicker;
     }
@@ -346,14 +412,19 @@ export function getStockDisplayInfo(ticker: string, rawName?: string): {
 
 /**
  * 텍스트 기반(텔레그램, 콘솔, 일반 문자열)에서 '종목명 우선'으로 표기하는 문자열을 반환합니다.
- * 예: '삼성전자 (005930)', 'SK하이닉스 (000660)', '엔비디아 (NVDA)'
+ * 예: '삼성전자 (005930)', 'KODEX 레버리지 (122630)', '엔비디아 (NVDA)'
  */
 export function formatStockDisplayName(ticker: string, rawName?: string): string {
   if (!ticker) return '';
   const { primaryName, subCode } = getStockDisplayInfo(ticker, rawName);
-  let cleanName = primaryName || rawName || ticker;
+  let cleanName = primaryName || subCode || ticker;
   // subCode 중복 괄호 제거 (예: '엔비디아 (NVIDIA)' -> '엔비디아')
   cleanName = cleanName.replace(new RegExp(`\\s*\\(${subCode}\\)`, 'i'), '').trim();
+
+  // 만약 cleanName에 여전히 '국내종목' 잔재가 있다면 종목코드로 대체
+  if (cleanName.startsWith('국내종목') || /^국내\s*종목/i.test(cleanName)) {
+    cleanName = subCode;
+  }
 
   if (!cleanName || cleanName === subCode) {
     return subCode;
@@ -367,14 +438,18 @@ export function formatStockDisplayName(ticker: string, rawName?: string): string
  *
  * 예시:
  * - <b>삼성전자</b> (005930)
- * - <b>SK하이닉스</b> (000660)
+ * - <b>KODEX 레버리지</b> (122630)
  * - <b>엔비디아</b> (NVDA)
  */
 export function formatTelegramStockName(ticker: string, rawName?: string): string {
   if (!ticker) return '';
   const { primaryName, subCode } = getStockDisplayInfo(ticker, rawName);
-  let cleanName = primaryName || rawName || ticker;
+  let cleanName = primaryName || subCode || ticker;
   cleanName = cleanName.replace(new RegExp(`\\s*\\(${subCode}\\)`, 'i'), '').trim();
+
+  if (cleanName.startsWith('국내종목') || /^국내\s*종목/i.test(cleanName)) {
+    cleanName = subCode;
+  }
 
   const safeName = cleanName
     .replace(/&/g, '&amp;')
@@ -390,4 +465,5 @@ export function formatTelegramStockName(ticker: string, rawName?: string): strin
   }
   return `<b>${safeName}</b> (${safeCode})`;
 }
+
 
