@@ -85,8 +85,8 @@ async function buildTelegramReport(
       reportText += `🚨 <b>[통합 매도 & 포지션 청산 권고]</b>\n`;
       actionableExits.slice(0, 3).forEach((exit: any, idx: number) => {
         const retText = exit.returnSinceEntryPct !== undefined
-          ? ` (진입대비 ${exit.returnSinceEntryPct >= 0 ? '+' : ''}${exit.returnSinceEntryPct.toFixed(1)}%)`
-          : '';
+          ? ` (진입대비 ${exit.returnSinceEntryPct >= 0 ? '+' : ''}${exit.returnSinceEntryPct.toFixed(1)}% | ${escapeTelegramHtml(exit.entryPriceBasisLabel || '평단가 기준')})`
+          : ` [기술적 추세 이탈 | 평단가 미등록]`;
         reportText += `${idx + 1}. ${formatTelegramStockName(exit.ticker, exit.name)}: ${escapeTelegramHtml(exit.headline)}${retText}\n`;
         reportText += `   └ 💡 <b>실행 권고:</b> ${escapeTelegramHtml(exit.recommendedAction)}\n`;
       });

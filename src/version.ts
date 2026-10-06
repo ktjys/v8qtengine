@@ -43,7 +43,7 @@ const resolveBuildTime = (fallback = FALLBACK_BUILD_TIME): string => {
 };
 
 export const APP_VERSION_INFO: AppVersionInfo = {
-  version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '8.2.4',
+  version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '8.2.5',
   commitHash: resolveCommitHash(),
   commitMessage: resolveCommitMessage(),
   buildTime: resolveBuildTime(),
@@ -51,6 +51,19 @@ export const APP_VERSION_INFO: AppVersionInfo = {
 };
 
 export const RECENT_RELEASE_CHANGELOG = [
+  {
+    version: 'v8.2.5',
+    date: '2026-10-05',
+    commit: '7b91e0a',
+    title: '국내 ETF 공식 종목명 전수(1,171개) 매핑 & 매도/청산 매수가 기준 투명화',
+    items: [
+      '국내 ETF 전수(1,171종목) 공식 마스터 딕셔너리 구축 (KODEX, TIGER, ACE 등 "국내종목" 표기 원천 제거)',
+      '매도/청산 신호 매수가 기준 3단계 명확화 (실계좌 등록 평단가 / 모의투자 체결가 / 미등록 관심종목 기술적 감시)',
+      '평단가 미등록 종목에 대해 가짜 ₩0 표기 대신 "기술적 추세 이탈만 감시"로 명확히 분리 및 원클릭 평단가 등록 제공',
+      '텔레그램 정기 스캔 리포트 및 대시보드 카드에 매수가 출처 및 기준일자(YYYY-MM-DD) 투명 공개',
+      '트레일링 스탑(-7%) 발동 기준을 "진입 후 최고점(Peak Price) 대비 하락률"로 상세 안내',
+    ],
+  },
   {
     version: 'v8.2.4',
     date: '2026-10-03',

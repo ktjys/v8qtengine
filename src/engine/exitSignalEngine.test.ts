@@ -76,4 +76,54 @@ describe('ExitSignalEngine — 시장 격리 (Market Isolation)', () => {
       expect(r.ticker).not.toBe('SPY');
     }
   });
+
+  it('사용자 등록 평단가가 있는 경우 명확한 출처 라벨과 계산된 수익률을 제공한다', () => {
+    const result = ExitSignalEngine.evaluateTickerExit(krEvaluation, {
+      id: 'test_1',
+      ticker: '005930.KS',
+      name: '삼성전자',
+      entryPrice: 70000,
+      shares: 10,
+      entryDate: '2024-10-01',
+      created_at: '2024-10-01',
+      source: 'MANUAL',
+    });
+
+    expect(result.isHoldPosition).toBe(true);
+    expect(result.entryPrice).toBe(70000);
+    expect(result.returnSinceEntryPct).toBeCloseTo(7.1, 1);
+    expect(result.entryPriceBasisLabel).toContain('실계좌 등록 평단가');
+    expect(result.entryPriceBasisLabel).toContain('2024-10-01');
+  });
+
+  it('평단가가 미등록된 관심종목은 애매한 ₩0 표기 대신 평단가 미등록 라벨과 기술적 지표 감시 모드로 작동한다', () => {
+    const result = ExitSignalEngine.evaluateTickerExit(krEvaluation, undefined);
+
+    expect(result.isHoldPosition).toBe(false);
+    expect(result.entryPrice).toBeUndefined();
+    expect(result.returnSinceEntryPct).toBeUndefined();
+    expect(result.entryPriceBasisLabel).toBe('평단가 미등록 (기술적 추세 이탈만 감시)');
+    expect(result.rules.takeProfit.label).toContain('평단가 미등록');
+    expect(result.rules.stopLoss.label).toContain('평단가 미등록');
+    expect(result.rules.trailingStop.label).toContain('평단가 미등록');
+  });
+
+  it('평단가가 미등록되어도 50일 이동평균선이 붕괴되면 기술적 매도 경보를 발행한다', () => {
+    const brokenEvaluation = {
+      ...krEvaluation,
+      opportunity: {
+        ...krEvaluation.opportunity,
+        technical_details: {
+          rsi14: 45,
+          priceAboveMa20: false,
+          ma20Above50: false,
+        },
+      },
+    } as unknown as FullTickerEvaluation;
+
+    const result = ExitSignalEngine.evaluateTickerExit(brokenEvaluation, undefined);
+    expect(result.primaryExitSignal).toBe('TREND_BREAK_50MA');
+    expect(result.isActionableSell).toBe(true);
+    expect(result.recommendedAction).toContain('50일선이 붕괴');
+  });
 });

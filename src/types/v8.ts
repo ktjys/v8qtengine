@@ -801,14 +801,17 @@ export interface IntegratedExitEvaluation {
   entryDate?: string;      // 매수 진입일
   highestPriceSinceEntry?: number; // 진입 후 최고가
   returnSinceEntryPct?: number;   // 진입 대비 수익률 (%)
-  
+  positionSource?: 'PAPER' | 'MANUAL' | 'QUANT_SIGNAL' | 'UNREGISTERED'; // 포지션 출처
+  strategySource?: string;            // 전략 출처 (예: STRATEGY_A, STRATEGY_B)
+  entryPriceBasisLabel?: string;      // 매수가 기준 출처 한글 라벨 (예: '실계좌 등록 평단가', '모의투자 전략 체결가', '퀀트 BUY 신호 체결가', '평단가 미등록')
+
   // 종합 판정
   primaryExitSignal: SellSignalType;
   urgency: SellUrgency;
   isActionableSell: boolean; // 매도 권고 여부 (HOLD가 아님)
   headline: string;
   recommendedAction: string;
-  
+
   // 4대 매도 규칙 개별 평가 결과
   rules: {
     takeProfit: {
@@ -840,7 +843,7 @@ export interface IntegratedExitEvaluation {
       label: string;
     };
   };
-  
+
   signalsList: ExitSignalDetail[];
 }
 
@@ -857,6 +860,9 @@ export interface UserHoldPosition {
   trailingStopPct?: number;     // 기본값 -7%
   highestPrice?: number;        // 진입 후 최고가 추적
   memo?: string;
+  source?: 'PAPER' | 'MANUAL' | 'QUANT_SIGNAL';  // 포지션 출처
+  strategySource?: string;      // 전략 출처 (STRATEGY_A, STRATEGY_B, MANUAL 등)
   created_at: string;
 }
+
 

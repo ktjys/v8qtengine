@@ -408,14 +408,22 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                       <span className="text-xs text-slate-400 truncate max-w-[150px]">
                         {item.name}
                       </span>
-                      {isHold && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                          내 보유종목
+                      {isHold ? (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          item.positionSource === 'PAPER'
+                            ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                            : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                        }`}>
+                          {item.positionSource === 'PAPER' ? '모의투자 포지션' : '내 등록 보유종목'}
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800/90 text-slate-400 border border-slate-700">
+                          관심종목 (미보유)
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center space-x-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="text-slate-300 font-medium">
                         {formatStockPrice(item.currentPrice, item.ticker)}
                       </span>
@@ -426,9 +434,9 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                       >
                         {formatChangePercent(item.change1d)}
                       </span>
-                      {item.returnSinceEntryPct !== undefined && (
+                      {item.returnSinceEntryPct !== undefined ? (
                         <span className="text-slate-400">
-                          진입(${(item.entryPrice || 0).toFixed(2)}) 대비:{' '}
+                          진입({formatStockPrice(item.entryPrice || 0, item.ticker)}) 대비:{' '}
                           <b
                             className={
                               item.returnSinceEntryPct >= 0
@@ -439,17 +447,43 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                             {item.returnSinceEntryPct >= 0 ? '+' : ''}
                             {item.returnSinceEntryPct.toFixed(1)}%
                           </b>
+                          {item.entryDate && (
+                            <span className="text-[10px] text-slate-500 ml-1">
+                              ({item.entryDate} 기준)
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-[11px] flex items-center space-x-1">
+                          <span>평단가 미등록 (기술적 감시)</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewTicker(item.ticker);
+                              setNewName(item.name);
+                              setNewEntryPrice(Math.round(item.currentPrice).toString());
+                              setIsAddModalOpen(true);
+                            }}
+                            className="text-cyan-400 hover:text-cyan-300 underline text-[11px] ml-1 font-medium"
+                          >
+                            [내 평단가 등록]
+                          </button>
                         </span>
                       )}
                     </div>
 
-                    {/* Headline Badge */}
-                    <div className="flex items-center space-x-2">
+                    {/* Headline Badge & Entry Basis Label */}
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center space-x-1.5 ${badgeColor}`}
                       >
                         <span>{item.headline}</span>
                       </span>
+                      {item.entryPriceBasisLabel && (
+                        <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800/80">
+                          📍 {item.entryPriceBasisLabel}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -554,12 +588,16 @@ export const ExitSignalDashboardView: React.FC<ExitSignalDashboardViewProps> = (
                           onClick={() => {
                             setNewTicker(item.ticker);
                             setNewName(item.name);
-                            setNewEntryPrice(item.currentPrice.toFixed(2));
+                            setNewEntryPrice(
+                              detectMarketRegion(item.ticker) === 'KR'
+                                ? Math.round(item.currentPrice).toString()
+                                : item.currentPrice.toFixed(2)
+                            );
                             setIsAddModalOpen(true);
                           }}
-                          className="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                          className="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-slate-700 transition-colors flex items-center space-x-1"
                         >
-                          평단가 등록
+                          <span>⚡ 평단가 등록</span>
                         </button>
                       )}
                     </div>

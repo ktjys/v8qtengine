@@ -399,8 +399,8 @@ async function doExecuteCronScan(options: CronScanOptions = {}): Promise<CronSca
           const safeHeadline = escapeTelegramHtml(exit.headline);
           const safeAction = escapeTelegramHtml(exit.recommendedAction);
           const retText = exit.returnSinceEntryPct !== undefined
-            ? ` (진입대비 ${exit.returnSinceEntryPct >= 0 ? '+' : ''}${exit.returnSinceEntryPct.toFixed(1)}%)`
-            : '';
+            ? ` (진입대비 ${exit.returnSinceEntryPct >= 0 ? '+' : ''}${exit.returnSinceEntryPct.toFixed(1)}% | ${escapeTelegramHtml(exit.entryPriceBasisLabel || '평단가 기준')})`
+            : ` [기술적 추세 이탈 | 평단가 미등록]`;
 
           reportText += `${idx + 1}. ${stockTitle}: ${safeHeadline}${retText}\n`;
           reportText += `   └ 💡 <b>실행 권고:</b> ${safeAction}\n`;

@@ -8,12 +8,63 @@ import {
   MarketRegion,
 } from '../types/v8';
 import { detectMarketRegion } from '../utils/marketUtils';
+import { PaperTradingEngine } from './paperTradingEngine';
 
 export const USER_HOLD_POSITIONS_STORAGE_KEY = 'v8_quant_user_hold_positions';
 
 export class ExitSignalEngine {
   /**
-   * 로컬 스토리지에 저장된 사용자 보유 종목 목록 조회
+   * 모의투자(Paper Trading) 퀀트 전략 체결 포지션을 보유 종목 형태로 자동 변환합니다.
+   * 임의의 가짜 데이터 대신 알고리즘(전략 A/B)이 실제로 체결한 체결가(avgCostBasis)와 체결일자를 기준으로 산출합니다.
+   */
+  public static getPaperTradingAsHoldPositions(market: MarketRegion | 'ALL' = 'US'): UserHoldPosition[] {
+    const marketsToFetch: MarketRegion[] = market === 'ALL' ? ['US', 'KR'] : [market];
+    const results: UserHoldPosition[] = [];
+
+    for (const m of marketsToFetch) {
+      try {
+        const summary = PaperTradingEngine.getAccountSummary(m);
+        for (const pos of summary.positions) {
+          const strategyLabel =
+            pos.strategySource === 'STRATEGY_A'
+              ? '전략 A (모멘텀 돌파)'
+              : pos.strategySource === 'STRATEGY_B'
+              ? '전략 B (눌림목 분할매수)'
+              : '수동 주문';
+
+          const entryDate = pos.firstBoughtAt
+            ? pos.firstBoughtAt.split('T')[0]
+            : new Date().toISOString().split('T')[0];
+
+          results.push({
+            id: `paper_${m}_${pos.ticker}`,
+            ticker: pos.ticker,
+            name: pos.companyName,
+            market_region: m,
+            entryPrice: pos.avgCostBasis,
+            shares: pos.shares,
+            entryDate,
+            targetTakeProfitPct: 15,
+            stopLossPct: -7,
+            trailingStopPct: -7,
+            highestPrice: Math.max(pos.avgCostBasis, pos.currentPrice),
+            memo: `모의투자 ${strategyLabel} 체결`,
+            source: 'PAPER',
+            strategySource: pos.strategySource,
+            created_at: pos.firstBoughtAt || new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn(`[ExitSignalEngine] Failed to load paper trading positions for ${m}:`, err);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * 로컬 스토리지에 저장된 사용자 직접 등록 보유 종목 목록 조회
+   * 등록된 종목이 없으면 빈 배열([])을 반환하여 임의의 가짜 데이터 혼선을 원천 차단합니다.
    */
   public static getUserPositions(): UserHoldPosition[] {
     try {
@@ -21,86 +72,20 @@ export class ExitSignalEngine {
         const stored = localStorage.getItem(USER_HOLD_POSITIONS_STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed)) {
+            return parsed.map((p) => ({
+              ...p,
+              source: p.source || 'MANUAL',
+            }));
+          }
         }
       }
     } catch (err) {
       console.warn('[ExitSignalEngine] Failed to load user hold positions:', err);
     }
-    // 기본 샘플 데이터 (사용자가 보유 중인 핵심 주식 예시)
-    return [
-      {
-        id: 'hold_nvda',
-        ticker: 'NVDA',
-        name: 'NVIDIA Corp',
-        entryPrice: 118.5,
-        shares: 20,
-        entryDate: '2026-06-15',
-        targetTakeProfitPct: 20,
-        stopLossPct: -7,
-        trailingStopPct: -7,
-        highestPrice: 140.2,
-        memo: '2분기 실적 발표 전 진입',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'hold_tsla',
-        ticker: 'TSLA',
-        name: 'Tesla Inc',
-        entryPrice: 220.0,
-        shares: 15,
-        entryDate: '2026-07-02',
-        targetTakeProfitPct: 15,
-        stopLossPct: -7,
-        trailingStopPct: -8,
-        highestPrice: 238.5,
-        memo: '로보택시 모멘텀 분할매수',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'hold_spy',
-        ticker: 'SPY',
-        name: 'SPDR S&P 500 ETF Trust',
-        entryPrice: 535.0,
-        shares: 10,
-        entryDate: '2026-05-10',
-        targetTakeProfitPct: 12,
-        stopLossPct: -5,
-        trailingStopPct: -5,
-        highestPrice: 565.0,
-        memo: '코어 인덱스 장기 적립',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'hold_005930',
-        ticker: '005930.KS',
-        name: '삼성전자',
-        entryPrice: 71500,
-        shares: 50,
-        entryDate: '2026-06-20',
-        targetTakeProfitPct: 15,
-        stopLossPct: -7,
-        trailingStopPct: -6,
-        highestPrice: 76000,
-        memo: 'HBM 및 반도체 업황 턴어라운드',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'hold_000660',
-        ticker: '000660.KS',
-        name: 'SK하이닉스',
-        entryPrice: 185000,
-        shares: 20,
-        entryDate: '2026-07-05',
-        targetTakeProfitPct: 20,
-        stopLossPct: -8,
-        trailingStopPct: -7,
-        highestPrice: 198000,
-        memo: 'HBM3E 공급 모멘텀',
-        created_at: new Date().toISOString(),
-      },
-    ];
+    return [];
   }
+
 
   /**
    * 사용자 보유 종목 목록 저장
@@ -158,13 +143,31 @@ export class ExitSignalEngine {
 
     const signalsList: ExitSignalDetail[] = [];
 
+    const isKr = detectMarketRegion(ticker) === 'KR';
+    const currSymbol = isKr ? '₩' : '$';
+    const formattedEntryPrice = entryPrice ? (isKr ? `₩${Math.round(entryPrice).toLocaleString()}` : `$${entryPrice.toFixed(2)}`) : '';
+    
+    // 매수가 기준 출처 명확화 (애매함 100% 해소)
+    let sourceLabel = '등록 매수평단가';
+    let entryPriceBasisLabel = '평단가 미등록 (기술적 추세 이탈만 감시)';
+    if (userPosition?.source === 'PAPER') {
+      sourceLabel = '모의투자 전략 체결가';
+      entryPriceBasisLabel = `모의투자 체결가 (${userPosition.entryDate || ''})`;
+    } else if (userPosition?.source === 'QUANT_SIGNAL') {
+      sourceLabel = '퀀트 BUY 신호 체결가';
+      entryPriceBasisLabel = `퀀트 BUY 신호가 (${userPosition.entryDate || ''})`;
+    } else if (userPosition?.entryPrice) {
+      sourceLabel = '실계좌 등록 평단가';
+      entryPriceBasisLabel = `실계좌 등록 평단가 (${userPosition.entryDate || ''})`;
+    }
+
     // ==========================================
     // Rule 1: 목표 수익률 도달 (Take Profit)
     // ==========================================
     const tp1Pct = userPosition?.targetTakeProfitPct ?? 15;
     const tp2Pct = tp1Pct + 10; // e.g. 25%
-    const tp1Price = entryPrice ? Math.round(entryPrice * (1 + tp1Pct / 100) * 100) / 100 : 0;
-    const tp2Price = entryPrice ? Math.round(entryPrice * (1 + tp2Pct / 100) * 100) / 100 : 0;
+    const tp1Price = entryPrice ? (isKr ? Math.round(entryPrice * (1 + tp1Pct / 100)) : Math.round(entryPrice * (1 + tp1Pct / 100) * 100) / 100) : 0;
+    const tp2Price = entryPrice ? (isKr ? Math.round(entryPrice * (1 + tp2Pct / 100)) : Math.round(entryPrice * (1 + tp2Pct / 100) * 100) / 100) : 0;
 
     let tpStatus: 'REACHED_TP2' | 'REACHED_TP1' | 'IN_PROGRESS' | 'NOT_APPLICABLE' =
       'NOT_APPLICABLE';
@@ -179,7 +182,7 @@ export class ExitSignalEngine {
           label: `🎯 2차 목표 익절 도달 (+${returnSinceEntryPct.toFixed(1)}%)`,
           urgency: 'HIGH',
           actionRecommendation: '잔여 물량 50%~전량 강력 익절 (수익 극대화 확정)',
-          reason: `진입가($${entryPrice}) 대비 2차 목표 수익률(+${tp2Pct}%)을 돌파했습니다.`,
+          reason: `${sourceLabel}(${formattedEntryPrice}) 대비 2차 목표 수익률(+${tp2Pct}%)을 돌파했습니다.`,
           triggerPrice: tp2Price,
           returnSinceEntryPct,
         });
@@ -191,7 +194,7 @@ export class ExitSignalEngine {
           label: `🎯 1차 목표 익절 도달 (+${returnSinceEntryPct.toFixed(1)}%)`,
           urgency: 'MEDIUM',
           actionRecommendation: '보유 수량의 30~50% 1차 분할 익절 권장',
-          reason: `진입가($${entryPrice}) 대비 1차 목표 수익률(+${tp1Pct}%)에 도달했습니다.`,
+          reason: `${sourceLabel}(${formattedEntryPrice}) 대비 1차 목표 수익률(+${tp1Pct}%)에 도달했습니다.`,
           triggerPrice: tp1Price,
           returnSinceEntryPct,
         });
@@ -205,9 +208,9 @@ export class ExitSignalEngine {
     // ==========================================
     // 진입가 대비 5% 이상 수익이 났던 적이 있고, 최고점 대비 -7% 이상 꺾일 때
     const trailingThresholdPct = userPosition?.trailingStopPct ?? -7;
-    const trailingStopPrice = Math.round(
-      highestPriceSinceEntry * (1 + trailingThresholdPct / 100) * 100
-    ) / 100;
+    const trailingStopPrice = isKr
+      ? Math.round(highestPriceSinceEntry * (1 + trailingThresholdPct / 100))
+      : Math.round(highestPriceSinceEntry * (1 + trailingThresholdPct / 100) * 100) / 100;
     let isTrailingTriggered = false;
 
     if (
@@ -216,14 +219,16 @@ export class ExitSignalEngine {
       drawdownFromPeakPct <= trailingThresholdPct
     ) {
       isTrailingTriggered = true;
+      const formattedPeak = isKr ? `₩${Math.round(highestPriceSinceEntry).toLocaleString()}` : `$${highestPriceSinceEntry.toFixed(2)}`;
+      const formattedTrailingStop = isKr ? `₩${Math.round(trailingStopPrice).toLocaleString()}` : `$${trailingStopPrice.toFixed(2)}`;
       signalsList.push({
         type: 'TRAILING_STOP',
         label: `🛡️ 트레일링 스탑 이탈 (${drawdownFromPeakPct.toFixed(1)}%)`,
         urgency: 'HIGH',
         actionRecommendation: '수익 보존을 위한 잔여 포지션 청산',
-        reason: `진입 후 최고점($${highestPriceSinceEntry.toFixed(2)}) 대비 ${Math.abs(
+        reason: `진입 후 최고점(${formattedPeak}) 대비 ${Math.abs(
           drawdownFromPeakPct
-        )}% 하락하여 트레일링 스탑($${trailingStopPrice.toFixed(2)})을 하향 돌파했습니다.`,
+        )}% 하락하여 트레일링 스탑(${formattedTrailingStop})을 하향 돌파했습니다.`,
         triggerPrice: trailingStopPrice,
         returnSinceEntryPct,
         drawdownFromPeakPct,
@@ -234,7 +239,9 @@ export class ExitSignalEngine {
     // Rule 3: 최대 허용 손실 제한 (기계적 손절매 Stop Loss)
     // ==========================================
     const slThresholdPct = userPosition?.stopLossPct ?? -7;
-    const stopLossPrice = entryPrice ? Math.round(entryPrice * (1 + slThresholdPct / 100) * 100) / 100 : 0;
+    const stopLossPrice = entryPrice
+      ? (isKr ? Math.round(entryPrice * (1 + slThresholdPct / 100)) : Math.round(entryPrice * (1 + slThresholdPct / 100) * 100) / 100)
+      : 0;
     let isStopLossTriggered = false;
 
     if (returnSinceEntryPct !== undefined && returnSinceEntryPct <= slThresholdPct) {
@@ -244,11 +251,12 @@ export class ExitSignalEngine {
         label: `🛑 기계적 손절매 신호 (${returnSinceEntryPct.toFixed(1)}%)`,
         urgency: 'CRITICAL',
         actionRecommendation: '추가 손실 방지를 위한 즉시 전량 손절매',
-        reason: `진입가($${entryPrice}) 대비 최대 허용 손실 한도(${slThresholdPct}%)를 이탈했습니다.`,
+        reason: `${sourceLabel}(${formattedEntryPrice}) 대비 최대 허용 손실 한도(${slThresholdPct}%)를 이탈했습니다.`,
         triggerPrice: stopLossPrice,
         returnSinceEntryPct,
       });
     }
+
 
     // ==========================================
     // Rule 4: 기술적 지표 추세 이탈 & 과열 (보유 여부 무관)
@@ -294,14 +302,16 @@ export class ExitSignalEngine {
     // ==========================================
     let primaryExitSignal: SellSignalType = 'HOLD';
     let urgency: SellUrgency = 'NONE';
-    let headline = '정상 보유 (안정적 추세 유지)';
-    let recommendedAction = '현재 매도 신호 없음. 기존 포지션 유지';
+    let headline = isHoldPosition ? '정상 보유 (안정적 추세 유지)' : '추세 양호 (매도 신호 없음)';
+    let recommendedAction = isHoldPosition
+      ? '현재 매도 신호 없음. 기존 포지션 유지'
+      : '기술적 지표 정상. 보유 중인 종목인 경우 평단가를 등록하면 익절(+15%) 및 트레일링 스탑(-7%)이 자동 감시됩니다.';
 
     if (isStopLossTriggered) {
       primaryExitSignal = 'STOP_LOSS';
       urgency = 'CRITICAL';
       headline = `🛑 기계적 손절매 (자본 보호 최우선)`;
-      recommendedAction = `손실 확대를 차단하기 위해 전량 손절매를 권고합니다.`;
+      recommendedAction = `손실 확대를 차단하기 위해 전량 손절매를 권고합니다. (${sourceLabel} 대비 ${returnSinceEntryPct?.toFixed(1)}%)`;
     } else if (isTrailingTriggered) {
       primaryExitSignal = 'TRAILING_STOP';
       urgency = 'HIGH';
@@ -321,17 +331,19 @@ export class ExitSignalEngine {
       primaryExitSignal = 'TREND_BREAK_50MA';
       urgency = 'HIGH';
       headline = `📉 중기 지지선 붕괴 (추세 이탈 경보)`;
-      recommendedAction = `주요 이동평균선이 붕괴되었습니다. 비중을 축소하고 관망하세요.`;
+      recommendedAction = isHoldPosition
+        ? '주요 이동평균선이 붕괴되었습니다. 비중을 축소하고 관망하세요.'
+        : '평단가와 무관하게 50일선이 붕괴되었습니다. 신규 매수 금지 및 리스크 관리 권고.';
     } else if (ma20Broken && change1d < -1.5) {
       primaryExitSignal = 'TREND_BREAK_20MA';
       urgency = 'MEDIUM';
       headline = `⚠️ 단기 20일선 이탈 경고`;
-      recommendedAction = `단기 지지선이 무너졌습니다. 일부 물량 분할 차익실현을 검토하세요.`;
+      recommendedAction = '단기 지지선이 무너졌습니다. 일부 물량 분할 차익실현을 검토하세요.';
     } else if (isOverbought) {
       primaryExitSignal = 'OVERBOUGHT_DIVERGENCE';
       urgency = 'LOW';
       headline = `🔥 극단적 과열 (RSI ${rsi14.toFixed(1)})`;
-      recommendedAction = `단기 과매수 상태입니다. 분할 차익실현을 고려하세요.`;
+      recommendedAction = '단기 과매수 상태입니다. 분할 차익실현을 고려하세요.';
     }
 
     const isActionableSell = primaryExitSignal !== 'HOLD';
@@ -347,6 +359,9 @@ export class ExitSignalEngine {
       entryDate,
       highestPriceSinceEntry,
       returnSinceEntryPct,
+      positionSource: userPosition?.source || (userPosition ? 'MANUAL' : 'UNREGISTERED'),
+      strategySource: userPosition?.strategySource,
+      entryPriceBasisLabel,
       primaryExitSignal,
       urgency,
       isActionableSell,
@@ -364,7 +379,9 @@ export class ExitSignalEngine {
               ? `1차 목표 도달 (+${returnSinceEntryPct?.toFixed(1)}%)`
               : returnSinceEntryPct !== undefined
               ? `진행 중 (${returnSinceEntryPct >= 0 ? '+' : ''}${returnSinceEntryPct.toFixed(1)}% / 목표 +${tp1Pct}%)`
-              : `목표가 $${tp1Price} (+${tp1Pct}%)`,
+              : entryPrice
+              ? `목표가 ${currSymbol}${tp1Price.toLocaleString()} (+${tp1Pct}%)`
+              : `평단가 미등록 (+${tp1Pct}% 익절 대기)`,
           status: tpStatus,
         },
         trailingStop: {
@@ -374,7 +391,9 @@ export class ExitSignalEngine {
           drawdownFromPeakPct,
           label: isTrailingTriggered
             ? `스탑 이탈 (${drawdownFromPeakPct.toFixed(1)}% / 기준 ${trailingThresholdPct}%)`
-            : `고점 대비 ${drawdownFromPeakPct.toFixed(1)}% (스탑 기준 ${trailingThresholdPct}%)`,
+            : entryPrice
+            ? `고점 대비 ${drawdownFromPeakPct.toFixed(1)}% (스탑 기준 ${trailingThresholdPct}%)`
+            : `고점 대비 ${drawdownFromPeakPct.toFixed(1)}% (평단가 미등록)`,
         },
         stopLoss: {
           triggered: isStopLossTriggered,
@@ -383,8 +402,8 @@ export class ExitSignalEngine {
           label: isStopLossTriggered
             ? `손절선 이탈 (${returnSinceEntryPct?.toFixed(1)}% / 기준 ${slThresholdPct}%)`
             : entryPrice
-            ? `손절가 $${stopLossPrice} (${slThresholdPct}%)`
-            : `기준 ${slThresholdPct}%`,
+            ? `손절가 ${currSymbol}${stopLossPrice.toLocaleString()} (${slThresholdPct}%)`
+            : `평단가 미등록 (${slThresholdPct}% 손절 대기)`,
         },
         technicalExit: {
           triggered: isTechnicalTriggered,
@@ -406,7 +425,7 @@ export class ExitSignalEngine {
   }
 
   /**
-   * 전체 유니버스 + 사용자 보유 종목 통합 매도 평가 산출 (시장별 격리 지원)
+   * 전체 유니버스 + 보유 종목 통합 매도 평가 산출 (시장별 격리 지원)
    */
   public static evaluateAllExits(
     evaluations: FullTickerEvaluation[],
@@ -423,9 +442,22 @@ export class ExitSignalEngine {
       }
     }
 
-    let positions = userPositions || this.getUserPositions();
+    let positions: UserHoldPosition[];
+    if (userPositions !== undefined) {
+      positions = userPositions;
+    } else {
+      const customPositions = this.getUserPositions();
+      // 실계좌 직접 등록 종목 최우선 반영 + 모의투자 포지션 중 중복되지 않는 종목 함께 병합하여 보유 종목 감시망 완성
+      const paperPositions = this.getPaperTradingAsHoldPositions(effectiveRegion || 'US');
+      const customTickers = new Set(customPositions.map((p) => p.ticker.toUpperCase()));
+      positions = [
+        ...customPositions,
+        ...paperPositions.filter((p) => !customTickers.has(p.ticker.toUpperCase())),
+      ];
+    }
+
     if (effectiveRegion && effectiveRegion !== 'ALL') {
-      positions = positions.filter((p) => detectMarketRegion(p.ticker) === effectiveRegion);
+      positions = positions.filter((p) => (p.market_region || detectMarketRegion(p.ticker)) === effectiveRegion);
     }
 
     const positionMap = new Map<string, UserHoldPosition>();
