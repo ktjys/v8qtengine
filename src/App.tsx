@@ -28,6 +28,8 @@ import { AutoScanScheduleModal } from './components/AutoScanScheduleModal';
 import { DatabaseHealthModal } from './components/DatabaseHealthModal';
 import { VersionInfoModal } from './components/VersionInfoModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LoginModal } from './components/LoginModal';
 import { calculateBacktestMetrics } from './engine/backtestEngine';
 import {
   DEFAULT_STRATEGY_CONFIG,
@@ -76,8 +78,10 @@ const getInitialTab = (): TabType => {
 };
 
 export default function App() {
+  const auth = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -619,6 +623,9 @@ export default function App() {
         onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         onOpenDbHealthModal={() => setIsDbHealthModalOpen(true)}
         onOpenVersionModal={() => setIsVersionModalOpen(true)}
+        onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        isAuthenticated={auth.session !== null}
+        user={auth.user}
         evaluations={filteredEvaluations}
         onRefreshData={loadAllData}
         isRefreshingData={isInitialLoading}
@@ -931,6 +938,15 @@ export default function App() {
         <VersionInfoModal
           isOpen={isVersionModalOpen}
           onClose={() => setIsVersionModalOpen(false)}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* Owner Login & Recovery Modal */}
+      {isLoginModalOpen && (
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
           onShowToast={showToast}
         />
       )}

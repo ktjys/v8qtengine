@@ -16,6 +16,8 @@ import {
   LineChart,
   ShieldAlert,
   GitCommit,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import { MarketRegion, FullTickerEvaluation } from '../types/v8';
 import { APP_VERSION_INFO } from '../version';
@@ -30,6 +32,9 @@ interface NavbarProps {
   onOpenScheduleModal: () => void;
   onOpenDbHealthModal?: () => void;
   onOpenVersionModal?: () => void;
+  onOpenLoginModal?: () => void;
+  isAuthenticated?: boolean;
+  user?: { email?: string | null } | null;
   evaluations?: FullTickerEvaluation[];
   onRefreshData?: () => void;
   isRefreshingData?: boolean;
@@ -47,6 +52,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenScheduleModal,
   onOpenDbHealthModal,
   onOpenVersionModal,
+  onOpenLoginModal,
+  isAuthenticated = false,
+  user = null,
   evaluations = [],
   onRefreshData,
   isRefreshingData = false,
@@ -220,6 +228,33 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <GitCommit className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                 <span className="font-bold">#{APP_VERSION_INFO.commitHash}</span>
+              </button>
+            )}
+
+            {/* Owner Auth Button (소유자 인증) */}
+            {onOpenLoginModal && (
+              <button
+                id="header-auth-btn"
+                type="button"
+                onClick={onOpenLoginModal}
+                className={`flex items-center space-x-1.5 py-1 px-2 rounded-lg border text-xs font-mono font-semibold transition-all active:scale-95 shrink-0 ${
+                  isAuthenticated
+                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-300 border-rose-500/40 hover:bg-rose-500/20'
+                }`}
+                title={isAuthenticated ? `로그인 중: ${user?.email || ''} - 클릭하여 로그아웃` : '소유자 인증 필요 (보안 영역 진입)'}
+              >
+                {isAuthenticated ? (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">인증됨</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">소유자 인증</span>
+                  </>
+                )}
               </button>
             )}
 

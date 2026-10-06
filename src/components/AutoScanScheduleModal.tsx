@@ -127,13 +127,7 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      try {
-        const savedToken = localStorage.getItem('v8_telegram_bot_token');
-        const savedChatId = localStorage.getItem('v8_telegram_chat_id');
-        if (savedToken && !inputBotToken) setInputBotToken(savedToken);
-        if (savedChatId && !inputChatId) setInputChatId(savedChatId);
-      } catch {}
-
+      // ⚠️ 보안 개선: 로컬스토리지에서 토큰을 불러오지 않고 서버의 마스킹된 상태만 조회합니다.
       fetchTelegramStatus();
       fetchSchedulerStatus();
       setScanResult(null);
@@ -169,11 +163,8 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
 
     setIsSavingTelegram(true);
     try {
-      try {
-        localStorage.setItem('v8_telegram_bot_token', cleanToken);
-        localStorage.setItem('v8_telegram_chat_id', cleanChatId);
-      } catch {}
-
+      // ⚠️ 보안 개선: Bot Token과 Chat ID를 브라우저 localStorage에 평문 저장하지 않고
+      // 오직 서버(/api/v8/telegram/config) 세션/환경변수로만 안전하게 전달합니다.
       const res = await fetch('/api/v8/telegram/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,9 +177,9 @@ export const AutoScanScheduleModal: React.FC<AutoScanScheduleModalProps> = ({
           botTokenConfigured: true,
           chatIdConfigured: true,
           targetChatIdMasked: `${cleanChatId.slice(0, 3)}****`,
-          source: 'BROWSER_AND_SERVER',
+          source: 'SERVER_SECURE',
         });
-        onShowToast('텔레그램 봇 연동 정보가 로컬 및 서버에 안전하게 저장되었습니다!');
+        onShowToast('텔레그램 봇 연동 정보가 서버 세션에 안전하게 저장되었습니다 (브라우저 비저장).');
       } else {
         const data = await res.json().catch(() => ({}));
         onShowToast(`서버 등록 실패: ${data.error || '오류 발생'}`);

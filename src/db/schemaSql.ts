@@ -307,6 +307,105 @@ CREATE POLICY "Allow all classification_snapshots" ON classification_snapshots F
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- 16. Admin Profiles & Recovery Codes (소유자 인증 기반)
+--   auth.users와 1:1 매핑된 관리자 프로필과, 이메일 의존성 제로를 위한
+--   복구 코드(해시 저장) 테이블. 신규 테이블에만 본인 전용 RLS 정책 적용.
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL UNIQUE,
+  display_name TEXT,
+  is_admin BOOLEAN NOT NULL DEFAULT false,
+  recovery_code_used BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS recovery_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  code_hint CHAR(1) NOT NULL,
+  is_used BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  used_at TIMESTAMPTZ,
+  CONSTRAINT recovery_codes_profile_unique_active
+    EXCLUDE (profile_id WITH =) WHERE (is_used = false)
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recovery_codes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "own_profile" ON profiles;
+CREATE POLICY "own_profile" ON profiles
+  FOR ALL USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "own_recovery_codes" ON recovery_codes;
+CREATE POLICY "own_recovery_codes" ON recovery_codes
+  FOR ALL USING (auth.uid() = profile_id) WITH CHECK (auth.uid() = profile_id);
+
+GRANT ALL ON TABLE profiles TO authenticated, service_role;
+GRANT ALL ON TABLE recovery_codes TO authenticated, service_role;
+
+-- 4. RPC 헬퍼 함수 (서버에서 service 키로만 호출)
+
+-- 4-1. 복구 코드 생성: pgcrypto crypt()로 해시 저장, code_hint 첫 글자 저장
+CREATE OR REPLACE FUNCTION create_recovery_code(p_profile_id UUID, p_code TEXT)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE recovery_codes
+  SET is_used = true, used_at = NOW()
+  WHERE profile_id = p_profile_id AND is_used = false;
+
+  INSERT INTO recovery_codes (profile_id, code_hash, code_hint)
+  VALUES (p_profile_id, crypt(p_code, gen_salt('bfx', 8)), LEFT(p_code, 1));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4-2. 복구 코드 검증: crypt(input, stored_hash) == stored_hash
+CREATE OR REPLACE FUNCTION verify_recovery_code(p_profile_id UUID, p_code TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_hash TEXT;
+BEGIN
+  SELECT rc.code_hash INTO v_hash
+  FROM recovery_codes rc
+  WHERE rc.profile_id = p_profile_id
+    AND rc.is_used = false
+  ORDER BY rc.created_at DESC
+  LIMIT 1;
+
+  IF v_hash IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  IF crypt(p_code, v_hash) = v_hash THEN
+    UPDATE recovery_codes
+    SET is_used = true, used_at = NOW()
+    WHERE profile_id = p_profile_id AND is_used = false AND code_hash = v_hash;
+    RETURN TRUE;
+  END IF;
+
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4-3. 관리자 프로필 생성/보정 (서버 전용)
+CREATE OR REPLACE FUNCTION ensure_admin_profile(p_user_id UUID, p_email TEXT)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO profiles (id, email, is_admin)
+  VALUES (p_user_id, p_email, true)
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    is_admin = TRUE,
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION create_recovery_code TO service_role;
+GRANT EXECUTE ON FUNCTION verify_recovery_code TO service_role;
+GRANT EXECUTE ON FUNCTION ensure_admin_profile TO service_role;
 `;
 
 export const ALL_TABLES_RLS_FIX_SQL = `-- ==============================================================================

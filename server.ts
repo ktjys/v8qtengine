@@ -16,6 +16,7 @@ import { macroRouter } from './src/api/macroRoutes';
 import { portfolioRouter } from './src/api/portfolioRoutes';
 import { paperTradingRouter } from './src/api/paperTradingRoutes';
 import { riskSizingRouter } from './src/api/riskSizingRoutes';
+import { authRouter } from './src/api/authRoutes';
 import { executeCronScan, getLastCronScanResult } from './src/engine/cronScanEngine';
 import { telegramNotifier } from './src/notification/telegramNotifier';
 import { internalScheduler } from './src/services/internalScheduler';
@@ -87,6 +88,7 @@ async function startServer() {
   app.use('/api/v8/portfolio', portfolioRouter);
   app.use('/api/v8/paper', paperTradingRouter);
   app.use('/api/v8/risk', riskSizingRouter);
+  app.use('/api/v8/auth', authRouter);
 
   // Auto-scan / Cron routes for local and production parity (supports all aliases and methods)
   const cronHandler = async (req: express.Request, res: express.Response) => {
