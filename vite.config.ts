@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import packageJson from './package.json';
 import {defineConfig} from 'vite';
 import {execSync} from 'child_process';
 
@@ -32,7 +33,7 @@ export default defineConfig(() => {
       },
     },
     define: {
-      __APP_VERSION__: JSON.stringify('8.2.4'),
+      __APP_VERSION__: JSON.stringify(packageJson.version || '8.2.5'),
       __COMMIT_HASH__: JSON.stringify(getGitCommitHash()),
       __COMMIT_MESSAGE__: JSON.stringify(getGitCommitMessage()),
       __BUILD_TIME__: JSON.stringify(

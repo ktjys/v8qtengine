@@ -16,9 +16,9 @@ declare const __COMMIT_HASH__: string | undefined;
 declare const __COMMIT_MESSAGE__: string | undefined;
 declare const __BUILD_TIME__: string | undefined;
 
-export const FALLBACK_COMMIT_HASH = 'c6e04de';
-export const FALLBACK_COMMIT_MESSAGE = 'fix(ui): responsive two-tier navbar and mobile layout';
-export const FALLBACK_BUILD_TIME = '2026. 10. 4. AM 9:31:43 KST';
+export const FALLBACK_COMMIT_HASH = 'ac4e772';
+export const FALLBACK_COMMIT_MESSAGE = '버전 변경 히스토리 자동 기록 시스템 구축';
+export const FALLBACK_BUILD_TIME = '2026. 10. 6. PM 9:20:02 KST';
 
 const resolveCommitHash = (fallback = FALLBACK_COMMIT_HASH): string => {
   if (typeof __COMMIT_HASH__ !== 'undefined' && __COMMIT_HASH__) return __COMMIT_HASH__;
@@ -43,7 +43,7 @@ const resolveBuildTime = (fallback = FALLBACK_BUILD_TIME): string => {
 };
 
 export const APP_VERSION_INFO: AppVersionInfo = {
-  version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '8.2.5',
+  version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '8.2.6',
   commitHash: resolveCommitHash(),
   commitMessage: resolveCommitMessage(),
   buildTime: resolveBuildTime(),
@@ -51,6 +51,16 @@ export const APP_VERSION_INFO: AppVersionInfo = {
 };
 
 export const RECENT_RELEASE_CHANGELOG = [
+  {
+    version: 'v8.2.6',
+    date: '2026-10-06',
+    commit: 'ac4e772',
+    title: '버전 변경 히스토리 자동 기록 시스템 구축',
+    items: [
+      'Git 커밋 및 단일 CLI 기반 자동 체인지로그 생성',
+      'package.json 및 vite.config.ts 버전 자동 동기화 지원',
+    ],
+  },
   {
     version: 'v8.2.5',
     date: '2026-10-05',

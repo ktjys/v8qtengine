@@ -1,11 +1,13 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "8.2.6",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "dev:worker": "wrangler dev",
+    "version:bump": "node scripts/auto-version.cjs",
+    "version:auto": "node scripts/auto-version.cjs --auto",
     "prebuild": "node scripts/update-version.cjs",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist-server/server.cjs",
     "build:pages": "vite build",
