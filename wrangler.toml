@@ -19,6 +19,7 @@ V8_DATA_PROVIDER = "yahoo"
 # Dashboard: Settings > Variables and Secrets > Environment Variables
 # Or CLI: npx wrangler secret put SUPABASE_URL / npx wrangler secret put SUPABASE_KEY
 # (Do NOT define empty SUPABASE_URL/KEY in [vars] as empty strings overwrite Cloudflare dashboard secrets!)
+#
 
 [triggers]
 crons = [
