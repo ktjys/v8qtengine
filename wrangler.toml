@@ -12,8 +12,9 @@ not_found_handling = "single-page-application"
 NODE_VERSION = "20"
 V8_DATA_PROVIDER = "yahoo"
 # VITE_ variables are exposed to the client; safe to set as vars (not secrets)
-VITE_SUPABASE_URL = ""
-VITE_SUPABASE_ANON_KEY = ""
+# Set these via Cloudflare Dashboard → Variables and Secrets → Environment Variables
+# VITE_SUPABASE_URL = ""
+# VITE_SUPABASE_ANON_KEY = ""
 # ⚠️ Set TELEGRAM and SUPABASE SERVICE KEY in Cloudflare dashboard or wrangler secret:
 # Dashboard: Settings > Variables and Secrets > Environment Variables
 # Or CLI: npx wrangler secret put SUPABASE_URL / npx wrangler secret put SUPABASE_KEY
