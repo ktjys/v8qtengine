@@ -310,7 +310,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Tier 2: Dedicated Navigation Tab Bar (Desktop & Responsive) */}
-      <div className="border-t border-slate-800/80 bg-slate-950/60 backdrop-blur-sm w-full max-w-full overflow-hidden">
+      <div className="border-t border-slate-800/80 bg-slate-950/60 backdrop-blur-sm w-full max-w-full overflow-visible">
         <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
           <nav
             role="tablist"
