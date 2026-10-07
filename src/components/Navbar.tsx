@@ -152,7 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const activeSecondaryItem = secondaryTabs.find((tab) => tab.id === activeTab);
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40 w-full max-w-full overflow-x-clip">
+    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40 w-full max-w-full overflow-visible">
       {/* Tier 1: Brand & Core Utility Bar */}
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-13 sm:h-14 gap-1 sm:gap-4 w-full max-w-full min-w-0">
