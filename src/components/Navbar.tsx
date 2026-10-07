@@ -152,60 +152,58 @@ export const Navbar: React.FC<NavbarProps> = ({
   const activeSecondaryItem = secondaryTabs.find((tab) => tab.id === activeTab);
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40">
+    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 text-slate-100 shadow-sm shadow-slate-950/40 w-full max-w-full overflow-x-clip">
       {/* Tier 1: Brand & Core Utility Bar */}
-      <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-13 sm:h-14 gap-2 sm:gap-4">
-          {/* Logo, Brand & Market Toggle */}
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
-              <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-white stroke-[2.5]" />
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-13 sm:h-14 gap-1 sm:gap-4 w-full max-w-full min-w-0">
+          {/* Logo & Brand (compact icon on mobile, full text on sm+) */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
+              <Activity className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-white stroke-[2.5]" />
             </div>
-            <div className="min-w-0 flex items-center space-x-2">
-              <span className="font-bold text-sm sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent truncate">
+            <div className="hidden sm:flex items-center space-x-1.5 sm:space-x-2">
+              <span className="font-bold text-sm sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
                 QUANT ENGINE
               </span>
-              <span className="hidden sm:inline-flex px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+              <span className="hidden md:inline-flex px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
                 LIVE
               </span>
             </div>
-
-            {/* Market Region Segmented Toggle */}
-            {onSelectMarket && (
-              <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner shrink-0 ml-1 sm:ml-2">
-                <button
-                  id="market-select-us-btn"
-                  type="button"
-                  onClick={() => onSelectMarket('US')}
-                  className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-all ${
-                    activeMarket === 'US'
-                      ? 'bg-blue-600 text-white shadow-sm font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                  title="미국 주식 & ETF (USD $ / S&P500 기준)"
-                >
-                  <span className="text-xs leading-none">🇺🇸</span>
-                  <span className="text-xs">US</span>
-                  <span className="hidden md:inline text-xs">장</span>
-                </button>
-                <button
-                  id="market-select-kr-btn"
-                  type="button"
-                  onClick={() => onSelectMarket('KR')}
-                  className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-all ${
-                    activeMarket === 'KR'
-                      ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-                  }`}
-                  title="국내 주식 & ETF (KRW ₩ / KOSPI200 기준)"
-                >
-                  <span className="text-xs leading-none">🇰🇷</span>
-                  <span className="text-xs">KR</span>
-                  <span className="hidden md:inline text-xs">장</span>
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* Market Region Segmented Toggle (Unclipped, always crisp and fully visible) */}
+          {onSelectMarket && (
+            <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shadow-inner shrink-0">
+              <button
+                id="market-select-us-btn"
+                type="button"
+                onClick={() => onSelectMarket('US')}
+                className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-all cursor-pointer ${
+                  activeMarket === 'US'
+                    ? 'bg-blue-600 text-white shadow-sm font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+                title="미국 주식 & ETF (USD $ / S&P500 기준)"
+              >
+                <span className="text-xs leading-none">🇺🇸</span>
+                <span className="text-[11px] sm:text-xs">US<span className="hidden md:inline">장</span></span>
+              </button>
+              <button
+                id="market-select-kr-btn"
+                type="button"
+                onClick={() => onSelectMarket('KR')}
+                className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-all cursor-pointer ${
+                  activeMarket === 'KR'
+                    ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+                title="국내 주식 & ETF (KRW ₩ / KOSPI200 기준)"
+              >
+                <span className="text-xs leading-none">🇰🇷</span>
+                <span className="text-[11px] sm:text-xs">KR<span className="hidden md:inline">장</span></span>
+              </button>
+            </div>
+          )}
 
           {/* Action Trigger Controls & Tools */}
           <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
@@ -231,28 +229,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Owner Auth Button (소유자 인증) */}
+            {/* Owner Auth Button (인증) */}
             {onOpenLoginModal && (
               <button
                 id="header-auth-btn"
                 type="button"
                 onClick={onOpenLoginModal}
-                className={`flex items-center space-x-1.5 py-1 px-2 rounded-lg border text-xs font-mono font-semibold transition-all active:scale-95 shrink-0 ${
+                className={`flex items-center space-x-1 py-1.5 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold transition-all active:scale-95 shrink-0 shadow-sm cursor-pointer ${
                   isAuthenticated
-                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/20'
-                    : 'bg-rose-500/10 text-rose-300 border-rose-500/40 hover:bg-rose-500/20'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60 hover:bg-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-200 border-rose-500/60 hover:bg-rose-500/30 ring-1 ring-rose-500/40'
                 }`}
-                title={isAuthenticated ? `로그인 중: ${user?.email || '소유자'} (클릭하여 관리자 패널/로그아웃)` : '소유자 인증 필요 (보안 영역 진입)'}
+                title={isAuthenticated ? `로그인 중: ${user?.email || '소유자'} (클릭하여 관리자 패널/로그아웃)` : '인증 필요 (보안 영역 진입)'}
               >
                 {isAuthenticated ? (
                   <>
-                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline">인증됨</span>
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span className="text-[11px] font-bold">인증됨</span>
                   </>
                 ) : (
                   <>
-                    <Lock className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline">소유자 인증</span>
+                    <Lock className="w-3.5 h-3.5 shrink-0 text-rose-300" />
+                    <span className="text-[11px] font-bold">인증</span>
                   </>
                 )}
               </button>
@@ -264,7 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 id="header-db-health-btn"
                 type="button"
                 onClick={onOpenDbHealthModal}
-                className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/80 transition-all active:scale-95 shrink-0"
+                className="hidden md:flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/80 transition-all active:scale-95 shrink-0 cursor-pointer"
                 title="데이터베이스 헬스체크 & DDL"
               >
                 <Database className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -277,7 +275,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="header-schedule-btn"
               type="button"
               onClick={onOpenScheduleModal}
-              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all active:scale-95 shrink-0"
+              className="hidden md:flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all active:scale-95 shrink-0 cursor-pointer"
               title="하루 2회 자동 스캔 & 텔레그램 알림 설정"
             >
               <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -289,11 +287,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="header-run-scan-btn"
               type="button"
               onClick={onOpenScanModal}
-              className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 shrink-0"
+              className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md shadow-cyan-600/30 transition-all active:scale-95 shrink-0 cursor-pointer"
               title="실시간 퀀트 스캔 실행"
             >
               <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-              <span>스캔 실행</span>
+              <span className="hidden sm:inline">스캔 실행</span>
+              <span className="sm:hidden text-xs">스캔</span>
             </button>
 
             {/* Mobile / Tablet Drawer Toggle Button */}
@@ -301,7 +300,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="header-mobile-menu-btn"
               type="button"
               onClick={() => setIsMobileDrawerOpen((prev) => !prev)}
-              className="md:hidden p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 shrink-0 ml-0.5"
+              className="md:hidden p-1.5 sm:p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 shrink-0 ml-0.5 cursor-pointer"
               aria-label="전체 메뉴 열기"
             >
               {isMobileDrawerOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -311,15 +310,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Tier 2: Dedicated Navigation Tab Bar (Desktop & Responsive) */}
-      <div className="border-t border-slate-800/80 bg-slate-950/60 backdrop-blur-sm">
-        <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+      <div className="border-t border-slate-800/80 bg-slate-950/60 backdrop-blur-sm w-full max-w-full overflow-hidden">
+        <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
           <nav
             role="tablist"
             aria-label="메인 내비게이션 탭"
-            className="flex items-center space-x-1 sm:space-x-1.5 py-1.5"
+            className="flex items-center space-x-1 sm:space-x-1.5 py-1.5 w-full max-w-full min-w-0"
           >
-            {/* Scrollable Main Tabs */}
-            <div className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto no-scrollbar whitespace-nowrap">
+            {/* Scrollable Main Tabs (min-w-0 flex-1 prevents horizontal page blow-out) */}
+            <div className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto no-scrollbar whitespace-nowrap min-w-0 flex-1 py-0.5">
               {mainTabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -333,7 +332,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       setActiveTab(tab.id);
                       setIsMoreMenuOpen(false);
                     }}
-                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 ${
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer ${
                       isActive
                         ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30 font-semibold'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
@@ -368,7 +367,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 aria-haspopup="true"
                 aria-expanded={isMoreMenuOpen}
                 onClick={() => setIsMoreMenuOpen((prev) => !prev)}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer ${
                   isSecondaryActive
                     ? 'bg-slate-800 text-purple-300 shadow-sm border border-purple-500/30 font-semibold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80'
@@ -432,9 +431,83 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
+      {/* Tier 3: Mobile Urgent Auth Notice Strip (미인증 시 모바일 상단 1줄 강조 배너) */}
+      {!isAuthenticated && onOpenLoginModal && (
+        <div className="md:hidden bg-gradient-to-r from-rose-950/90 via-slate-900 to-rose-950/90 border-b border-rose-500/40 px-2.5 sm:px-3 py-1.5 flex items-center justify-between text-xs text-rose-200 w-full max-w-full overflow-hidden">
+          <div className="flex items-center space-x-1.5 min-w-0 truncate">
+            <span className="flex h-2 w-2 relative shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+            </span>
+            <span className="font-semibold text-[11px] text-rose-200 truncate">
+              관리자 미인증 (보안 영역 잠김)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenLoginModal}
+            className="flex items-center space-x-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-500 px-2 py-0.5 rounded-md shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
+          >
+            <Lock className="w-3 h-3 shrink-0" />
+            <span>지금 인증</span>
+          </button>
+        </div>
+      )}
+
       {/* Mobile & Small Screen Full Drawer */}
       {isMobileDrawerOpen && (
         <div className="md:hidden border-t border-slate-800 py-3 px-3 bg-slate-900/98 rounded-b-2xl shadow-2xl animate-fadeIn space-y-3">
+          {/* Mobile Auth Status & Action (소유자 인증 / 계정) */}
+          {onOpenLoginModal && (
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div
+                    className={`p-2 rounded-xl border shrink-0 ${
+                      isAuthenticated
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                    }`}
+                  >
+                    {isAuthenticated ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                      <span>{isAuthenticated ? '관리자 인증 완료' : '관리자 미인증'}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold shrink-0 ${
+                          isAuthenticated
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-rose-500/20 text-rose-300'
+                        }`}
+                      >
+                        {isAuthenticated ? '정상 세션' : '인증 필요'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono truncate max-w-[170px] sm:max-w-[220px]">
+                      {isAuthenticated ? (user?.email || '소유자') : 'DDL 및 보안 제어 잠금'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenLoginModal();
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all active:scale-95 shrink-0 ${
+                    isAuthenticated
+                      ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/30'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500/40 shadow-sm shadow-rose-950'
+                  }`}
+                >
+                  {isAuthenticated ? '계정 관리' : '인증하기'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Market Region Toggle in Mobile */}
           {onSelectMarket && (
             <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">

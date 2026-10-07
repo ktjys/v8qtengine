@@ -164,10 +164,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-100">
-                {isAuthenticated ? '소유자 인증 활성화됨' : '소유자 인증 관리'}
+                {isAuthenticated ? '관리자 인증 완료' : '관리자 인증'}
               </h3>
               <p className="text-[11px] text-slate-400">
-                {isAuthenticated ? '시스템 관리자 권한 활성화 상태' : '관리자 전용 보안 영역 진입'}
+                {isAuthenticated ? '보안 제어 및 DDL 관리 권한 활성화됨' : '보안 제어 및 관리자 전용 세션 진입'}
               </p>
             </div>
           </div>
