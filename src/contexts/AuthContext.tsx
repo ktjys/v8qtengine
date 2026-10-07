@@ -85,12 +85,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             const verifyData = await verifyRes.json();
             if (verifyData.valid && isMounted) {
-              const adminUser = {
-                id: parsed.user?.id || 'admin-owner',
-                email: parsed.user?.email || defaultAdminEmail,
-                user_metadata: { role: 'admin', is_admin: true },
-                app_metadata: { role: 'admin' },
-              } as User;
+               const adminUser = {
+                 id: parsed.user?.id || 'admin-owner',
+                 email: parsed.user?.email || defaultAdminEmail,
+                 user_metadata: { role: 'admin', is_admin: true },
+                 app_metadata: { role: 'admin' },
+                 aud: 'authenticated',
+                 created_at: new Date().toISOString(),
+               } as User;
 
               const adminSession = {
                 access_token: parsed.token,
@@ -274,12 +276,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 인증 성공 시 세션 토큰 저장 및 상태 즉시 반영
       if (data.token) {
-        const adminUser = {
-          id: data.user?.id || 'admin-owner',
-          email: data.user?.email || 'kanada250@gmail.com',
-          user_metadata: { role: 'admin', is_admin: true },
-          app_metadata: { role: 'admin' },
-        } as User;
+         const adminUser = {
+           id: data.user?.id || 'admin-owner',
+           email: data.user?.email || 'kanada250@gmail.com',
+           user_metadata: { role: 'admin', is_admin: true },
+           app_metadata: { role: 'admin' },
+           aud: 'authenticated',
+           created_at: new Date().toISOString(),
+         } as User;
 
         const adminSession = {
           access_token: data.token,

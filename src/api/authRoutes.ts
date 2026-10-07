@@ -14,6 +14,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { dbClient } from '../db/supabaseClient';
+import { User } from '@supabase/auth-js';
 
 export const authRouter = Router();
 
@@ -137,10 +138,10 @@ authRouter.post('/recovery-code', async (req: Request, res: Response) => {
     });
 
     // DB 연결 및 profiles/recovery_codes RPC가 존재할 경우 DB에도 반영 시도
-    if (dbClient.ensureConnected()) {
-      try {
-        const { data: listData } = await dbClient.supabase!.auth.admin.listUsers();
-        const adminUser = listData?.users?.find((u) => u.email === adminEmail);
+     if (dbClient.ensureConnected()) {
+       try {
+        const { data: listData } = await dbClient.supabase!.auth.admin.listUsers() as { data: { users: User[]; aud: string } | { users: [] }; error: any };
+        const adminUser = (listData?.users as User[]).find((u) => u.email === adminEmail);
         if (adminUser) {
           await dbClient.supabase!.rpc('ensure_admin_profile', {
             p_user_id: adminUser.id,
@@ -198,11 +199,11 @@ authRouter.post('/verify-recovery-code', async (req: Request, res: Response) => 
       }
     }
 
-    // 3) DB RPC 검증 시도 (Supabase 연동 시)
-    if (!isMatch && dbClient.ensureConnected()) {
-      try {
-        const { data: listData } = await dbClient.supabase!.auth.admin.listUsers();
-        const adminUser = listData?.users?.find((u) => u.email === adminEmail);
+     // 3) DB RPC 검증 시도 (Supabase 연동 시)
+     if (!isMatch && dbClient.ensureConnected()) {
+       try {
+        const { data: listData } = await dbClient.supabase!.auth.admin.listUsers() as { data: { users: User[]; aud: string } | { users: [] }; error: any };
+        const adminUser = (listData?.users as User[]).find((u) => u.email === adminEmail);
         if (adminUser) {
           const { data: match } = await dbClient.supabase!.rpc('verify_recovery_code', {
             p_profile_id: adminUser.id,
