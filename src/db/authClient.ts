@@ -20,9 +20,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Vite inlines these at build time. They must be defined in .env as
-// VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (see .env.example).
-// TypeScript doesn't know about import.meta.env by default - use a type assertion
 declare global {
   interface ImportMetaEnv {
     readonly VITE_SUPABASE_URL: string | undefined;
@@ -33,29 +30,28 @@ declare global {
   }
 }
 
-const supabaseUrl = (
-  (typeof import.meta !== 'undefined' ? import.meta.env.VITE_SUPABASE_URL : undefined) ||
+let supabaseUrl = (
+  (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_SUPABASE_URL : undefined) ||
   (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined) ||
   ''
 ).trim().replace(/^["']|["']$/g, '');
 
-const supabaseAnonKey = (
-  (typeof import.meta !== 'undefined' ? import.meta.env.VITE_SUPABASE_ANON_KEY : undefined) ||
+let supabaseAnonKey = (
+  (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_SUPABASE_ANON_KEY : undefined) ||
   (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : undefined) ||
   ''
 ).trim().replace(/^["']|["']$/g, '');
 
 let authClient: SupabaseClient | null = null;
 
-export function getAuthClient(): SupabaseClient | null {
-  if (authClient) return authClient;
+export function initAuthClient(url?: string, anonKey?: string): SupabaseClient | null {
+  if (url) supabaseUrl = url.trim().replace(/^["']|["']$/g, '');
+  if (anonKey) supabaseAnonKey = anonKey.trim().replace(/^["']|["']$/g, '');
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn(
-      '[AuthClient] ⚠️ VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY가 설정되지 않았습니다. ' +
-      '인증 기능을 사용하려면 .env에 VITE_SUPABASE_URL와 VITE_SUPABASE_ANON_KEY를 추가하세요.'
-    );
     return null;
   }
+
   authClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,        // 브라우저 재방문 시 세션 복원
@@ -64,7 +60,16 @@ export function getAuthClient(): SupabaseClient | null {
       storageKey: 'quant_engine_auth_v8',
     },
   });
+
   return authClient;
+}
+
+export function getAuthClient(): SupabaseClient | null {
+  if (authClient) return authClient;
+  if (supabaseUrl && supabaseAnonKey) {
+    return initAuthClient();
+  }
+  return null;
 }
 
 export function isAuthConfigured(): boolean {

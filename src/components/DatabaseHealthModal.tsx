@@ -24,6 +24,8 @@ interface DatabaseHealthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast?: (msg: string) => void;
+  isAuthenticated?: boolean;
+  onOpenLoginModal?: () => void;
 }
 
 export interface TableStatusItem {
@@ -66,6 +68,8 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
   isOpen,
   onClose,
   onShowToast,
+  isAuthenticated = false,
+  onOpenLoginModal,
 }) => {
   const [diagnostics, setDiagnostics] = useState<any | null>(null);
   const [schemaSql, setSchemaSql] = useState<string>('');
@@ -134,6 +138,16 @@ export const DatabaseHealthModal: React.FC<DatabaseHealthModalProps> = ({
   }, [isOpen]);
 
   const handleSeedData = async () => {
+    if (!isAuthenticated) {
+      if (onShowToast) {
+        onShowToast('소유자 인증이 필요합니다. 관리자 로그인 후 DB 주입이 가능합니다.');
+      }
+      if (onOpenLoginModal) {
+        onOpenLoginModal();
+      }
+      return;
+    }
+
     setIsSeeding(true);
     try {
       const res = await fetch('/api/v8/system/db/seed', { method: 'POST' });

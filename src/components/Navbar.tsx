@@ -242,7 +242,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/20'
                     : 'bg-rose-500/10 text-rose-300 border-rose-500/40 hover:bg-rose-500/20'
                 }`}
-                title={isAuthenticated ? `로그인 중: ${user?.email || ''} - 클릭하여 로그아웃` : '소유자 인증 필요 (보안 영역 진입)'}
+                title={isAuthenticated ? `로그인 중: ${user?.email || '소유자'} (클릭하여 관리자 패널/로그아웃)` : '소유자 인증 필요 (보안 영역 진입)'}
               >
                 {isAuthenticated ? (
                   <>

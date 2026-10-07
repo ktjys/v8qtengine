@@ -893,6 +893,8 @@ export default function App() {
             isOpen={isDbHealthModalOpen}
             onClose={() => setIsDbHealthModalOpen(false)}
             onShowToast={showToast}
+            isAuthenticated={auth.session !== null}
+            onOpenLoginModal={() => setIsLoginModalOpen(true)}
           />
         </ErrorBoundary>
       )}

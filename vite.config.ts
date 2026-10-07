@@ -33,11 +33,17 @@ export default defineConfig(() => {
       },
     },
     define: {
-      __APP_VERSION__: JSON.stringify(packageJson.version || '8.2.5'),
+      __APP_VERSION__: JSON.stringify(packageJson.version || '8.2.6'),
       __COMMIT_HASH__: JSON.stringify(getGitCommitHash()),
       __COMMIT_MESSAGE__: JSON.stringify(getGitCommitMessage()),
       __BUILD_TIME__: JSON.stringify(
         new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' KST'
+      ),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
+        process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://xuzctskacealvvwlmica.supabase.co'
+      ),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(
+        process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || 'sb_publishable__6cC6rZrrlLsIPRcRMQAFg_BknuN793'
       ),
     },
     server: {
