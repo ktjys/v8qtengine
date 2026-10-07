@@ -12,6 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import { MarketRegion, ScanRunLog, SignalSnapshot } from '../types/v8';
+import { detectMarketRegion } from '../utils/marketUtils';
 
 interface ScanRunnerModalProps {
   onClose: () => void;
@@ -111,42 +112,51 @@ export const ScanRunnerModal: React.FC<ScanRunnerModalProps> = ({
     return () => clearInterval(interval);
   }, [polling, scanId]);
 
-  const fetchFinalResults = useCallback(async (scanId: string) => {
-    try {
-      const [evalRes, signalRes] = await Promise.all([
-        fetch(`/api/v8/evaluations`),
-        fetch(`/api/v8/signals`),
-      ]);
+    const fetchFinalResults = useCallback(async (scanId: string) => {
+  try {
+    const [evalRes, signalRes] = await Promise.all([
+      fetch(`/api/v8/evaluations`),
+      fetch(`/api/v8/signals`),
+    ]);
 
-      const evalData = await evalRes.json();
-      const signalData = await signalRes.json();
+    const evalData = await evalRes.json();
+    const signalData = await signalRes.json();
 
-      const evaluations = evalData.success ? evalData.evaluations || [] : [];
-      const signals = signalData.success ? signalData.signals || [] : [];
+    const evaluations = evalData.success ? evalData.evaluations || [] : [];
+    const signals = signalData.success ? signalData.signals || [] : [];
 
-      // Get the scan run
-      const runRes = await fetch(`/api/v8/scan/status/${scanId}`);
-      const runData = await runRes.json();
+    // Get the scan run
+    const runRes = await fetch(`/api/v8/scan/status/${scanId}`);
+    const runData = await runRes.json();
 
-      if (runData.success && runData.run) {
-        const run = runData.run;
-        setCompletedLog(run);
+    if (runData.success && runData.run) {
+      const run = runData.run;
+      setCompletedLog(run);
 
-        const evaluations = await fetch('/api/v8/evaluations').then(r => r.json()).then(d => d.success ? d.evaluations || [] : []);
-        const actionable = evaluations.filter((e: any) => e.signal_generated);
-        setActionableSignals(actionable);
-        setNewSignals([]);
+      // Filter evaluations and signals by activeMarket before processing
+      const marketFilteredEvaluations = evaluations.filter((e: any) => {
+        const region = e.market_region || detectMarketRegion(e.ticker);
+        return region === activeMarket;
+      });
+      const marketFilteredSignals = signals.filter((s: any) => {
+        const region = s.market_region || detectMarketRegion(s.ticker);
+        return region === activeMarket;
+      });
 
-        onScanCompleted({ scan_log: run, new_signals: [] });
+      const actionable = marketFilteredEvaluations.filter((e: any) => e.signal_generated);
+      setActionableSignals(actionable);
+      setNewSignals([]);
 
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: { scan_log: run } }));
-        }
+      onScanCompleted({ scan_log: run, new_signals: [] });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('quant-alerts-updated', { detail: { scan_log: run } }));
       }
-    } catch (err) {
-      console.error('Failed to fetch final results:', err);
     }
-  }, []);
+  } catch (err) {
+    console.error('Failed to fetch final results:', err);
+  }
+}, [activeMarket]);
 
   // ESC key handler & body scroll lock
   useEffect(() => {
