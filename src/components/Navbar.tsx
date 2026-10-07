@@ -391,11 +391,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 />
               </button>
 
-              {isMoreMenuOpen && (
-                <div
-                  role="menu"
-                  className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-72 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-xl shadow-slate-950/80 p-1.5 z-50 animate-fadeIn"
-                >
+               {isMoreMenuOpen && (
+                 <div
+                   role="menu"
+                   className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-72 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-xl shadow-slate-950/80 p-1.5 z-[9999] animate-fadeIn"
+                 >
                   <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-800/80 mb-1">
                     심층 퀀트 & 자산배분 도구
                   </div>
